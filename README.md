@@ -17,17 +17,17 @@ This tool can merge multiple Excel files into one Excel workbook according to th
 主要特点 / Features
 
 * 支持批量选择多个 Excel 文件
-    Supports selecting multiple Excel files at once
+* Supports selecting multiple Excel files at once
 * 按文件名顺序依次合并
-    Merges files in file name order
+*  Merges files in file name order
 * 尽量保留原始单元格格式
-    Tries to preserve the original cell formatting
+* Tries to preserve the original cell formatting
 * 支持输出为新的 Excel 文件
-    Supports exporting to a new Excel file
+*  Supports exporting to a new Excel file
 * 操作简单，适合非技术人员使用
-    Simple to use, suitable for non-technical users
+* Simple to use, suitable for non-technical users
 * 适用于日常办公、数据汇总、财务对账等场景
-    Suitable for daily office work, data summary, financial reconciliation, and similar tasks
+* Suitable for daily office work, data summary, financial reconciliation, and similar tasks
 
 ⸻
 
@@ -38,43 +38,43 @@ This tool can merge multiple Excel files into one Excel workbook according to th
 This tool is useful in scenarios such as:
 
 * 每月需要合并多份 Excel 表格
-    Merging multiple Excel files every month
+* Merging multiple Excel files every month
 * 多个部门提交的表格需要汇总
-    Combining spreadsheets submitted by different departments
+* Combining spreadsheets submitted by different departments
 * 订单明细、付款明细、发票明细需要整理到一起
-    Consolidating order details, payment details, and invoice details
+* Consolidating order details, payment details, and invoice details
 * 不想反复手动复制、粘贴、调整格式
-    Avoiding repeated manual copying, pasting, and formatting
+* Avoiding repeated manual copying, pasting, and formatting
 
 ⸻
 
 使用方法 / How to Use
 
 1. 打开 Excel 合并工具
-    Open the Excel Merge Tool
+* Open the Excel Merge Tool
 2. 选择需要合并的 Excel 文件
-    Select the Excel files you want to merge
+* Select the Excel files you want to merge
 3. 确认文件顺序
-    Check the file order
+* Check the file order
 4. 选择输出位置
-    Choose the output location
+* Choose the output location
 5. 点击开始合并
-    Click the merge/start button
+* Click the merge/start button
 6. 等待生成新的合并文件
-    Wait for the merged Excel file to be generated
+* Wait for the merged Excel file to be generated
 
 ⸻
 
 注意事项 / Notes
 
 * 建议提前确认文件名顺序，因为工具会按照文件名顺序进行合并
-    It is recommended to check the file name order in advance, because the tool merges files according to file name order
+* It is recommended to check the file name order in advance, because the tool merges files according to file name order
 * 建议被合并的 Excel 文件表头结构保持一致
-    It is recommended that the Excel files have the same header structure
+* It is recommended that the Excel files have the same header structure
 * 如果原文件格式较复杂，合并后建议人工复核一次
-    If the original files contain complex formatting, manual review after merging is recommended
+* If the original files contain complex formatting, manual review after merging is recommended
 * 使用前建议备份原始文件，避免误操作
-    It is recommended to back up the original files before use
+* It is recommended to back up the original files before use
 
 ⸻
 
@@ -89,13 +89,13 @@ Currently designed for local desktop use.
 Future improvements may include:
 
 * macOS 桌面版
-    macOS desktop version
+* macOS desktop version
 * Windows 桌面版
-    Windows desktop version
+* Windows desktop version
 * 更多 Excel 格式兼容
-    Better Excel format compatibility
+* Better Excel format compatibility
 * 自定义合并规则
-    Custom merge rules
+* Custom merge rules
 
 ⸻
 
