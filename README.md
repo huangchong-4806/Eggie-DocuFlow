@@ -1,3 +1,5 @@
+<img width="1084" height="676" alt="image" src="https://github.com/user-attachments/assets/723319fc-e67a-47d8-a3bc-5c76be7547c4" />
+
 Excel Merge Tool / Excel 合并工具
 
 一个用于批量合并 Excel 文件的桌面工具，适合日常办公、财务对账、订单汇总、月报整理等场景。
