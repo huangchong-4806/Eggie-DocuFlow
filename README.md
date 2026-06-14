@@ -4,11 +4,35 @@
 ![Platform](https://img.shields.io/badge/macOS-Apple%20Silicon-black)
 ![Python](https://img.shields.io/badge/Python-3.9%2B-green)
 
-一个面向日常办公的 Excel 批量合并工具。它可以按列表顺序合并多个
-`.xlsx` 或 `.xlsm` 文件，并保留单元格格式、公式、列宽和合并单元格。
+Excel Merge Tool 是一个面向日常办公场景的 Excel 批量合并工具，适合需要按文件顺序
+汇总多份 Excel 表格、并尽量保留原始格式的用户。
 
-A desktop utility for merging `.xlsx` and `.xlsm` files in a chosen order
-while preserving cell formatting, formulas, column widths, and merged cells.
+当前版本重点解决以下问题：
+
+- 多个 Excel 文件批量合并
+- 按文件列表顺序合并
+- 尽量保留原始单元格格式、列宽、合并单元格和公式
+- 支持较大文件的低内存处理
+- 提供简单易用的 macOS 图形界面
+
+A desktop utility for merging multiple Excel files in a chosen order while
+preserving cell formatting, formulas, column widths, and merged cells whenever
+possible.
+
+## 普通用户如何下载 / Download
+
+如果你只是想直接使用软件，不需要安装 Python，也不需要运行源码。
+
+1. 打开本项目右侧的 **Releases**
+2. 下载最新版安装包
+3. 解压后运行 Excel 合并工具
+4. 如果 macOS 提示无法打开，请在“系统设置 - 隐私与安全性”中允许运行
+
+> 当前正式版主要支持 Apple 芯片 macOS，Windows 版本后续再考虑。
+
+## 软件界面 / Screenshot
+
+![Excel Merge Tool](docs/screenshot.jpg)
 
 ## 主要功能 / Features
 
@@ -28,6 +52,15 @@ while preserving cell formatting, formulas, column widths, and merged cells.
 3. 使用“上移 / 下移”确认文件顺序。
 4. 设置后续文件跳过的行数。
 5. 选择输出文件位置并点击“开始合并”。
+
+## 使用说明与注意事项
+
+- 建议合并前关闭正在打开的 Excel 文件；
+- 建议合并前先备份原始文件；
+- 当前优先支持 `.xlsx` 和 `.xlsm` 文件；
+- 加密、损坏、受保护的 Excel 文件可能无法正常合并；
+- 合并大文件时请耐心等待；
+- 如果合并结果异常，请先检查源文件格式是否一致。
 
 ## 本地运行 / Run from Source
 
