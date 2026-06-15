@@ -140,3 +140,19 @@ and image plugins.
 更多项目历史见 [docs/PROJECT_HISTORY.md](docs/PROJECT_HISTORY.md)。
 
 See [docs/PROJECT_HISTORY.md](docs/PROJECT_HISTORY.md) for additional project history.
+
+## 许可证
+
+本项目采用 MIT License 开源协议。
+
+你可以自由使用、复制、修改和分发本项目，但请保留原始版权和作者信息。
+
+请勿将本项目重新包装后冒充原创，或用于误导性传播。
+
+## License
+
+This project is licensed under the MIT License.
+
+You are free to use, copy, modify, and distribute this project, but please retain the original copyright and author information.
+
+Please do not repackage this project as your own original work or use it for misleading distribution.
