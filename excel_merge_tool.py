@@ -1,6 +1,7 @@
 import os
 import posixpath
 import re
+import time
 import warnings
 from copy import copy
 from dataclasses import dataclass
@@ -43,6 +44,26 @@ class WorkbookMetadata:
     column_widths: tuple
     merged_ranges: tuple
     worksheet_path: str
+
+
+@dataclass(frozen=True)
+class SplitWorkbookResult:
+    output_files: tuple
+    output_folder: str
+    total_rows: int
+    header_rows: int
+    data_rows: int
+    elapsed_seconds: float
+
+    @property
+    def file_count(self):
+        return len(self.output_files)
+
+    @property
+    def average_seconds_per_file(self):
+        if not self.output_files:
+            return 0
+        return self.elapsed_seconds / len(self.output_files)
 
 
 def discover_excel_files(folder):
@@ -324,6 +345,315 @@ def _configure_formula_calculation(workbook):
     calculation.calcMode = "auto"
     calculation.fullCalcOnLoad = True
     calculation.forceFullCalc = True
+
+
+def _copy_column_dimensions(source_sheet, output_sheet):
+    for column_key, source_dimension in source_sheet.column_dimensions.items():
+        target_dimension = output_sheet.column_dimensions[column_key]
+        target_dimension.width = source_dimension.width
+        target_dimension.hidden = source_dimension.hidden
+
+
+def _copy_row_dimension(source_sheet, output_sheet, source_row, target_row):
+    source_dimension = source_sheet.row_dimensions[source_row]
+    if source_dimension.height is None and not source_dimension.hidden:
+        return
+
+    target_dimension = output_sheet.row_dimensions[target_row]
+    target_dimension.height = source_dimension.height
+    target_dimension.hidden = source_dimension.hidden
+
+
+def _copy_auto_filter(source_sheet, output_sheet, output_max_row):
+    if not source_sheet.auto_filter.ref:
+        return
+
+    try:
+        min_column, min_row, max_column, _ = range_boundaries(
+            source_sheet.auto_filter.ref
+        )
+    except (TypeError, ValueError):
+        output_sheet.auto_filter.ref = source_sheet.auto_filter.ref
+        return
+
+    output_sheet.auto_filter.ref = (
+        f"{get_column_letter(min_column)}{min_row}:"
+        f"{get_column_letter(max_column)}{max(output_max_row, min_row)}"
+    )
+
+
+def _cached_cell_style_parts(source_cell, style_cache):
+    if not source_cell.has_style:
+        return None
+
+    style_identifier = _style_identifier(source_cell)
+    if style_identifier not in style_cache:
+        style_cache[style_identifier] = (
+            copy(source_cell.font),
+            copy(source_cell.fill),
+            copy(source_cell.border),
+            copy(source_cell.alignment),
+            source_cell.number_format,
+            copy(source_cell.protection),
+        )
+    return style_cache[style_identifier]
+
+
+def _copy_split_cell(source_cell, target_cell, style_cache):
+    value = source_cell.value
+    if source_cell.data_type == "f" and isinstance(value, str):
+        value = _translated_cell_value(source_cell, target_cell.coordinate)
+
+    target_cell.value = value
+    if (
+        source_cell.data_type == "s"
+        and isinstance(value, str)
+        and value.startswith("=")
+    ):
+        target_cell.data_type = "s"
+
+    cached_style_parts = _cached_cell_style_parts(source_cell, style_cache)
+    if cached_style_parts is not None:
+        (
+            target_cell.font,
+            target_cell.fill,
+            target_cell.border,
+            target_cell.alignment,
+            target_cell.number_format,
+            target_cell.protection,
+        ) = cached_style_parts
+
+
+def _copy_worksheet_row(
+    source_sheet,
+    output_sheet,
+    source_row_number,
+    source_row,
+    target_row,
+    style_cache,
+):
+    _copy_row_dimension(source_sheet, output_sheet, source_row_number, target_row)
+    for source_cell in source_row:
+        target_cell = output_sheet.cell(
+            row=target_row,
+            column=source_cell.column,
+        )
+        _copy_split_cell(source_cell, target_cell, style_cache)
+
+
+def _prepare_split_merged_ranges(source_sheet, header_rows):
+    header_ranges = []
+    data_ranges = []
+
+    for merged_range in source_sheet.merged_cells.ranges:
+        min_column, min_row, max_column, max_row = merged_range.bounds
+        bounds = (min_column, min_row, max_column, max_row)
+        if min_row >= 1 and max_row <= header_rows:
+            header_ranges.append(bounds)
+        elif min_row > header_rows:
+            data_ranges.append(bounds)
+
+    return header_ranges, data_ranges
+
+
+def _copy_prepared_split_merged_cells(
+    output_sheet,
+    header_ranges,
+    data_ranges,
+    header_rows,
+    chunk_start_row,
+    chunk_end_row,
+):
+    for min_column, min_row, max_column, max_row in header_ranges:
+        output_sheet.merge_cells(
+            start_row=min_row,
+            start_column=min_column,
+            end_row=max_row,
+            end_column=max_column,
+        )
+
+    row_offset = header_rows + 1 - chunk_start_row
+    for min_column, min_row, max_column, max_row in data_ranges:
+        if min_row < chunk_start_row or max_row > chunk_end_row:
+            continue
+
+        output_sheet.merge_cells(
+            start_row=min_row + row_offset,
+            start_column=min_column,
+            end_row=max_row + row_offset,
+            end_column=max_column,
+        )
+
+
+def _create_split_output_folder(parent_folder, source_file):
+    parent_folder = Path(parent_folder)
+    source_stem = Path(source_file).stem
+    base_name = f"{source_stem}_拆分结果"
+    candidate = parent_folder / base_name
+    suffix_number = 1
+
+    while True:
+        try:
+            candidate.mkdir()
+            return candidate
+        except FileExistsError:
+            candidate = parent_folder / f"{base_name}_{suffix_number}"
+            suffix_number += 1
+
+
+def _split_output_path(output_folder, source_file, part_number):
+    output_folder = Path(output_folder)
+    source_stem = Path(source_file).stem
+    return output_folder / f"{source_stem}_拆分{part_number:03d}.xlsx"
+
+
+def split_workbook_by_rows(
+    source_file,
+    output_folder,
+    rows_per_file,
+    header_rows=0,
+    progress_callback=None,
+):
+    if rows_per_file < 1:
+        raise ValueError("每个文件的数据行数必须大于 0。")
+    if header_rows < 0:
+        raise ValueError("表头行数不能小于 0。")
+
+    source_file = os.path.abspath(source_file)
+    output_folder = os.path.abspath(output_folder)
+
+    if Path(source_file).suffix.lower() != ".xlsx":
+        raise ValueError("拆分工具只支持 .xlsx 格式的 Excel 文件。")
+    if not os.path.isfile(source_file):
+        raise ValueError("源 Excel 文件不存在。")
+    if not os.path.isdir(output_folder):
+        raise ValueError("输出文件夹不存在。")
+
+    start_time = time.perf_counter()
+    output_files = []
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        workbook = load_workbook(
+            source_file,
+            data_only=False,
+            keep_links=False,
+        )
+
+    try:
+        source_sheet = workbook.active
+        max_row = source_sheet.max_row
+        if header_rows > max_row:
+            raise ValueError("表头行数不能大于总行数。")
+
+        data_start_row = header_rows + 1
+        data_rows = max_row - header_rows
+        if data_rows == 0:
+            raise ValueError("源文件中没有可拆分数据。")
+
+        total_parts = (data_rows + rows_per_file - 1) // rows_per_file
+        split_output_folder = _create_split_output_folder(
+            output_folder,
+            source_file,
+        )
+        if header_rows:
+            header_rows_cache = list(
+                source_sheet.iter_rows(
+                    min_row=1,
+                    max_row=min(header_rows, max_row),
+                )
+            )
+        else:
+            header_rows_cache = []
+        header_ranges, data_merged_ranges = _prepare_split_merged_ranges(
+            source_sheet,
+            header_rows,
+        )
+
+        for part_index in range(total_parts):
+            chunk_start_row = data_start_row + part_index * rows_per_file
+            chunk_end_row = min(max_row, chunk_start_row + rows_per_file - 1)
+            output_workbook = Workbook()
+            output_sheet = output_workbook.active
+            output_sheet.title = source_sheet.title
+            _configure_formula_calculation(output_workbook)
+            _copy_column_dimensions(source_sheet, output_sheet)
+            if source_sheet.freeze_panes:
+                output_sheet.freeze_panes = source_sheet.freeze_panes
+
+            style_cache = {}
+            target_row = 1
+            for source_row_number, source_row in enumerate(
+                header_rows_cache,
+                start=1,
+            ):
+                _copy_worksheet_row(
+                    source_sheet,
+                    output_sheet,
+                    source_row_number,
+                    source_row,
+                    target_row,
+                    style_cache,
+                )
+                target_row += 1
+
+            for source_row_number, source_row in enumerate(
+                source_sheet.iter_rows(
+                    min_row=chunk_start_row,
+                    max_row=chunk_end_row,
+                ),
+                start=chunk_start_row,
+            ):
+                _copy_worksheet_row(
+                    source_sheet,
+                    output_sheet,
+                    source_row_number,
+                    source_row,
+                    target_row,
+                    style_cache,
+                )
+                target_row += 1
+
+            output_max_row = target_row - 1
+            _copy_prepared_split_merged_cells(
+                output_sheet,
+                header_ranges,
+                data_merged_ranges,
+                header_rows,
+                chunk_start_row,
+                chunk_end_row,
+            )
+            _copy_auto_filter(source_sheet, output_sheet, output_max_row)
+
+            output_path = _split_output_path(
+                split_output_folder,
+                source_file,
+                part_index + 1,
+            )
+            try:
+                output_workbook.save(output_path)
+            finally:
+                output_workbook.close()
+
+            output_files.append(str(output_path))
+            if progress_callback:
+                progress_callback(
+                    part_index + 1,
+                    total_parts,
+                    os.path.basename(output_path),
+                )
+    finally:
+        workbook.close()
+
+    elapsed_seconds = time.perf_counter() - start_time
+    return SplitWorkbookResult(
+        output_files=tuple(output_files),
+        output_folder=str(split_output_folder),
+        total_rows=max_row,
+        header_rows=header_rows,
+        data_rows=data_rows,
+        elapsed_seconds=elapsed_seconds,
+    )
 
 
 def _stream_output_cell(

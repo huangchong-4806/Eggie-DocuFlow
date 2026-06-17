@@ -4,7 +4,8 @@ from pathlib import Path
 
 
 PROJECT_ROOT = Path(SPECPATH).parent
-APP_BASENAME = "Excel合并工具V1.0.1"
+APP_BASENAME = "Eggie Excel Tool"
+APP_VERSION = "1.1.0"
 
 EXCLUDED_BINARY_PATHS = {
     "PySide6/QtNetwork.abi3.so",
@@ -61,7 +62,22 @@ a = Analysis(
     [str(PROJECT_ROOT / "main.py")],
     pathex=[str(PROJECT_ROOT)],
     binaries=[],
-    datas=[],
+    datas=[
+        (str(PROJECT_ROOT / "assets" / "software_logo.png"), "assets"),
+        (str(PROJECT_ROOT / "assets" / "app_icon.icns"), "assets"),
+        (
+            str(PROJECT_ROOT / "assets" / "en.lproj" / "InfoPlist.strings"),
+            "en.lproj",
+        ),
+        (
+            str(PROJECT_ROOT / "assets" / "zh-Hans.lproj" / "InfoPlist.strings"),
+            "zh-Hans.lproj",
+        ),
+        (
+            str(PROJECT_ROOT / "assets" / "zh-Hant.lproj" / "InfoPlist.strings"),
+            "zh-Hant.lproj",
+        ),
+    ],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -109,14 +125,18 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name=f"{APP_BASENAME}.app",
-    icon=None,
+    icon=str(PROJECT_ROOT / "assets" / "app_icon.icns"),
     bundle_identifier="com.huang.excelmerger",
-    version="1.0.1",
+    version=APP_VERSION,
     info_plist={
         "CFBundleDisplayName": APP_BASENAME,
         "CFBundleName": APP_BASENAME,
-        "CFBundleShortVersionString": "1.0.1",
-        "CFBundleVersion": "2",
+        "CFBundleShortVersionString": APP_VERSION,
+        "CFBundleVersion": "3",
+        "CFBundleAllowMixedLocalizations": True,
+        "CFBundleDevelopmentRegion": "zh-Hans",
+        "CFBundleLocalizations": ["en", "zh-Hans", "zh-Hant"],
+        "LSHasLocalizedDisplayName": True,
         "LSMinimumSystemVersion": "11.0",
     },
 )
