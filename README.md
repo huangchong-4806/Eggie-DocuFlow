@@ -1,6 +1,6 @@
 # Eggie Excel Tool / Excel 合并拆分工具
 
-![Version](https://img.shields.io/badge/version-1.1.0-blue)
+![Version](https://img.shields.io/badge/version-1.1.1-blue)
 ![Platform](https://img.shields.io/badge/macOS-Apple%20Silicon-black)
 ![Python](https://img.shields.io/badge/Python-3.9%2B-green)
 
@@ -41,16 +41,16 @@ The current release focuses on:
 
 1. 打开本项目右侧的 **Releases**
 2. 下载最新版安装包
-3. 解压后运行 `EggieExcelTool_V1.1.0_mac.app`
-4. 如果 macOS 提示无法打开，请在“系统设置 - 隐私与安全性”中允许运行
+3. 解压后运行 `EggieExcelTool_V1.1.1_mac.app`
+4. 本版本未做 Apple 公证；如果 macOS 阻止打开，请在 Finder 中右键 App，选择“打开”，再确认“打开”
 
 If you only want to use the application, you do not need to install Python or
 run the source code.
 
 1. Open **Releases** on the right side of this repository
 2. Download the latest application package
-3. Extract the package and launch `EggieExcelTool_V1.1.0_mac.app`
-4. If macOS blocks the application, allow it in **System Settings - Privacy & Security**
+3. Extract the package and launch `EggieExcelTool_V1.1.1_mac.app`
+4. This release is not Apple-notarized. If macOS blocks it, right-click the App in Finder, choose **Open**, then confirm **Open**
 
 > 当前正式版主要支持 Apple 芯片 macOS，Windows 版本后续再考虑。
 > The current release primarily supports Apple Silicon macOS. A Windows version may be considered in the future.
@@ -87,7 +87,7 @@ run the source code.
 
 ## 使用方法 / Usage
 
-1. 打开 `EggieExcelTool_V1.1.0_mac.app`。 / Open `EggieExcelTool_V1.1.0_mac.app`.
+1. 打开 `EggieExcelTool_V1.1.1_mac.app`。 / Open `EggieExcelTool_V1.1.1_mac.app`.
 2. 选择“Excel 合并工具”或“Excel 拆分工具”。 / Choose **Excel Merge Tool** or **Excel Split Tool**.
 
 合并 Excel：
@@ -115,6 +115,7 @@ run the source code.
 - 加密、损坏、受保护的 Excel 文件可能无法正常合并。 / Encrypted, corrupted, or protected workbooks may not merge correctly.
 - 合并大文件时请耐心等待。 / Large workbooks may require additional processing time.
 - 如果合并结果异常，请先检查源文件格式是否一致。 / If the result looks incorrect, first check whether the source files use consistent structures and formats.
+- 本版本未做 Apple 公证；首次打开被拦截时，请右键 App 并选择“打开”。 / This release is not Apple-notarized. If first launch is blocked, right-click the App and choose **Open**.
 
 ## 本地运行 / Run from Source
 
@@ -154,8 +155,8 @@ PYTHON=.venv/bin/python scripts/build_macos.sh
 
 构建结果位于 `release/`，正式版文件名为：
 
-- `EggieExcelTool_V1.1.0_mac.app`
-- `EggieExcelTool_V1.1.0_mac.zip`
+- `EggieExcelTool_V1.1.1_mac.app`
+- `EggieExcelTool_V1.1.1_mac.zip`
 
 打包脚本保留所有 `qtbase` 系统语言翻译，并移除本工具不使用的 Qt 网络、TLS、
 SVG 和图片插件。
@@ -165,6 +166,15 @@ Build artifacts are written to `release/`. The packaging script keeps all
 and image plugins.
 
 ## 版本记录 / Changelog
+
+### V1.1.1
+
+- 精简界面代码并改用系统原生控件 / Simplified the UI and adopted native system controls.
+- 防止输出路径别名覆盖源 Excel 文件 / Prevented output path aliases from overwriting source workbooks.
+- 合并结果采用安全的临时文件写入 / Added atomic saves to preserve existing output when a merge fails.
+- 拆分前检测跨边界合并单元格，避免静默丢失内容 / Detect merged cells across split boundaries to prevent silent data loss.
+- 拆分失败时自动清理本次残缺结果 / Remove incomplete split output created by a failed run.
+- 新增相关自动化测试 / Added regression tests for the new safeguards.
 
 ### V1.1.0
 

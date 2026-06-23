@@ -1,6 +1,8 @@
 import os
 import posixpath
 import re
+import shutil
+import tempfile
 import time
 import warnings
 from copy import copy
@@ -531,6 +533,7 @@ def split_workbook_by_rows(
 
     start_time = time.perf_counter()
     output_files = []
+    split_output_folder = None
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", UserWarning)
@@ -552,10 +555,6 @@ def split_workbook_by_rows(
             raise ValueError("源文件中没有可拆分数据。")
 
         total_parts = (data_rows + rows_per_file - 1) // rows_per_file
-        split_output_folder = _create_split_output_folder(
-            output_folder,
-            source_file,
-        )
         if header_rows:
             header_rows_cache = list(
                 source_sheet.iter_rows(
@@ -568,6 +567,24 @@ def split_workbook_by_rows(
         header_ranges, data_merged_ranges = _prepare_split_merged_ranges(
             source_sheet,
             header_rows,
+        )
+        for merged_range in source_sheet.merged_cells.ranges:
+            _, merged_min_row, _, merged_max_row = merged_range.bounds
+            crosses_header = merged_min_row <= header_rows < merged_max_row
+            crosses_part = (
+                merged_min_row > header_rows
+                and (merged_min_row - data_start_row) // rows_per_file
+                != (merged_max_row - data_start_row) // rows_per_file
+            )
+            if crosses_header or crosses_part:
+                raise ValueError(
+                    f"合并单元格 {merged_range} 跨越拆分边界，"
+                    "请调整每个文件的数据行数或先取消该合并。"
+                )
+
+        split_output_folder = _create_split_output_folder(
+            output_folder,
+            source_file,
         )
 
         for part_index in range(total_parts):
@@ -642,6 +659,10 @@ def split_workbook_by_rows(
                     total_parts,
                     os.path.basename(output_path),
                 )
+    except Exception:
+        if split_output_folder is not None:
+            shutil.rmtree(split_output_folder, ignore_errors=True)
+        raise
     finally:
         workbook.close()
 
@@ -856,6 +877,13 @@ def build_merged_workbook(
     if not files:
         raise ValueError("至少需要选择一个 Excel 文件。")
 
+    files = [os.path.abspath(filename) for filename in files]
+    output_file = os.path.abspath(output_file)
+    if os.path.exists(output_file):
+        for filename in files:
+            if os.path.exists(filename) and os.path.samefile(filename, output_file):
+                raise ValueError("保存位置不能与待合并的源文件相同。")
+
     metadata_by_file = [
         get_workbook_metadata(filename)
         for filename in files
@@ -869,21 +897,34 @@ def build_merged_workbook(
                 requires_compatibility_mode = True
                 break
 
-    if requires_compatibility_mode:
-        _build_compatibility_workbook(
-            files,
-            metadata_by_file,
-            output_file,
-            skip_rows,
-            keep_merged_cells,
-            progress_callback,
-        )
-        return
-
-    _build_streaming_workbook(
-        files,
-        metadata_by_file,
-        output_file,
-        skip_rows,
-        progress_callback,
+    file_descriptor, temporary_output = tempfile.mkstemp(
+        prefix=f".{Path(output_file).stem}-",
+        suffix=".xlsx",
+        dir=os.path.dirname(output_file),
     )
+    os.close(file_descriptor)
+    try:
+        if requires_compatibility_mode:
+            _build_compatibility_workbook(
+                files,
+                metadata_by_file,
+                temporary_output,
+                skip_rows,
+                keep_merged_cells,
+                progress_callback,
+            )
+        else:
+            _build_streaming_workbook(
+                files,
+                metadata_by_file,
+                temporary_output,
+                skip_rows,
+                progress_callback,
+            )
+        os.replace(temporary_output, output_file)
+    except Exception:
+        try:
+            os.unlink(temporary_output)
+        except FileNotFoundError:
+            pass
+        raise
