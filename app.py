@@ -5,7 +5,6 @@ import sys
 from pathlib import Path
 
 from PySide6.QtCore import (
-    QCoreApplication,
     QLibraryInfo,
     QLocale,
     QSize,
@@ -19,14 +18,12 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
     QCheckBox,
-    QComboBox,
-    QDialog,
     QFileDialog,
-    QFrame,
     QGridLayout,
     QGroupBox,
     QHeaderView,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QMainWindow,
@@ -38,7 +35,6 @@ from PySide6.QtWidgets import (
     QStackedWidget,
     QTreeWidget,
     QTreeWidgetItem,
-    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -168,9 +164,7 @@ def build_theme_stylesheet(colors):
     }}
     QWidget#homePage,
     QWidget#excelPage,
-    QWidget#splitPage,
-    QDialog#settingsDialog,
-    QDialog#confirmDialog {{
+    QWidget#splitPage {{
         background: {colors["window_bg"]};
         color: {colors["text"]};
     }}
@@ -191,23 +185,7 @@ def build_theme_stylesheet(colors):
         color: {colors["accent"]};
         font-size: 12px;
     }}
-    QLabel[role="questionIcon"] {{
-        background: {colors["accent"]};
-        color: {colors["window_bg"]};
-        border-radius: 22px;
-        font-size: 24px;
-        font-weight: 700;
-    }}
-    QLabel[role="confirmText"] {{
-        color: {colors["text"]};
-        font-size: 14px;
-        font-weight: 600;
-    }}
-    QDialog#settingsDialog QLabel[role="title"] {{
-        font-size: 22px;
-    }}
-    QGroupBox,
-    QFrame[frameRole="settingsCard"] {{
+    QGroupBox {{
         background: {colors["panel"]};
         border: 1px solid {colors["border"]};
         border-radius: 12px;
@@ -270,8 +248,7 @@ def build_theme_stylesheet(colors):
         font-weight: 600;
     }}
     QLineEdit,
-    QSpinBox,
-    QComboBox {{
+    QSpinBox {{
         background: {colors["input"]};
         color: {colors["text"]};
         border: 1px solid {colors["border"]};
@@ -280,78 +257,11 @@ def build_theme_stylesheet(colors):
         min-height: 24px;
     }}
     QLineEdit:focus,
-    QSpinBox:focus,
-    QComboBox:focus {{
+    QSpinBox:focus {{
         border: 1px solid {colors["accent"]};
-    }}
-    QSpinBox {{
-        padding-right: 42px;
-    }}
-    QSpinBox::up-button,
-    QSpinBox::down-button {{
-        subcontrol-origin: border;
-        width: 38px;
-        background: {colors["panel"]};
-        border-left: 1px solid {colors["border"]};
-    }}
-    QSpinBox::up-button {{
-        subcontrol-position: top right;
-        border-top-right-radius: 8px;
-        border-bottom: 1px solid {colors["border"]};
-    }}
-    QSpinBox::down-button {{
-        subcontrol-position: bottom right;
-        border-bottom-right-radius: 8px;
-    }}
-    QSpinBox::up-button:hover,
-    QSpinBox::down-button:hover {{
-        background: {colors["accent_soft"]};
-        border-left-color: {colors["accent_border"]};
-    }}
-    QSpinBox::up-arrow {{
-        image: none;
-        width: 0px;
-        height: 0px;
-    }}
-    QSpinBox::down-arrow {{
-        image: none;
-        width: 0px;
-        height: 0px;
-    }}
-    QToolButton[role="spinArrow"] {{
-        background: {colors["panel"]};
-        color: {colors["title"]};
-        border: none;
-        border-left: 1px solid {colors["border"]};
-        font-size: 17px;
-        font-weight: 900;
-        padding: 0;
-    }}
-    QToolButton[role="spinArrow"]:hover {{
-        background: {colors["accent_soft"]};
-        color: {colors["accent"]};
-        border-left-color: {colors["accent_border"]};
-    }}
-    QToolButton[role="spinArrow"][direction="up"] {{
-        border-bottom: 1px solid {colors["border"]};
-        border-top-right-radius: 8px;
-    }}
-    QToolButton[role="spinArrow"][direction="down"] {{
-        border-bottom-right-radius: 8px;
     }}
     QLineEdit:read-only {{
         color: {colors["muted"]};
-    }}
-    QComboBox::drop-down {{
-        border: none;
-        width: 28px;
-    }}
-    QComboBox QAbstractItemView {{
-        background: {colors["panel"]};
-        color: {colors["text"]};
-        selection-background-color: {colors["accent_soft"]};
-        selection-color: {colors["text"]};
-        border: 1px solid {colors["border"]};
     }}
     QCheckBox {{
         color: {colors["text"]};
@@ -461,66 +371,6 @@ def build_theme_stylesheet(colors):
     """
 
 
-def build_output_dialog_stylesheet():
-    return """
-    QFileDialog {
-        background: #F4F6F8;
-        color: #111827;
-    }
-    QFileDialog QLabel {
-        color: #111827;
-        font-size: 13px;
-        font-weight: 600;
-    }
-    QFileDialog QLineEdit,
-    QFileDialog QComboBox {
-        background: #FFFFFF;
-        color: #111827;
-        border: 1px solid #CBD5E1;
-        border-radius: 8px;
-        padding: 6px 10px;
-        min-height: 26px;
-        selection-background-color: #2563EB;
-        selection-color: #FFFFFF;
-    }
-    QFileDialog QLineEdit:focus,
-    QFileDialog QComboBox:focus {
-        border: 1px solid #0284C7;
-    }
-    QFileDialog QPushButton {
-        background: #FFFFFF;
-        color: #111827;
-        border: 1px solid #CBD5E1;
-        border-radius: 8px;
-        padding: 7px 16px;
-        font-weight: 600;
-        min-height: 28px;
-    }
-    QFileDialog QPushButton:hover {
-        background: #E0F2FE;
-        border-color: #0284C7;
-    }
-    QFileDialog QTreeView,
-    QFileDialog QListView {
-        background: #FFFFFF;
-        color: #111827;
-        border: 1px solid #CBD5E1;
-        selection-background-color: #CBD5E1;
-        selection-color: #111827;
-        alternate-background-color: #F8FAFC;
-    }
-    QFileDialog QHeaderView::section {
-        background: #E2E8F0;
-        color: #111827;
-        border: none;
-        border-right: 1px solid #CBD5E1;
-        border-bottom: 1px solid #CBD5E1;
-        padding: 6px;
-        font-weight: 600;
-    }
-    """
-
-
 def preferred_system_locale():
     locale_name = QLocale.system().name()
 
@@ -569,160 +419,6 @@ def format_elapsed_seconds(seconds):
     return f"{minutes} 分 {remaining_seconds:.2f} 秒"
 
 
-class LightArrowSpinBox(QSpinBox):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.up_button = self.create_arrow_button("▲", "up")
-        self.down_button = self.create_arrow_button("▼", "down")
-        self.up_button.clicked.connect(self.stepUp)
-        self.down_button.clicked.connect(self.stepDown)
-
-    def create_arrow_button(self, text, direction):
-        button = QToolButton(self)
-        button.setText(text)
-        button.setProperty("role", "spinArrow")
-        button.setProperty("direction", direction)
-        button.setFocusPolicy(Qt.NoFocus)
-        button.setCursor(Qt.PointingHandCursor)
-        button.setAutoRepeat(True)
-        return button
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        button_width = 38
-        content = self.rect().adjusted(0, 1, -1, -1)
-        half_height = content.height() // 2
-        left = content.right() - button_width + 1
-        self.up_button.setGeometry(left, content.top(), button_width, half_height)
-        self.down_button.setGeometry(
-            left,
-            content.top() + half_height,
-            button_width,
-            content.height() - half_height,
-        )
-        self.up_button.raise_()
-        self.down_button.raise_()
-
-
-class SettingsDialog(QDialog):
-    def __init__(self, parent, accent_name):
-        super().__init__(parent)
-        self.original_accent_name = accent_name
-
-        self.setObjectName("settingsDialog")
-        self.setWindowTitle("软件设置")
-        self.setModal(False)
-        self.setWindowModality(Qt.NonModal)
-        self.setAttribute(Qt.WA_DeleteOnClose, True)
-        self.resize(520, 240)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(28, 24, 28, 24)
-        layout.setSpacing(18)
-
-        title = QLabel("软件设置")
-        title.setAlignment(Qt.AlignCenter)
-        title.setFont(QFont("PingFang SC", 20, QFont.Bold))
-        title.setProperty("role", "title")
-        layout.addWidget(title)
-
-        subtitle = QLabel("默认使用深色科技版，可在这里更换软件色调。")
-        subtitle.setAlignment(Qt.AlignCenter)
-        subtitle.setProperty("role", "subtitle")
-        layout.addWidget(subtitle)
-
-        card = QFrame()
-        card.setProperty("frameRole", "settingsCard")
-        card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(22, 20, 22, 22)
-        card_layout.setSpacing(14)
-
-        accent_layout = QHBoxLayout()
-        accent_label = QLabel("主题色调")
-        accent_label.setMinimumWidth(90)
-        self.accent_combo = QComboBox()
-        for accent_key, accent_data in ACCENT_PALETTES.items():
-            self.accent_combo.addItem(accent_data["label"], accent_key)
-        accent_index = self.accent_combo.findData(accent_name)
-        self.accent_combo.setCurrentIndex(max(0, accent_index))
-        accent_layout.addWidget(accent_label)
-        accent_layout.addWidget(self.accent_combo, 1)
-        card_layout.addLayout(accent_layout)
-
-        hint = QLabel("点击“确定”后保存设置；点击“取消”会在有修改时询问是否保存。")
-        hint.setWordWrap(True)
-        hint.setProperty("role", "hint")
-        card_layout.addWidget(hint)
-        layout.addWidget(card)
-
-        button_layout = QHBoxLayout()
-        button_layout.addStretch()
-        self.ok_button = QPushButton("确定")
-        self.ok_button.setMinimumWidth(96)
-        self.ok_button.setProperty("variant", "primary")
-        self.cancel_button = QPushButton("取消")
-        self.cancel_button.setMinimumWidth(96)
-        self.cancel_button.setProperty("variant", "ghost")
-        button_layout.addWidget(self.ok_button)
-        button_layout.addWidget(self.cancel_button)
-        layout.addLayout(button_layout)
-
-        self.ok_button.clicked.connect(self.accept_settings)
-        self.cancel_button.clicked.connect(self.reject)
-        self.accent_combo.currentIndexChanged.connect(self.preview_selected_accent)
-
-    def selected_accent_name(self):
-        return self.accent_combo.currentData()
-
-    def has_unsaved_changes(self):
-        return self.selected_accent_name() != self.original_accent_name
-
-    def preview_selected_accent(self):
-        accent_name = self.selected_accent_name()
-        if accent_name not in ACCENT_PALETTES:
-            return
-        self.parent().preview_accent_setting(accent_name)
-        self.setStyleSheet(build_theme_stylesheet(build_theme_colors(accent_name)))
-
-    def restore_original_accent(self):
-        self.parent().preview_accent_setting(self.original_accent_name)
-
-    def accept_settings(self):
-        self.parent().save_accent_setting(self.selected_accent_name())
-        self.accept()
-
-    def reject(self):
-        if self.confirm_close_when_changed():
-            super().reject()
-
-    def closeEvent(self, event):
-        if self.confirm_close_when_changed():
-            event.accept()
-        else:
-            event.ignore()
-
-    def confirm_close_when_changed(self):
-        if not self.has_unsaved_changes():
-            return True
-
-        message = QMessageBox(self)
-        message.setWindowTitle("设置未保存")
-        message.setText("主题色调修改未保存，是否关闭设置窗口？")
-        message.setInformativeText("选择“保存”会保存设置并关闭；选择“取消”会直接关闭且不保存。")
-        save_button = message.addButton("保存", QMessageBox.AcceptRole)
-        cancel_button = message.addButton("取消", QMessageBox.RejectRole)
-        message.setDefaultButton(save_button)
-        message.exec()
-
-        if message.clickedButton() == save_button:
-            self.parent().save_accent_setting(self.selected_accent_name())
-        elif message.clickedButton() != cancel_button:
-            return False
-        else:
-            self.restore_original_accent()
-        return True
-
-
 class ExcelMergerWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -738,7 +434,6 @@ class ExcelMergerWindow(QMainWindow):
         self.accent_name = self.settings.value("appearance/accent", "cyan")
         if self.accent_name not in ACCENT_PALETTES:
             self.accent_name = "cyan"
-        self.settings_dialog = None
         application = QApplication.instance()
         self.system_locale = getattr(
             application,
@@ -881,7 +576,7 @@ class ExcelMergerWindow(QMainWindow):
         options_layout.setSpacing(28)
 
         skip_rows_label = QLabel("后续文件跳过行数：")
-        self.skip_rows_spinbox = LightArrowSpinBox()
+        self.skip_rows_spinbox = QSpinBox()
         self.skip_rows_spinbox.setRange(0, 99)
         self.skip_rows_spinbox.setValue(1)
         self.skip_rows_spinbox.setSuffix(" 行")
@@ -891,15 +586,9 @@ class ExcelMergerWindow(QMainWindow):
         )
         self.merged_cells_checkbox = QCheckBox("保留合并单元格")
         self.merged_cells_checkbox.setChecked(True)
-        self.open_after_merge_checkbox = QCheckBox("合并后打开文件")
-        self.open_after_merge_checkbox.setToolTip(
-            "勾选后，合并成功会自动打开结果文件，并显示完成提示。"
-        )
-
         options_layout.addWidget(skip_rows_label)
         options_layout.addWidget(self.skip_rows_spinbox)
         options_layout.addWidget(self.merged_cells_checkbox)
-        options_layout.addWidget(self.open_after_merge_checkbox)
         main_layout.addLayout(options_layout)
 
         self.merge_button = QPushButton("开始合并")
@@ -1071,7 +760,7 @@ class ExcelMergerWindow(QMainWindow):
         options_layout.setAlignment(Qt.AlignCenter)
 
         header_rows_label = QLabel("表头行数：")
-        self.split_header_rows_spinbox = LightArrowSpinBox()
+        self.split_header_rows_spinbox = QSpinBox()
         self.split_header_rows_spinbox.setRange(0, 999)
         self.split_header_rows_spinbox.setValue(1)
         self.split_header_rows_spinbox.setSuffix(" 行")
@@ -1081,7 +770,7 @@ class ExcelMergerWindow(QMainWindow):
         )
 
         rows_per_file_label = QLabel("每个文件数据行数：")
-        self.split_rows_per_file_spinbox = LightArrowSpinBox()
+        self.split_rows_per_file_spinbox = QSpinBox()
         self.split_rows_per_file_spinbox.setRange(1, 1000000)
         self.split_rows_per_file_spinbox.setValue(1000)
         self.split_rows_per_file_spinbox.setSuffix(" 行")
@@ -1102,7 +791,6 @@ class ExcelMergerWindow(QMainWindow):
         self.split_button.setMinimumWidth(230)
         self.split_button.setFont(QFont("PingFang SC", 14, QFont.Bold))
         self.split_button.setProperty("variant", "primary")
-        self.split_button.setEnabled(True)
         split_button_layout = QHBoxLayout()
         split_button_layout.addStretch()
         split_button_layout.addWidget(self.split_button)
@@ -1198,22 +886,18 @@ class ExcelMergerWindow(QMainWindow):
         self.setWindowTitle(f"{self.app_name} - Excel 拆分工具")
 
     def show_settings(self):
-        if self.settings_dialog is not None and self.settings_dialog.isVisible():
-            self.settings_dialog.raise_()
-            self.settings_dialog.activateWindow()
-            return
-
-        self.settings_dialog = SettingsDialog(self, self.accent_name)
-        self.settings_dialog.setStyleSheet(
-            build_theme_stylesheet(build_theme_colors(self.accent_name))
+        accent_keys = list(ACCENT_PALETTES)
+        labels = [ACCENT_PALETTES[key]["label"] for key in accent_keys]
+        selected_label, accepted = QInputDialog.getItem(
+            self,
+            "软件设置",
+            "主题色调：",
+            labels,
+            accent_keys.index(self.accent_name),
+            False,
         )
-        self.settings_dialog.destroyed.connect(self.clear_settings_dialog_reference)
-        self.settings_dialog.show()
-        self.settings_dialog.raise_()
-        self.settings_dialog.activateWindow()
-
-    def clear_settings_dialog_reference(self):
-        self.settings_dialog = None
+        if accepted:
+            self.save_accent_setting(accent_keys[labels.index(selected_label)])
 
     def save_accent_setting(self, accent_name):
         if accent_name not in ACCENT_PALETTES:
@@ -1221,12 +905,6 @@ class ExcelMergerWindow(QMainWindow):
         self.accent_name = accent_name
         self.settings.setValue("appearance/accent", self.accent_name)
         self.settings.sync()
-        self.apply_theme()
-
-    def preview_accent_setting(self, accent_name):
-        if accent_name not in ACCENT_PALETTES:
-            return
-        self.accent_name = accent_name
         self.apply_theme()
 
     def apply_theme(self):
@@ -1450,51 +1128,13 @@ class ExcelMergerWindow(QMainWindow):
         self.refresh_file_list(selected_row=row + 1)
 
     def confirm_list_change(self, text):
-        dialog = QDialog(self)
-        dialog.setObjectName("confirmDialog")
-        dialog.setWindowTitle("确认操作")
-        dialog.setModal(True)
-        dialog.setStyleSheet(self.styleSheet())
-        dialog.setMinimumWidth(300)
-
-        layout = QVBoxLayout(dialog)
-        layout.setContentsMargins(28, 24, 28, 22)
-        layout.setSpacing(20)
-
-        content_layout = QHBoxLayout()
-        content_layout.setSpacing(18)
-        content_layout.setAlignment(Qt.AlignCenter)
-
-        icon_label = QLabel("?")
-        icon_label.setProperty("role", "questionIcon")
-        icon_label.setAlignment(Qt.AlignCenter)
-        icon_label.setFixedSize(44, 44)
-
-        text_label = QLabel(text)
-        text_label.setProperty("role", "confirmText")
-        text_label.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
-
-        content_layout.addWidget(icon_label)
-        content_layout.addWidget(text_label)
-        layout.addLayout(content_layout)
-
-        button_layout = QHBoxLayout()
-        button_layout.setSpacing(10)
-        button_layout.addStretch()
-
-        confirm_button = QPushButton("确认")
-        cancel_button = QPushButton("取消")
-        for button in (confirm_button, cancel_button):
-            button.setFixedSize(72, 34)
-        confirm_button.clicked.connect(dialog.accept)
-        cancel_button.clicked.connect(dialog.reject)
-
-        button_layout.addWidget(confirm_button)
-        button_layout.addWidget(cancel_button)
-        button_layout.addStretch()
-        layout.addLayout(button_layout)
-
-        return dialog.exec() == QDialog.Accepted
+        return QMessageBox.question(
+            self,
+            "确认操作",
+            text,
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        ) == QMessageBox.Yes
 
     def delete_selected(self):
         checked_paths = self.checked_file_paths()
@@ -1525,28 +1165,18 @@ class ExcelMergerWindow(QMainWindow):
         self.checked_files.clear()
         self.refresh_file_list()
 
-    def create_output_dialog(self):
-        downloads = str(Path.home() / "Downloads")
-        dialog = QFileDialog(
+    def choose_output_file(self):
+        default_path = Path.home() / "Downloads" / default_output_filename(
+            self.system_locale
+        )
+        output_file, _ = QFileDialog.getSaveFileName(
             self,
-            QCoreApplication.translate("QFileDialog", "Save As"),
-            downloads,
+            "保存合并结果",
+            str(default_path),
             "Excel (*.xlsx)",
         )
-        dialog.setAcceptMode(QFileDialog.AcceptSave)
-        dialog.setFileMode(QFileDialog.AnyFile)
-        dialog.setDefaultSuffix("xlsx")
-        dialog.setOption(QFileDialog.DontUseNativeDialog, True)
-        dialog.setOption(QFileDialog.DontConfirmOverwrite, False)
-        dialog.setStyleSheet(build_output_dialog_stylesheet())
-        dialog.selectFile(default_output_filename(self.system_locale))
-        return dialog
-
-    def choose_output_file(self):
-        dialog = self.create_output_dialog()
-        if dialog.exec() != QFileDialog.Accepted:
+        if not output_file:
             return
-        output_file = dialog.selectedFiles()[0]
         if not output_file.lower().endswith(".xlsx"):
             output_file += ".xlsx"
 
@@ -1554,9 +1184,6 @@ class ExcelMergerWindow(QMainWindow):
         self.output_path_edit.setText(self.output_file)
         self.output_path_edit.setToolTip(self.output_file)
         self.update_button_states()
-
-    def update_split_button_states(self):
-        self.split_button.setEnabled(True)
 
     def choose_split_source_file(self):
         downloads = str(Path.home() / "Downloads")
@@ -1595,8 +1222,6 @@ class ExcelMergerWindow(QMainWindow):
                 f"{os.path.basename(self.split_source_file)}\n{error}",
             )
 
-        self.update_split_button_states()
-
     def choose_split_output_folder(self):
         downloads = str(Path.home() / "Downloads")
         folder = QFileDialog.getExistingDirectory(
@@ -1612,8 +1237,6 @@ class ExcelMergerWindow(QMainWindow):
         self.split_result_folder = ""
         self.split_output_folder_edit.setText(self.split_output_folder)
         self.split_output_folder_edit.setToolTip(self.split_output_folder)
-        self.update_split_button_states()
-
     def open_split_output_folder(self):
         folder = self.split_result_folder or self.split_output_folder
         opened = QDesktopServices.openUrl(
@@ -1679,21 +1302,6 @@ class ExcelMergerWindow(QMainWindow):
 
         header_rows = self.split_header_rows_spinbox.value()
         rows_per_file = self.split_rows_per_file_spinbox.value()
-        if header_rows < 0:
-            QMessageBox.warning(
-                self,
-                "表头行数不正确",
-                "表头行数必须大于或等于 0。",
-            )
-            return
-
-        if rows_per_file <= 0:
-            QMessageBox.warning(
-                self,
-                "数据行数不正确",
-                "每个文件数据行数必须大于 0。",
-            )
-            return
 
         progress = QProgressDialog(
             "正在准备拆分...",
@@ -1777,7 +1385,9 @@ class ExcelMergerWindow(QMainWindow):
             )
             return
 
-        if self.output_file in self.files:
+        if os.path.realpath(self.output_file) in {
+            os.path.realpath(filename) for filename in self.files
+        }:
             QMessageBox.warning(
                 self,
                 "无法保存",
@@ -1825,6 +1435,4 @@ class ExcelMergerWindow(QMainWindow):
             QApplication.restoreOverrideCursor()
             progress.close()
 
-        if self.open_after_merge_checkbox.isChecked():
-            self.open_output_file()
         self.show_merge_complete_message()

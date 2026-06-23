@@ -1,7 +1,7 @@
-import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from openpyxl import Workbook, load_workbook
@@ -147,6 +147,39 @@ class ExcelMergeToolTests(unittest.TestCase):
             self.assertEqual(workbook.active["D2"].value, "合并内容")
         finally:
             workbook.close()
+
+    def test_merge_rejects_output_alias_of_source(self):
+        source = self.create_workbook("source.xlsx")
+        alias = self.root / "alias.xlsx"
+        alias.symlink_to(source)
+
+        with self.assertRaisesRegex(ValueError, "不能与待合并的源文件相同"):
+            build_merged_workbook([source], alias)
+
+        workbook = load_workbook(source)
+        try:
+            self.assertEqual(workbook.active.title, "Sheet")
+        finally:
+            workbook.close()
+
+    def test_merge_failure_preserves_existing_output(self):
+        source = self.create_workbook("atomic-source.xlsx")
+        output = self.root / "existing-output.xlsx"
+        output.write_bytes(b"existing result")
+
+        def fail_after_writing(files, metadata, temporary_output, *args):
+            Path(temporary_output).write_bytes(b"partial result")
+            raise RuntimeError("save failed")
+
+        with patch(
+            "excel_merge_tool._build_streaming_workbook",
+            side_effect=fail_after_writing,
+        ):
+            with self.assertRaisesRegex(RuntimeError, "save failed"):
+                build_merged_workbook([source], output)
+
+        self.assertEqual(output.read_bytes(), b"existing result")
+        self.assertFalse(any(self.root.glob(".existing-output-*.xlsx")))
 
     def test_discover_excel_files_is_sorted_and_ignores_temporary_files(self):
         nested = self.root / "nested"
@@ -302,6 +335,47 @@ class ExcelMergeToolTests(unittest.TestCase):
             [Path(filename).parent for filename in split_result.output_files],
             [Path(split_result.output_folder)],
         )
+
+    def test_split_rejects_merged_cells_across_part_boundary(self):
+        source = self.root / "cross-boundary.xlsx"
+        workbook = Workbook()
+        worksheet = workbook.active
+        worksheet.append(["表头"])
+        worksheet["A2"] = "合并内容"
+        worksheet.merge_cells("A2:A4")
+        workbook.save(source)
+        workbook.close()
+        output_folder = self.root / "cross-boundary-output"
+        output_folder.mkdir()
+
+        with self.assertRaisesRegex(ValueError, "跨越拆分边界"):
+            split_workbook_by_rows(
+                source,
+                output_folder,
+                rows_per_file=2,
+                header_rows=1,
+            )
+
+        self.assertEqual(list(output_folder.iterdir()), [])
+
+    def test_split_failure_removes_partial_result_folder(self):
+        source = self.create_workbook("partial-split.xlsx")
+        output_folder = self.root / "partial-split-output"
+        output_folder.mkdir()
+
+        def fail_after_first_file(*args):
+            raise RuntimeError("progress failed")
+
+        with self.assertRaisesRegex(RuntimeError, "progress failed"):
+            split_workbook_by_rows(
+                source,
+                output_folder,
+                rows_per_file=1,
+                header_rows=1,
+                progress_callback=fail_after_first_file,
+            )
+
+        self.assertEqual(list(output_folder.iterdir()), [])
 
 
 if __name__ == "__main__":
