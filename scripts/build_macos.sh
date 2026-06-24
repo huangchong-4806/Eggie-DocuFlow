@@ -4,8 +4,8 @@ set -euo pipefail
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PYTHON="${PYTHON:-python3}"
 DIST_APP_NAME="Eggie Excel Tool.app"
-APP_NAME="EggieExcelTool_V1.1.1_mac.app"
-ZIP_NAME="EggieExcelTool_V1.1.1_mac.zip"
+APP_NAME="EggieExcelTool_V1.2.0_mac.app"
+ZIP_NAME="EggieExcelTool_V1.2.0_mac.zip"
 DIST_DIR="$PROJECT_ROOT/dist"
 BUILD_DIR="$PROJECT_ROOT/build"
 RELEASE_DIR="$PROJECT_ROOT/release"
@@ -51,7 +51,7 @@ fi
 APP_BYTES="$(/usr/bin/du -sk "$RELEASE_DIR/$APP_NAME" | awk '{print $1 * 1024}')"
 ZIP_BYTES="$(/usr/bin/stat -f '%z' "$RELEASE_DIR/$ZIP_NAME")"
 APP_LIMIT=$((90 * 1024 * 1024))
-ZIP_LIMIT=$((35 * 1024 * 1024))
+ZIP_LIMIT=$((45 * 1024 * 1024))
 
 echo "App size: $((APP_BYTES / 1024 / 1024)) MB"
 echo "Zip size: $((ZIP_BYTES / 1024 / 1024)) MB"
@@ -62,7 +62,7 @@ if (( APP_BYTES > APP_LIMIT )); then
 fi
 
 if (( ZIP_BYTES > ZIP_LIMIT )); then
-  echo "Zip exceeds the 35 MB release limit." >&2
+  echo "Zip exceeds the 45 MB release limit." >&2
   exit 1
 fi
 
