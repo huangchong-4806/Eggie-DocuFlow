@@ -5,7 +5,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(SPECPATH).parent
 APP_BASENAME = "Eggie Excel Tool"
-APP_VERSION = "1.1.1"
+APP_VERSION = "1.2.0"
 
 EXCLUDED_BINARY_PATHS = {
     "PySide6/QtNetwork.abi3.so",
@@ -86,6 +86,9 @@ a = Analysis(
         "PySide6.QtNetwork",
         "PySide6.QtDBus",
         "PySide6.QtSvg",
+        "PIL",
+        "pypdfium2",
+        "pypdfium2_raw",
     ],
     noarchive=False,
     optimize=1,
@@ -103,7 +106,7 @@ exe = EXE(
     name=APP_BASENAME,
     debug=False,
     bootloader_ignore_signals=False,
-    strip=False,
+    strip=True,
     upx=False,
     console=False,
     disable_windowed_traceback=False,
@@ -117,7 +120,7 @@ coll = COLLECT(
     exe,
     a.binaries,
     a.datas,
-    strip=False,
+    strip=True,
     upx=False,
     name=APP_BASENAME,
 )
@@ -132,7 +135,7 @@ app = BUNDLE(
         "CFBundleDisplayName": APP_BASENAME,
         "CFBundleName": APP_BASENAME,
         "CFBundleShortVersionString": APP_VERSION,
-        "CFBundleVersion": "4",
+        "CFBundleVersion": "5",
         "CFBundleAllowMixedLocalizations": True,
         "CFBundleDevelopmentRegion": "zh-Hans",
         "CFBundleLocalizations": ["en", "zh-Hans", "zh-Hant"],

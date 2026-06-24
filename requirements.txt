@@ -1,3 +1,4 @@
 openpyxl==3.1.5
+pdfplumber==0.11.8
 PySide6-Essentials==6.10.3
 pyinstaller==6.20.0

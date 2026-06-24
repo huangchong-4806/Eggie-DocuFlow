@@ -46,6 +46,10 @@ from excel_merge_tool import (
     get_file_info,
     split_workbook_by_rows,
 )
+from pdf_invoice_tool import (
+    ScannedPdfUnsupportedError,
+    convert_invoice_pdf,
+)
 
 
 APP_NAME_ZH = "Excel 合并拆分工具"
@@ -164,7 +168,8 @@ def build_theme_stylesheet(colors):
     }}
     QWidget#homePage,
     QWidget#excelPage,
-    QWidget#splitPage {{
+    QWidget#splitPage,
+    QWidget#invoicePage {{
         background: {colors["window_bg"]};
         color: {colors["text"]};
     }}
@@ -410,6 +415,18 @@ def default_output_filename(locale):
     return "合并结果.xlsx"
 
 
+def available_output_path(path):
+    path = Path(path)
+    if not path.exists():
+        return str(path)
+    number = 1
+    while True:
+        candidate = path.with_name(f"{path.stem}_{number}{path.suffix}")
+        if not candidate.exists():
+            return str(candidate)
+        number += 1
+
+
 def format_elapsed_seconds(seconds):
     if seconds < 60:
         return f"{seconds:.2f} 秒"
@@ -429,6 +446,9 @@ class ExcelMergerWindow(QMainWindow):
         self.split_source_file = ""
         self.split_output_folder = ""
         self.split_result_folder = ""
+        self.invoice_source_file = ""
+        self.invoice_output_file = ""
+        self.invoice_overwrite_confirmed = False
         self.refreshing_list = False
         self.settings = QSettings("ExcelMergeTool", "MacSimpleOfficeTools")
         self.accent_name = self.settings.value("appearance/accent", "cyan")
@@ -456,9 +476,11 @@ class ExcelMergerWindow(QMainWindow):
         self.excel_page = QWidget()
         self.excel_page.setObjectName("excelPage")
         self.split_page = self.create_split_page()
+        self.invoice_page = self.create_invoice_page()
         self.stack.addWidget(self.home_page)
         self.stack.addWidget(self.excel_page)
         self.stack.addWidget(self.split_page)
+        self.stack.addWidget(self.invoice_page)
         self.update_home_responsive_layout()
 
         main_layout = QVBoxLayout(self.excel_page)
@@ -671,6 +693,11 @@ class ExcelMergerWindow(QMainWindow):
                 button.setToolTip("按表头和数据行数拆分一个 Excel 文件")
                 button.setProperty("variant", "toolCardPrimary")
                 button.clicked.connect(self.show_split_tool)
+            elif index == 2:
+                button.setText("PDF发票解析工具")
+                button.setToolTip("解析 PDF 发票并输出财务结构化 Excel")
+                button.setProperty("variant", "toolCardPrimary")
+                button.clicked.connect(self.show_invoice_tool)
             else:
                 button.setText("敬请期待")
                 button.setEnabled(False)
@@ -804,6 +831,92 @@ class ExcelMergerWindow(QMainWindow):
         self.split_button.clicked.connect(self.split_workbook)
         return page
 
+    def create_invoice_page(self):
+        page = QWidget()
+        page.setObjectName("invoicePage")
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(22, 18, 22, 18)
+        layout.setSpacing(14)
+
+        tool_header_layout = QHBoxLayout()
+        self.invoice_back_home_button = QPushButton("返回工具首页")
+        self.invoice_back_home_button.setMinimumHeight(30)
+        self.invoice_back_home_button.setProperty("variant", "ghost")
+        self.invoice_settings_button = QPushButton("软件设置")
+        self.invoice_settings_button.setMinimumHeight(30)
+        self.invoice_settings_button.setProperty("variant", "ghost")
+        tool_header_layout.addWidget(self.invoice_back_home_button)
+        tool_header_layout.addStretch()
+        tool_header_layout.addWidget(self.invoice_settings_button)
+        layout.addLayout(tool_header_layout)
+
+        title = QLabel("PDF发票解析工具")
+        title.setAlignment(Qt.AlignCenter)
+        title.setFont(QFont("PingFang SC", 20, QFont.Bold))
+        title.setProperty("role", "title")
+        layout.addWidget(title)
+
+        subtitle = QLabel("统一提取发票头信息和明细，自动校验金额与税额")
+        subtitle.setAlignment(Qt.AlignCenter)
+        subtitle.setProperty("role", "subtitle")
+        layout.addWidget(subtitle)
+
+        source_group = QGroupBox("PDF 发票")
+        source_layout = QHBoxLayout(source_group)
+        source_layout.setContentsMargins(12, 14, 12, 10)
+        source_layout.setSpacing(10)
+        self.invoice_source_path_edit = QLineEdit()
+        self.invoice_source_path_edit.setReadOnly(True)
+        self.invoice_source_path_edit.setPlaceholderText("请选择 100 页以内的 PDF 发票")
+        self.invoice_source_path_edit.setMinimumHeight(34)
+        self.choose_invoice_source_button = QPushButton("选择 PDF")
+        self.choose_invoice_source_button.setMinimumHeight(34)
+        self.choose_invoice_source_button.setProperty("variant", "accent")
+        source_layout.addWidget(self.invoice_source_path_edit, 1)
+        source_layout.addWidget(self.choose_invoice_source_button)
+        layout.addWidget(source_group)
+
+        output_group = QGroupBox("Excel 保存位置")
+        output_layout = QHBoxLayout(output_group)
+        output_layout.setContentsMargins(12, 14, 12, 10)
+        output_layout.setSpacing(10)
+        self.invoice_output_path_edit = QLineEdit()
+        self.invoice_output_path_edit.setReadOnly(True)
+        self.invoice_output_path_edit.setPlaceholderText("请选择结构化 Excel 保存位置")
+        self.invoice_output_path_edit.setMinimumHeight(34)
+        self.choose_invoice_output_button = QPushButton("选择保存位置")
+        self.choose_invoice_output_button.setMinimumHeight(34)
+        output_layout.addWidget(self.invoice_output_path_edit, 1)
+        output_layout.addWidget(self.choose_invoice_output_button)
+        layout.addWidget(output_group)
+
+        hint = QLabel(
+            "当前版本支持可复制文字的 PDF 发票；扫描图片型 PDF 暂不支持。"
+        )
+        hint.setAlignment(Qt.AlignCenter)
+        hint.setProperty("role", "hint")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        layout.addStretch(1)
+
+        self.invoice_convert_button = QPushButton("开始识别并生成 Excel")
+        self.invoice_convert_button.setMinimumHeight(48)
+        self.invoice_convert_button.setMinimumWidth(260)
+        self.invoice_convert_button.setFont(QFont("PingFang SC", 14, QFont.Bold))
+        self.invoice_convert_button.setProperty("variant", "primary")
+        button_layout = QHBoxLayout()
+        button_layout.addStretch()
+        button_layout.addWidget(self.invoice_convert_button)
+        button_layout.addStretch()
+        layout.addLayout(button_layout)
+
+        self.invoice_back_home_button.clicked.connect(self.show_home)
+        self.invoice_settings_button.clicked.connect(self.show_settings)
+        self.choose_invoice_source_button.clicked.connect(self.choose_invoice_source_file)
+        self.choose_invoice_output_button.clicked.connect(self.choose_invoice_output_file)
+        self.invoice_convert_button.clicked.connect(self.convert_invoice)
+        return page
+
     def update_home_responsive_layout(self):
         if not hasattr(self, "home_tool_buttons"):
             return
@@ -884,6 +997,10 @@ class ExcelMergerWindow(QMainWindow):
     def show_split_tool(self):
         self.stack.setCurrentWidget(self.split_page)
         self.setWindowTitle(f"{self.app_name} - Excel 拆分工具")
+
+    def show_invoice_tool(self):
+        self.stack.setCurrentWidget(self.invoice_page)
+        self.setWindowTitle(f"{self.app_name} - PDF发票解析工具")
 
     def show_settings(self):
         accent_keys = list(ACCENT_PALETTES)
@@ -1184,6 +1301,116 @@ class ExcelMergerWindow(QMainWindow):
         self.output_path_edit.setText(self.output_file)
         self.output_path_edit.setToolTip(self.output_file)
         self.update_button_states()
+
+    def choose_invoice_source_file(self):
+        filename, _ = QFileDialog.getOpenFileName(
+            self,
+            "选择 PDF 发票",
+            str(Path.home() / "Downloads"),
+            "PDF 文件 (*.pdf)",
+        )
+        if not filename:
+            return
+        self.invoice_source_file = os.path.abspath(filename)
+        self.invoice_source_path_edit.setText(self.invoice_source_file)
+        self.invoice_source_path_edit.setToolTip(self.invoice_source_file)
+        default_output = Path.home() / "Downloads" / (
+            f"{Path(filename).stem}_发票结构化.xlsx"
+        )
+        self.invoice_output_file = os.path.abspath(
+            available_output_path(default_output)
+        )
+        self.invoice_overwrite_confirmed = False
+        self.invoice_output_path_edit.setText(self.invoice_output_file)
+        self.invoice_output_path_edit.setToolTip(self.invoice_output_file)
+
+    def choose_invoice_output_file(self):
+        default_path = self.invoice_output_file or str(
+            Path.home() / "Downloads" / "发票结构化.xlsx"
+        )
+        output_file, _ = QFileDialog.getSaveFileName(
+            self,
+            "保存发票结构化结果",
+            default_path,
+            "Excel (*.xlsx)",
+        )
+        if not output_file:
+            return
+        if not output_file.lower().endswith(".xlsx"):
+            output_file += ".xlsx"
+        self.invoice_output_file = os.path.abspath(output_file)
+        self.invoice_overwrite_confirmed = os.path.exists(self.invoice_output_file)
+        self.invoice_output_path_edit.setText(self.invoice_output_file)
+        self.invoice_output_path_edit.setToolTip(self.invoice_output_file)
+
+    def show_invoice_complete_message(self, result):
+        message = QMessageBox(self)
+        message.setWindowTitle("发票识别完成")
+        message.setIcon(QMessageBox.Information)
+        message.setText("发票结构化 Excel 已生成")
+        status = "全部校验正常" if result.abnormal_count == 0 else (
+            f"发现 {result.abnormal_count} 项异常，请查看“校验结果”"
+        )
+        message.setInformativeText(
+            f"保存位置：\n{result.output_file}\n\n"
+            f"明细行数：{result.item_count}\n{status}"
+        )
+        open_button = message.addButton("打 开 文 件", QMessageBox.ActionRole)
+        ok_button = message.addButton("确 定", QMessageBox.AcceptRole)
+        for button in (ok_button, open_button):
+            button.setFixedSize(112, 36)
+        message.setDefaultButton(ok_button)
+        message.exec()
+        if message.clickedButton() == open_button:
+            self.open_output_file(result.output_file)
+
+    def convert_invoice(self):
+        if not self.invoice_source_file or not self.invoice_output_file:
+            QMessageBox.warning(self, "尚未完成设置", "请先选择 PDF 发票和 Excel 保存位置。")
+            return
+
+        progress = QProgressDialog("正在读取 PDF…", "", 0, 100, self)
+        progress.setWindowTitle("正在识别发票")
+        progress.setCancelButton(None)
+        progress.setMinimumDuration(0)
+        progress.setWindowModality(Qt.WindowModal)
+        progress.show()
+
+        def update_progress(value, total, text):
+            progress.setMaximum(total)
+            progress.setValue(value)
+            progress.setLabelText(text)
+            QApplication.processEvents()
+
+        result = None
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            overwrite = self.invoice_overwrite_confirmed
+            self.invoice_overwrite_confirmed = False
+            result = convert_invoice_pdf(
+                self.invoice_source_file,
+                self.invoice_output_file,
+                progress_callback=update_progress,
+                overwrite=overwrite,
+            )
+        except ScannedPdfUnsupportedError as error:
+            QMessageBox.warning(
+                self,
+                "当前不支持扫描件",
+                f"{error}\n\n请使用可以复制文字的 PDF 发票。",
+            )
+        except Exception as error:
+            QMessageBox.critical(
+                self,
+                "发票识别失败",
+                f"{error}\n\n未生成未结构化文本或不完整 Excel。",
+            )
+        finally:
+            QApplication.restoreOverrideCursor()
+            progress.close()
+
+        if result:
+            self.show_invoice_complete_message(result)
 
     def choose_split_source_file(self):
         downloads = str(Path.home() / "Downloads")
