@@ -5,7 +5,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(SPECPATH).parent
 APP_BASENAME = "Eggie Excel Tool"
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.2.1"
 
 EXCLUDED_BINARY_PATHS = {
     "PySide6/QtNetwork.abi3.so",
@@ -135,7 +135,7 @@ app = BUNDLE(
         "CFBundleDisplayName": APP_BASENAME,
         "CFBundleName": APP_BASENAME,
         "CFBundleShortVersionString": APP_VERSION,
-        "CFBundleVersion": "5",
+        "CFBundleVersion": "6",
         "CFBundleAllowMixedLocalizations": True,
         "CFBundleDevelopmentRegion": "zh-Hans",
         "CFBundleLocalizations": ["en", "zh-Hans", "zh-Hant"],

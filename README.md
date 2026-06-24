@@ -1,6 +1,6 @@
 # Eggie Excel Tool / Excel 合并拆分工具
 
-![Version](https://img.shields.io/badge/version-1.2.0-blue)
+![Version](https://img.shields.io/badge/version-1.2.1-blue)
 ![Platform](https://img.shields.io/badge/macOS-Apple%20Silicon-black)
 ![Python](https://img.shields.io/badge/Python-3.9%2B-green)
 
@@ -40,7 +40,7 @@ The current release focuses on:
 
 1. 打开本项目右侧的 **Releases**
 2. 下载最新版安装包
-3. 解压后运行 `EggieExcelTool_V1.2.0_mac.app`
+3. 解压后运行 `EggieExcelTool_V1.2.1_mac.app`
 4. 本版本未做 Apple 公证；如果 macOS 阻止打开，请在 Finder 中右键 App，选择“打开”，再确认“打开”
 
 If you only want to use the application, you do not need to install Python or
@@ -48,7 +48,7 @@ run the source code.
 
 1. Open **Releases** on the right side of this repository
 2. Download the latest application package
-3. Extract the package and launch `EggieExcelTool_V1.2.0_mac.app`
+3. Extract the package and launch `EggieExcelTool_V1.2.1_mac.app`
 4. This release is not Apple-notarized. If macOS blocks it, right-click the App in Finder, choose **Open**, then confirm **Open**
 
 > 当前正式版主要支持 Apple 芯片 macOS，Windows 版本后续再考虑。
@@ -87,13 +87,15 @@ run the source code.
 ### PDF发票解析工具 / PDF Invoice Parser
 
 - 支持 100 页以内、可复制文字的 PDF 发票 / Supports text-based PDF invoices up to 100 pages
+- 支持一次选择多个 PDF，每票独立生成 Excel / Supports multiple PDFs with one Excel output per invoice
+- 单票失败不影响其他发票，并在完成后汇总失败原因 / A failed invoice does not stop the batch and is reported at completion
 - 统一输出发票头信息、明细表和校验结果 / Outputs header, item, and validation sheets
 - 校验数量与单价、金额与税额、价税合计 / Validates quantities, prices, amounts, taxes, and totals
 - 不输出 PDF 原始逐行文本 / Never exports raw line-by-line PDF text
 
 ## 使用方法 / Usage
 
-1. 打开 `EggieExcelTool_V1.2.0_mac.app`。 / Open `EggieExcelTool_V1.2.0_mac.app`.
+1. 打开 `EggieExcelTool_V1.2.1_mac.app`。 / Open `EggieExcelTool_V1.2.1_mac.app`.
 2. 选择需要使用的工具。 / Choose the tool you need.
 
 合并 Excel：
@@ -113,9 +115,9 @@ run the source code.
 
 解析 PDF 发票：
 
-1. 选择单张文本型 PDF 发票。 / Select one text-based PDF invoice.
-2. 确认 Excel 保存位置并点击“开始识别并生成 Excel”。 / Confirm the output location and start parsing.
-3. 在“校验结果”中复核异常项。 / Review exceptions in the validation sheet.
+1. 选择一个或多个文本型 PDF 发票。 / Select one or more text-based PDF invoices.
+2. 选择 Excel 保存文件夹并点击“开始识别并生成 Excel”。 / Choose an output folder and start parsing.
+3. 每张发票会生成独立 Excel；完成后查看成功、失败及校验结果。 / Each invoice gets its own Excel file; review the completion summary and validation results.
 
 ## 使用说明与注意事项 / Notes
 
@@ -168,8 +170,8 @@ PYTHON=.venv/bin/python scripts/build_macos.sh
 
 构建结果位于 `release/`，正式版文件名为：
 
-- `EggieExcelTool_V1.2.0_mac.app`
-- `EggieExcelTool_V1.2.0_mac.zip`
+- `EggieExcelTool_V1.2.1_mac.app`
+- `EggieExcelTool_V1.2.1_mac.zip`
 
 打包脚本保留所有 `qtbase` 系统语言翻译，并移除本工具不使用的 Qt 网络、TLS、
 SVG 和图片插件。
@@ -179,6 +181,12 @@ Build artifacts are written to `release/`. The packaging script keeps all
 and image plugins.
 
 ## 版本记录 / Changelog
+
+### V1.2.1
+
+- 支持批量选择 PDF 发票，每票独立生成 Excel / Added batch PDF selection with one Excel file per invoice
+- 单票失败不影响其他任务，完成后统一提示失败原因 / Isolated per-invoice failures and added a completion summary
+- 自动避免覆盖同名结果文件 / Prevented overwriting output files with duplicate names
 
 ### V1.2.0
 

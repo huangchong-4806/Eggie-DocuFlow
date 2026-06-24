@@ -860,3 +860,31 @@ def convert_invoice_pdf(pdf_file, output_file, progress_callback=None, overwrite
         item_count=len(invoice.items),
         abnormal_count=sum(record.abnormal for record in invoice.validations),
     )
+
+
+def convert_invoice_pdfs(pdf_files, output_folder, progress_callback=None):
+    output_folder = os.path.abspath(output_folder)
+    if not os.path.isdir(output_folder):
+        raise ValueError("Excel 保存文件夹不存在。")
+
+    results = []
+    failures = []
+    total = len(pdf_files)
+    for index, pdf_file in enumerate(pdf_files, 1):
+        if progress_callback:
+            progress_callback(index - 1, total, f"正在解析：{Path(pdf_file).name}")
+        output_file = Path(output_folder) / f"{Path(pdf_file).stem}_发票结构化.xlsx"
+        number = 1
+        while output_file.exists():
+            output_file = output_file.with_name(
+                f"{Path(pdf_file).stem}_发票结构化_{number}.xlsx"
+            )
+            number += 1
+        try:
+            results.append(convert_invoice_pdf(pdf_file, output_file))
+        except Exception as error:
+            failures.append((os.path.abspath(pdf_file), str(error)))
+
+    if progress_callback:
+        progress_callback(total, total, "批量解析完成")
+    return results, failures

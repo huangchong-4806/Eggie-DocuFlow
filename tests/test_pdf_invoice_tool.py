@@ -19,6 +19,7 @@ from pdf_invoice_tool import (
     _extract_party,
     _pdf_text_blocks,
     _positioned_items,
+    convert_invoice_pdfs,
     extract_invoice,
     parse_invoice_blocks,
     validate_invoice,
@@ -74,6 +75,23 @@ class PdfInvoiceToolTests(unittest.TestCase):
         self.assertEqual(invoice.items[0].project_name, "服务费")
         self.assertEqual(invoice.items[0].tax_rate, Decimal("0.13"))
         self.assertTrue(all(not record.abnormal for record in invoice.validations))
+
+    @patch("pdf_invoice_tool.convert_invoice_pdf")
+    def test_batch_conversion_keeps_processing_after_one_invoice_fails(self, convert):
+        convert.side_effect = [
+            SimpleNamespace(output_file="first.xlsx", item_count=1, abnormal_count=0),
+            ValueError("无法解析"),
+            SimpleNamespace(output_file="third.xlsx", item_count=2, abnormal_count=1),
+        ]
+
+        results, failures = convert_invoice_pdfs(
+            [self.root / "第一张.pdf", self.root / "损坏.pdf", self.root / "第三张.pdf"],
+            self.root,
+        )
+
+        self.assertEqual(len(results), 2)
+        self.assertEqual(Path(failures[0][0]).name, "损坏.pdf")
+        self.assertEqual(convert.call_count, 3)
 
     def test_parser_keeps_inconsistent_values_for_validation(self):
         invoice = parse_invoice_blocks(
