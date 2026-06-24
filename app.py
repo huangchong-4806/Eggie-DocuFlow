@@ -847,20 +847,52 @@ class ExcelMergerWindow(QMainWindow):
         subtitle.setProperty("role", "subtitle")
         layout.addWidget(subtitle)
 
-        source_group = QGroupBox("PDF 发票（可多选）")
-        source_layout = QHBoxLayout(source_group)
-        source_layout.setContentsMargins(12, 14, 12, 10)
-        source_layout.setSpacing(10)
-        self.invoice_source_path_edit = QLineEdit()
-        self.invoice_source_path_edit.setReadOnly(True)
-        self.invoice_source_path_edit.setPlaceholderText("请选择一个或多个 PDF 发票")
-        self.invoice_source_path_edit.setMinimumHeight(34)
-        self.choose_invoice_source_button = QPushButton("选择 PDF 发票")
-        self.choose_invoice_source_button.setMinimumHeight(34)
+        source_button_layout = QHBoxLayout()
+        source_button_layout.setSpacing(10)
+        self.choose_invoice_source_button = QPushButton("添加 PDF 发票")
+        self.delete_invoice_source_button = QPushButton("删除选中")
+        self.clear_invoice_source_button = QPushButton("清空列表")
         self.choose_invoice_source_button.setProperty("variant", "accent")
-        source_layout.addWidget(self.invoice_source_path_edit, 1)
-        source_layout.addWidget(self.choose_invoice_source_button)
-        layout.addWidget(source_group)
+        self.delete_invoice_source_button.setProperty("variant", "danger")
+        for button in (
+            self.choose_invoice_source_button,
+            self.delete_invoice_source_button,
+            self.clear_invoice_source_button,
+        ):
+            button.setMinimumHeight(34)
+            source_button_layout.addWidget(button)
+        source_button_layout.addStretch()
+        layout.addLayout(source_button_layout)
+
+        source_group = QGroupBox("待解析 PDF 发票")
+        source_layout = QVBoxLayout(source_group)
+        source_layout.setContentsMargins(10, 14, 10, 10)
+        source_layout.setSpacing(8)
+        self.invoice_file_table = QTreeWidget()
+        self.invoice_file_table.setColumnCount(4)
+        self.invoice_file_table.setHeaderLabels(
+            ["序号", "文件名", "文件大小", "文件路径"]
+        )
+        self.invoice_file_table.headerItem().setTextAlignment(0, Qt.AlignCenter)
+        self.invoice_file_table.setRootIsDecorated(False)
+        self.invoice_file_table.setUniformRowHeights(True)
+        self.invoice_file_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.invoice_file_table.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.invoice_file_table.setTextElideMode(Qt.TextElideMode.ElideNone)
+        self.invoice_file_table.setAlternatingRowColors(True)
+        header = self.invoice_file_table.header()
+        header.setSectionResizeMode(0, QHeaderView.Fixed)
+        header.setSectionResizeMode(1, QHeaderView.Interactive)
+        header.setSectionResizeMode(2, QHeaderView.Fixed)
+        header.setSectionResizeMode(3, QHeaderView.Stretch)
+        self.invoice_file_table.setColumnWidth(0, 80)
+        self.invoice_file_table.setColumnWidth(1, 300)
+        self.invoice_file_table.setColumnWidth(2, 110)
+        source_layout.addWidget(self.invoice_file_table)
+        self.invoice_file_status_label = QLabel("尚未添加文件")
+        self.invoice_file_status_label.setProperty("role", "status")
+        source_layout.addWidget(self.invoice_file_status_label)
+        layout.addWidget(source_group, 1)
 
         output_group = QGroupBox("Excel 保存文件夹")
         output_layout = QHBoxLayout(output_group)
@@ -883,8 +915,6 @@ class ExcelMergerWindow(QMainWindow):
         hint.setProperty("role", "hint")
         hint.setWordWrap(True)
         layout.addWidget(hint)
-        layout.addStretch(1)
-
         self.invoice_convert_button = QPushButton("开始识别并生成 Excel")
         self.invoice_convert_button.setMinimumHeight(48)
         self.invoice_convert_button.setMinimumWidth(260)
@@ -898,9 +928,15 @@ class ExcelMergerWindow(QMainWindow):
 
         self.invoice_back_home_button.clicked.connect(self.show_home)
         self.invoice_settings_button.clicked.connect(self.show_settings)
-        self.choose_invoice_source_button.clicked.connect(self.choose_invoice_source_file)
+        self.choose_invoice_source_button.clicked.connect(self.add_invoice_files)
+        self.delete_invoice_source_button.clicked.connect(self.delete_selected_invoice_files)
+        self.clear_invoice_source_button.clicked.connect(self.clear_invoice_files)
         self.choose_invoice_output_button.clicked.connect(self.choose_invoice_output_folder)
         self.invoice_convert_button.clicked.connect(self.convert_invoice)
+        self.invoice_file_table.itemSelectionChanged.connect(
+            self.update_invoice_button_states
+        )
+        self.refresh_invoice_file_list()
         return page
 
     def update_home_responsive_layout(self):
@@ -1288,7 +1324,49 @@ class ExcelMergerWindow(QMainWindow):
         self.output_path_edit.setToolTip(self.output_file)
         self.update_button_states()
 
-    def choose_invoice_source_file(self):
+    def refresh_invoice_file_list(self):
+        self.invoice_file_table.clear()
+        if not self.invoice_source_files:
+            empty_item = QTreeWidgetItem(
+                ["", "暂无文件，请添加 PDF 发票", "", ""]
+            )
+            empty_item.setFlags(Qt.NoItemFlags)
+            self.invoice_file_table.addTopLevelItem(empty_item)
+            self.invoice_file_status_label.setText("尚未添加文件")
+        else:
+            for index, filename in enumerate(self.invoice_source_files, 1):
+                path = Path(filename)
+                try:
+                    size = format_file_size(path.stat().st_size)
+                except OSError:
+                    size = "无法读取"
+                item = QTreeWidgetItem(
+                    [f"{index:03d}", path.name, size, filename]
+                )
+                item.setData(0, Qt.UserRole, filename)
+                item.setTextAlignment(0, Qt.AlignCenter)
+                item.setTextAlignment(2, Qt.AlignCenter)
+                item.setToolTip(1, filename)
+                item.setToolTip(3, filename)
+                self.invoice_file_table.addTopLevelItem(item)
+            self.invoice_file_status_label.setText(
+                f"已添加 {len(self.invoice_source_files)} 个 PDF 发票"
+            )
+        self.update_invoice_button_states()
+
+    def update_invoice_button_states(self):
+        has_files = bool(self.invoice_source_files)
+        has_selection = any(
+            item.data(0, Qt.UserRole)
+            for item in self.invoice_file_table.selectedItems()
+        )
+        self.delete_invoice_source_button.setEnabled(has_selection)
+        self.clear_invoice_source_button.setEnabled(has_files)
+        self.invoice_convert_button.setEnabled(
+            has_files and bool(self.invoice_output_folder)
+        )
+
+    def add_invoice_files(self):
         filenames, _ = QFileDialog.getOpenFileNames(
             self,
             "选择一个或多个 PDF 发票",
@@ -1297,14 +1375,31 @@ class ExcelMergerWindow(QMainWindow):
         )
         if not filenames:
             return
-        self.invoice_source_files = [os.path.abspath(name) for name in filenames]
-        display_text = (
-            self.invoice_source_files[0]
-            if len(self.invoice_source_files) == 1
-            else f"已选择 {len(self.invoice_source_files)} 个 PDF 发票"
-        )
-        self.invoice_source_path_edit.setText(display_text)
-        self.invoice_source_path_edit.setToolTip("\n".join(self.invoice_source_files))
+        existing = set(self.invoice_source_files)
+        for filename in filenames:
+            normalized = os.path.abspath(filename)
+            if normalized not in existing:
+                self.invoice_source_files.append(normalized)
+                existing.add(normalized)
+        self.refresh_invoice_file_list()
+
+    def delete_selected_invoice_files(self):
+        selected = {
+            item.data(0, Qt.UserRole)
+            for item in self.invoice_file_table.selectedItems()
+            if item.data(0, Qt.UserRole)
+        }
+        if selected:
+            self.invoice_source_files = [
+                filename
+                for filename in self.invoice_source_files
+                if filename not in selected
+            ]
+            self.refresh_invoice_file_list()
+
+    def clear_invoice_files(self):
+        self.invoice_source_files = []
+        self.refresh_invoice_file_list()
 
     def choose_invoice_output_folder(self):
         output_folder = QFileDialog.getExistingDirectory(
@@ -1317,6 +1412,7 @@ class ExcelMergerWindow(QMainWindow):
         self.invoice_output_folder = os.path.abspath(output_folder)
         self.invoice_output_path_edit.setText(self.invoice_output_folder)
         self.invoice_output_path_edit.setToolTip(self.invoice_output_folder)
+        self.update_invoice_button_states()
 
     def show_invoice_complete_message(self, results, failures):
         message = QMessageBox(self)
