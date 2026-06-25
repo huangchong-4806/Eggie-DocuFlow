@@ -1,11 +1,11 @@
 # Eggie Excel Tool / Excel 合并拆分工具
 
-![Version](https://img.shields.io/badge/version-1.2.1-blue)
+![Version](https://img.shields.io/badge/version-1.3.0-blue)
 ![Platform](https://img.shields.io/badge/macOS-Apple%20Silicon-black)
 ![Python](https://img.shields.io/badge/Python-3.9%2B-green)
 
 Eggie Excel Tool 是一个面向日常办公场景的 Excel 与 PDF 工具。当前版本支持
-Excel 合并、Excel 拆分和文本型 PDF 发票结构化解析。
+Excel 合并、Excel 拆分、文本型 PDF 发票结构化解析，以及 PDF 文档智能处理。
 
 当前版本重点解决以下问题：
 
@@ -16,11 +16,14 @@ Excel 合并、Excel 拆分和文本型 PDF 发票结构化解析。
 - 拆分文件自动保留指定表头
 - 拆分结果自动集中保存到独立文件夹
 - PDF 发票转换为财务结构化 Excel，并自动校验金额与税额
+- PDF 文档智能路由：自动识别发票、合同、表格和未知文档
+- 合同 PDF 输出 Word 文档，表格 PDF 输出 Excel，未知 PDF 输出文本说明
 - 支持较大文件的低内存处理
 - 提供简单易用的 macOS 图形界面
 
 Eggie Excel Tool is a desktop utility for everyday office workflows. It supports
-Excel merging, Excel splitting, and structured parsing of text-based PDF invoices.
+Excel merging, Excel splitting, structured parsing of text-based PDF invoices,
+and intelligent PDF document routing.
 
 The current release focuses on:
 
@@ -31,6 +34,8 @@ The current release focuses on:
 - Keeping the configured header rows in every split file
 - Saving split output files into an automatically created folder
 - Converting PDF invoices into finance-ready Excel files with amount and tax validation
+- Intelligent PDF routing for invoices, contracts, tables, and unknown documents
+- Exporting contracts to Word, tables to Excel, and unknown PDFs to text reports
 - Low-memory processing for larger workbooks
 - A simple and user-friendly macOS graphical interface
 
@@ -40,7 +45,7 @@ The current release focuses on:
 
 1. 打开本项目右侧的 **Releases**
 2. 下载最新版安装包
-3. 解压后运行 `EggieExcelTool_V1.2.1_mac.app`
+3. 解压后运行 `EggieExcelTool_V1.3.0_mac.app`
 4. 本版本未做 Apple 公证；如果 macOS 阻止打开，请在 Finder 中右键 App，选择“打开”，再确认“打开”
 
 If you only want to use the application, you do not need to install Python or
@@ -48,7 +53,7 @@ run the source code.
 
 1. Open **Releases** on the right side of this repository
 2. Download the latest application package
-3. Extract the package and launch `EggieExcelTool_V1.2.1_mac.app`
+3. Extract the package and launch `EggieExcelTool_V1.3.0_mac.app`
 4. This release is not Apple-notarized. If macOS blocks it, right-click the App in Finder, choose **Open**, then confirm **Open**
 
 > 当前正式版主要支持 Apple 芯片 macOS，Windows 版本后续再考虑。
@@ -93,9 +98,19 @@ run the source code.
 - 校验数量与单价、金额与税额、价税合计 / Validates quantities, prices, amounts, taxes, and totals
 - 不输出 PDF 原始逐行文本 / Never exports raw line-by-line PDF text
 
+### 文档智能处理 / Document Intelligence
+
+- 新增统一入口“文档智能处理” / Added a unified **Document Intelligence** entry
+- 支持选择或拖拽 PDF 文件 / Supports selecting or dragging a PDF file
+- 自动分类为发票、合同、表格或未知文档 / Automatically classifies invoices, contracts, tables, or unknown documents
+- 发票复用原有发票解析逻辑并输出 Excel / Invoices reuse the existing invoice parser and export Excel
+- 合同输出 Word 文档 / Contracts export Word documents
+- 表格类 PDF 输出标准 Excel / Table-like PDFs export standard Excel workbooks
+- 扫描件不启用 OCR，会输出 UNKNOWN 文本说明 / Scanned PDFs do not use OCR and export an UNKNOWN text report
+
 ## 使用方法 / Usage
 
-1. 打开 `EggieExcelTool_V1.2.1_mac.app`。 / Open `EggieExcelTool_V1.2.1_mac.app`.
+1. 打开 `EggieExcelTool_V1.3.0_mac.app`。 / Open `EggieExcelTool_V1.3.0_mac.app`.
 2. 选择需要使用的工具。 / Choose the tool you need.
 
 合并 Excel：
@@ -119,6 +134,13 @@ run the source code.
 2. 选择 Excel 保存文件夹并点击“开始识别并生成 Excel”。 / Choose an output folder and start parsing.
 3. 每张发票会生成独立 Excel；完成后查看成功、失败及校验结果。 / Each invoice gets its own Excel file; review the completion summary and validation results.
 
+文档智能处理：
+
+1. 进入“文档智能处理”。 / Open **Document Intelligence**.
+2. 选择或拖拽一个 PDF 文件。 / Select or drag one PDF file.
+3. 点击“一键识别并处理”。 / Click **Identify and Process**.
+4. 查看识别类型、状态和输出文件路径。 / Review the detected type, status, and output path.
+
 ## 使用说明与注意事项 / Notes
 
 - 建议合并前关闭正在打开的 Excel 文件。 / Close any open Excel files before merging.
@@ -126,6 +148,7 @@ run the source code.
 - 当前优先支持 `.xlsx` 和 `.xlsm` 文件。 / `.xlsx` and `.xlsm` files are currently the primary supported formats.
 - Excel 拆分工具当前仅支持 `.xlsx` 文件。 / The Excel split tool currently supports `.xlsx` files only.
 - PDF 发票解析工具仅支持文本型、单票 PDF，扫描件请先转为可复制文字的 PDF。 / The PDF invoice parser supports one text-based invoice per PDF; scanned PDFs are not supported.
+- 文档智能处理当前不启用 OCR，扫描件会被标记为 UNKNOWN。 / Document Intelligence does not use OCR; scanned PDFs are marked as UNKNOWN.
 - 拆分工具只读取原始 Excel 文件，不会修改原文件。 / The split tool only reads the original Excel file and will not modify it.
 - 加密、损坏、受保护的 Excel 文件可能无法正常合并。 / Encrypted, corrupted, or protected workbooks may not merge correctly.
 - 合并大文件时请耐心等待。 / Large workbooks may require additional processing time.
@@ -170,8 +193,8 @@ PYTHON=.venv/bin/python scripts/build_macos.sh
 
 构建结果位于 `release/`，正式版文件名为：
 
-- `EggieExcelTool_V1.2.1_mac.app`
-- `EggieExcelTool_V1.2.1_mac.zip`
+- `EggieExcelTool_V1.3.0_mac.app`
+- `EggieExcelTool_V1.3.0_mac.zip`
 
 打包脚本保留所有 `qtbase` 系统语言翻译，并移除本工具不使用的 Qt 网络、TLS、
 SVG 和图片插件。
@@ -181,6 +204,15 @@ Build artifacts are written to `release/`. The packaging script keeps all
 and image plugins.
 
 ## 版本记录 / Changelog
+
+### V1.3.0
+
+- 文档智能路由系统上线 / Added the document intelligence routing system
+- 支持发票、合同、表格和未知文档自动分类 / Added automatic classification for invoices, contracts, tables, and unknown documents
+- App 入口新增“文档智能处理”，支持文件选择和拖拽 PDF / Added the Document Intelligence app entry with file selection and PDF drag-and-drop
+- 完成 core / parsers / exporters / utils 模块化架构 / Completed the core / parsers / exporters / utils modular architecture
+- 新增统一版本标识和日志版本号 / Added unified version metadata and versioned logs
+- 完成真实 PDF 验证 / Completed real PDF validation
 
 ### V1.2.1
 
