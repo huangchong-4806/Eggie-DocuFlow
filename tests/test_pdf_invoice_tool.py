@@ -216,7 +216,7 @@ class PdfInvoiceToolTests(unittest.TestCase):
             TextBlock("名称：", 1, 318, 20, 345),
             TextBlock("销方公司", 1, 342, 20, 420),
             TextBlock("项目名称 数量 单价 金额 税率 税额", 1, 10, 100, 580),
-            TextBlock("服务费200mm*", 1, 10, 120, 260),
+            TextBlock("服务费", 1, 10, 120, 260),
             TextBlock("1", 1, 270, 120, 280),
             TextBlock("100", 1, 330, 120, 350),
             TextBlock("100", 1, 400, 120, 430),
@@ -226,8 +226,8 @@ class PdfInvoiceToolTests(unittest.TestCase):
             TextBlock("13", 1, 550, 200, 570),
             TextBlock("小计", 1, 50, 206, 100),
             TextBlock("项目名称 数量 单价 金额 税率 税额", 2, 10, 100, 580),
-            TextBlock("200mm,70片/包", 2, 10, 112, 120),
-            TextBlock("调整行", 2, 10, 120, 80),
+            TextBlock("200mm*200mm,70片/包", 2, 10, 112, 120),
+            TextBlock("*调整项目*", 2, 10, 116, 80),
             TextBlock("-10", 2, 400, 120, 430),
             TextBlock("13%", 2, 470, 120, 490),
             TextBlock("-1.30", 2, 550, 120, 580),
@@ -239,7 +239,10 @@ class PdfInvoiceToolTests(unittest.TestCase):
         self.assertEqual(invoice.header["购买方名称"], "购方公司")
         self.assertEqual(invoice.header["销售方名称"], "销方公司")
         self.assertEqual(len(invoice.items), 2)
-        self.assertEqual(invoice.items[0].project_name, "服务费200mm*200mm,70片/包")
+        self.assertEqual(
+            invoice.items[0].project_name,
+            "服务费200mm*200mm,70片/包",
+        )
         self.assertEqual(invoice.items[0].specification, "")
         self.assertEqual(invoice.items[1].amount, Decimal("-10"))
 

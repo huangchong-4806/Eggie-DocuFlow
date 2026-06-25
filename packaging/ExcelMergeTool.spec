@@ -5,7 +5,9 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(SPECPATH).parent
 APP_BASENAME = "Eggie Excel Tool"
-APP_VERSION = "1.2.1"
+version_scope = {}
+exec((PROJECT_ROOT / "version.py").read_text(encoding="utf-8"), version_scope)
+APP_VERSION = version_scope["APP_VERSION"]
 
 EXCLUDED_BINARY_PATHS = {
     "PySide6/QtNetwork.abi3.so",
@@ -77,6 +79,7 @@ a = Analysis(
             str(PROJECT_ROOT / "assets" / "zh-Hant.lproj" / "InfoPlist.strings"),
             "zh-Hant.lproj",
         ),
+        (str(PROJECT_ROOT / "test_files"), "test_files"),
     ],
     hiddenimports=[],
     hookspath=[],
@@ -110,7 +113,7 @@ exe = EXE(
     upx=False,
     console=False,
     disable_windowed_traceback=False,
-    argv_emulation=False,
+    argv_emulation=True,
     target_arch="arm64",
     codesign_identity=None,
     entitlements_file=None,
@@ -141,5 +144,13 @@ app = BUNDLE(
         "CFBundleLocalizations": ["en", "zh-Hans", "zh-Hant"],
         "LSHasLocalizedDisplayName": True,
         "LSMinimumSystemVersion": "11.0",
+        "CFBundleDocumentTypes": [
+            {
+                "CFBundleTypeName": "PDF Document",
+                "CFBundleTypeExtensions": ["pdf"],
+                "CFBundleTypeRole": "Viewer",
+                "LSHandlerRank": "Alternate",
+            }
+        ],
     },
 )

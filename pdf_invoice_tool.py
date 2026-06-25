@@ -348,7 +348,10 @@ def _positioned_items(blocks):
             _column_text(line, 0, 190, use_start=True)
             for line in content[: numeric_indexes[0]]
         ).strip()
-        if leading_text and items and "*" not in leading_text:
+        leading_text = re.split(
+            r"\*(?=[\u3400-\u9fff]{1,20}\*)", leading_text, maxsplit=1
+        )[0]
+        if leading_text and items:
             items[-1].project_name = "".join(
                 filter(None, (items[-1].project_name, leading_text))
             )

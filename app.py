@@ -46,6 +46,7 @@ from excel_merge_tool import (
     get_file_info,
     split_workbook_by_rows,
 )
+from document_router import process_document
 from pdf_invoice_tool import (
     convert_invoice_pdfs,
 )
@@ -53,6 +54,12 @@ from pdf_invoice_tool import (
 
 APP_NAME_ZH = "Excel 合并拆分工具"
 APP_NAME_EN = "Eggie Excel Tool"
+DOCUMENT_TYPE_LABELS = {
+    "INVOICE": "发票",
+    "CONTRACT": "合同",
+    "TABLE": "表格",
+    "UNKNOWN": "未知文档",
+}
 
 
 def is_chinese_locale(locale):
@@ -168,7 +175,8 @@ def build_theme_stylesheet(colors):
     QWidget#homePage,
     QWidget#excelPage,
     QWidget#splitPage,
-    QWidget#invoicePage {{
+    QWidget#invoicePage,
+    QWidget#documentPage {{
         background: {colors["window_bg"]};
         color: {colors["text"]};
     }}
@@ -435,6 +443,9 @@ class ExcelMergerWindow(QMainWindow):
         self.split_result_folder = ""
         self.invoice_source_files = []
         self.invoice_output_folder = ""
+        self.document_source_file = ""
+        self.document_output_folder = ""
+        self.document_result_file = ""
         self.refreshing_list = False
         self.settings = QSettings("ExcelMergeTool", "MacSimpleOfficeTools")
         self.accent_name = self.settings.value("appearance/accent", "cyan")
@@ -454,6 +465,7 @@ class ExcelMergerWindow(QMainWindow):
         self.setWindowTitle(self.app_name)
         self.resize(1120, 740)
         self.setMinimumSize(900, 580)
+        self.setAcceptDrops(True)
 
         self.stack = QStackedWidget()
         self.setCentralWidget(self.stack)
@@ -463,10 +475,12 @@ class ExcelMergerWindow(QMainWindow):
         self.excel_page.setObjectName("excelPage")
         self.split_page = self.create_split_page()
         self.invoice_page = self.create_invoice_page()
+        self.document_page = self.create_document_page()
         self.stack.addWidget(self.home_page)
         self.stack.addWidget(self.excel_page)
         self.stack.addWidget(self.split_page)
         self.stack.addWidget(self.invoice_page)
+        self.stack.addWidget(self.document_page)
         self.update_home_responsive_layout()
 
         main_layout = QVBoxLayout(self.excel_page)
@@ -684,6 +698,11 @@ class ExcelMergerWindow(QMainWindow):
                 button.setToolTip("解析 PDF 发票并输出财务结构化 Excel")
                 button.setProperty("variant", "toolCardPrimary")
                 button.clicked.connect(self.show_invoice_tool)
+            elif index == 3:
+                button.setText("文档智能处理")
+                button.setToolTip("自动识别 PDF 类型并生成对应结果")
+                button.setProperty("variant", "toolCardPrimary")
+                button.clicked.connect(self.show_document_tool)
             else:
                 button.setText("敬请期待")
                 button.setEnabled(False)
@@ -939,6 +958,113 @@ class ExcelMergerWindow(QMainWindow):
         self.refresh_invoice_file_list()
         return page
 
+    def create_document_page(self):
+        page = QWidget()
+        page.setObjectName("documentPage")
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(22, 18, 22, 18)
+        layout.setSpacing(14)
+
+        tool_header_layout = QHBoxLayout()
+        self.document_back_home_button = QPushButton("返回工具首页")
+        self.document_back_home_button.setMinimumHeight(30)
+        self.document_back_home_button.setProperty("variant", "ghost")
+        self.document_settings_button = QPushButton("软件设置")
+        self.document_settings_button.setMinimumHeight(30)
+        self.document_settings_button.setProperty("variant", "ghost")
+        tool_header_layout.addWidget(self.document_back_home_button)
+        tool_header_layout.addStretch()
+        tool_header_layout.addWidget(self.document_settings_button)
+        layout.addLayout(tool_header_layout)
+
+        title = QLabel("文档智能处理")
+        title.setAlignment(Qt.AlignCenter)
+        title.setFont(QFont("PingFang SC", 20, QFont.Bold))
+        title.setProperty("role", "title")
+        layout.addWidget(title)
+
+        subtitle = QLabel("自动识别发票、合同和表格类 PDF，并生成对应结果")
+        subtitle.setAlignment(Qt.AlignCenter)
+        subtitle.setProperty("role", "subtitle")
+        layout.addWidget(subtitle)
+
+        source_group = QGroupBox("待处理 PDF")
+        source_layout = QHBoxLayout(source_group)
+        self.document_source_path_edit = QLineEdit()
+        self.document_source_path_edit.setReadOnly(True)
+        self.document_source_path_edit.setPlaceholderText("请选择一个 PDF 文件")
+        self.document_source_path_edit.setMinimumHeight(34)
+        self.choose_document_source_button = QPushButton("选择 PDF")
+        self.choose_document_source_button.setMinimumHeight(34)
+        self.choose_document_source_button.setProperty("variant", "accent")
+        source_layout.addWidget(self.document_source_path_edit, 1)
+        source_layout.addWidget(self.choose_document_source_button)
+        layout.addWidget(source_group)
+
+        output_group = QGroupBox("结果保存文件夹")
+        output_layout = QHBoxLayout(output_group)
+        self.document_output_path_edit = QLineEdit()
+        self.document_output_path_edit.setReadOnly(True)
+        self.document_output_path_edit.setPlaceholderText("选择 PDF 后将自动设为同目录的 output 文件夹")
+        self.document_output_path_edit.setMinimumHeight(34)
+        self.choose_document_output_button = QPushButton("更改文件夹")
+        self.choose_document_output_button.setMinimumHeight(34)
+        output_layout.addWidget(self.document_output_path_edit, 1)
+        output_layout.addWidget(self.choose_document_output_button)
+        layout.addWidget(output_group)
+
+        result_group = QGroupBox("处理结果")
+        result_layout = QVBoxLayout(result_group)
+        self.document_status_label = QLabel("等待选择 PDF 文件")
+        self.document_status_label.setProperty("role", "status")
+        self.document_result_path_edit = QLineEdit()
+        self.document_result_path_edit.setReadOnly(True)
+        self.document_result_path_edit.setPlaceholderText("处理完成后在这里显示结果路径")
+        self.document_result_path_edit.setMinimumHeight(34)
+        result_layout.addWidget(self.document_status_label)
+        result_layout.addWidget(self.document_result_path_edit)
+        layout.addWidget(result_group)
+
+        hint = QLabel(
+            "处理顺序：PDF 分类 → 路由 → 输出。当前版本不含 OCR，"
+            "扫描图片型 PDF 将输出 UNKNOWN 文本说明。"
+        )
+        hint.setAlignment(Qt.AlignCenter)
+        hint.setProperty("role", "hint")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        layout.addStretch(1)
+
+        button_layout = QHBoxLayout()
+        self.document_process_button = QPushButton("一键识别并处理")
+        self.document_process_button.setMinimumHeight(48)
+        self.document_process_button.setMinimumWidth(230)
+        self.document_process_button.setFont(QFont("PingFang SC", 14, QFont.Bold))
+        self.document_process_button.setProperty("variant", "primary")
+        self.open_document_result_button = QPushButton("打开结果")
+        self.open_document_result_button.setMinimumHeight(48)
+        self.open_document_result_button.setMinimumWidth(140)
+        button_layout.addStretch()
+        button_layout.addWidget(self.document_process_button)
+        button_layout.addWidget(self.open_document_result_button)
+        button_layout.addStretch()
+        layout.addLayout(button_layout)
+
+        self.document_back_home_button.clicked.connect(self.show_home)
+        self.document_settings_button.clicked.connect(self.show_settings)
+        self.choose_document_source_button.clicked.connect(
+            self.choose_document_source_file
+        )
+        self.choose_document_output_button.clicked.connect(
+            self.choose_document_output_folder
+        )
+        self.document_process_button.clicked.connect(self.process_smart_document)
+        self.open_document_result_button.clicked.connect(
+            lambda: self.open_output_file(self.document_result_file)
+        )
+        self.update_document_button_states()
+        return page
+
     def update_home_responsive_layout(self):
         if not hasattr(self, "home_tool_buttons"):
             return
@@ -1023,6 +1149,10 @@ class ExcelMergerWindow(QMainWindow):
     def show_invoice_tool(self):
         self.stack.setCurrentWidget(self.invoice_page)
         self.setWindowTitle(f"{self.app_name} - PDF发票解析工具")
+
+    def show_document_tool(self):
+        self.stack.setCurrentWidget(self.document_page)
+        self.setWindowTitle(f"{self.app_name} - 文档智能处理")
 
     def show_settings(self):
         accent_keys = list(ACCENT_PALETTES)
@@ -1477,6 +1607,162 @@ class ExcelMergerWindow(QMainWindow):
 
         if results or failures:
             self.show_invoice_complete_message(results, failures)
+
+    def update_document_button_states(self):
+        self.document_process_button.setEnabled(
+            bool(self.document_source_file and self.document_output_folder)
+        )
+        self.open_document_result_button.setEnabled(
+            bool(self.document_result_file and Path(self.document_result_file).exists())
+        )
+
+    def dropped_pdf_path(self, event):
+        for url in event.mimeData().urls():
+            if url.isLocalFile() and Path(url.toLocalFile()).suffix.lower() == ".pdf":
+                return url.toLocalFile()
+        return ""
+
+    def dragEnterEvent(self, event):
+        if self.dropped_pdf_path(event):
+            event.acceptProposedAction()
+            return
+        super().dragEnterEvent(event)
+
+    def dropEvent(self, event):
+        pdf_file = self.dropped_pdf_path(event)
+        if not pdf_file:
+            super().dropEvent(event)
+            return
+        self.set_document_source_file(pdf_file)
+        self.show_document_tool()
+        event.acceptProposedAction()
+
+    def set_document_source_file(self, filename):
+        if not filename or Path(filename).suffix.lower() != ".pdf":
+            return False
+        self.document_source_file = os.path.abspath(filename)
+        self.document_output_folder = str(Path(self.document_source_file).parent / "output")
+        self.document_result_file = ""
+        self.document_source_path_edit.setText(self.document_source_file)
+        self.document_source_path_edit.setToolTip(self.document_source_file)
+        self.document_output_path_edit.setText(self.document_output_folder)
+        self.document_output_path_edit.setToolTip(self.document_output_folder)
+        self.document_result_path_edit.clear()
+        self.document_status_label.setText("已选择 PDF，可开始一键处理")
+        self.update_document_button_states()
+        return True
+
+    def choose_document_source_file(self):
+        filename, _ = QFileDialog.getOpenFileName(
+            self,
+            "选择要智能处理的 PDF",
+            str(Path.home() / "Downloads"),
+            "PDF 文件 (*.pdf)",
+        )
+        if not filename:
+            return
+
+        self.set_document_source_file(filename)
+
+    def choose_document_output_folder(self):
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            "选择结果保存文件夹",
+            self.document_output_folder or str(Path.home() / "Downloads"),
+            QFileDialog.ShowDirsOnly,
+        )
+        if not folder:
+            return
+
+        self.document_output_folder = os.path.abspath(folder)
+        self.document_result_file = ""
+        self.document_output_path_edit.setText(self.document_output_folder)
+        self.document_output_path_edit.setToolTip(self.document_output_folder)
+        self.document_result_path_edit.clear()
+        self.document_status_label.setText("保存位置已更新，可开始处理")
+        self.update_document_button_states()
+
+    def process_smart_document(self):
+        if not self.document_source_file or not self.document_output_folder:
+            QMessageBox.warning(self, "尚未完成设置", "请先选择 PDF 文件。")
+            return
+
+        progress = QProgressDialog("正在读取 PDF…", "", 0, 0, self)
+        progress.setWindowTitle("文档智能处理")
+        progress.setCancelButton(None)
+        progress.setMinimumDuration(0)
+        progress.setWindowModality(Qt.WindowModal)
+        progress.show()
+
+        def update_progress(value, total, text):
+            progress.setMaximum(max(total, 1))
+            progress.setValue(value)
+            progress.setLabelText(text)
+            self.document_status_label.setText(text)
+            QApplication.processEvents()
+
+        self.document_result_file = ""
+        self.document_result_path_edit.clear()
+        self.document_status_label.setText("正在识别文档类型…")
+        self.update_document_button_states()
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        error_detail = ""
+        try:
+            result = process_document(
+                self.document_source_file,
+                self.document_output_folder,
+                progress_callback=update_progress,
+            )
+        except Exception as error:
+            result = {
+                "doc_type": "UNKNOWN",
+                "confidence": 0.0,
+                "output_file": "",
+                "status": "failed",
+            }
+            error_detail = f"\n\n错误信息：{error}"
+        finally:
+            QApplication.restoreOverrideCursor()
+            progress.close()
+
+        if result["status"] != "success" or not result["output_file"]:
+            self.document_status_label.setText(
+                "处理失败，请检查 PDF 文件和日志记录"
+            )
+            QMessageBox.critical(
+                self,
+                "处理失败",
+                "未生成结果文件。"
+                f"{error_detail}\n\n日志位置：~/.eggie_excel_tool/logs",
+            )
+            self.update_document_button_states()
+            return
+
+        self.document_result_file = result["output_file"]
+        self.document_result_path_edit.setText(self.document_result_file)
+        self.document_result_path_edit.setToolTip(self.document_result_file)
+        doc_type_label = DOCUMENT_TYPE_LABELS.get(
+            result["doc_type"], result["doc_type"]
+        )
+        confidence_percent = round(result["confidence"] * 100)
+        self.document_status_label.setText(
+            f"处理完成：{doc_type_label}（置信度 {confidence_percent}%）"
+        )
+        self.update_document_button_states()
+
+        message = QMessageBox(self)
+        message.setWindowTitle("处理完成")
+        message.setIcon(QMessageBox.Information)
+        message.setText(f"已识别为：{doc_type_label}")
+        message.setInformativeText(f"结果保存位置：\n{self.document_result_file}")
+        open_button = message.addButton("打开结果", QMessageBox.ActionRole)
+        ok_button = message.addButton("确 定", QMessageBox.AcceptRole)
+        for button in (ok_button, open_button):
+            button.setFixedSize(112, 36)
+        message.setDefaultButton(ok_button)
+        message.exec()
+        if message.clickedButton() == open_button:
+            self.open_output_file(self.document_result_file)
 
     def choose_split_source_file(self):
         downloads = str(Path.home() / "Downloads")

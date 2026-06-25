@@ -1,0 +1,3 @@
+APP_VERSION = "1.3.0"
+BUILD_TYPE = "release"
+BUILD_DATE = "2026-06-25"

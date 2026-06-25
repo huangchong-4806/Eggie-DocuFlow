@@ -161,8 +161,12 @@ venv.bak/
 
 # Local release output and benchmark files
 outputs/
+output/
 work/
 release/
+logs/
+tmp/
+beta_testing/
 *.xlsx
 
 # Spyder project settings
