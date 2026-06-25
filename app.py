@@ -448,7 +448,11 @@ class ExcelMergerWindow(QMainWindow):
         self.document_result_file = ""
         self.refreshing_list = False
         self.settings = QSettings("EggieDocuFlow", "EggieDocuFlow")
-        self.accent_name = self.settings.value("appearance/accent", "cyan")
+        old_settings = QSettings("ExcelMergeTool", "MacSimpleOfficeTools")
+        self.accent_name = self.settings.value(
+            "appearance/accent",
+            old_settings.value("appearance/accent", "cyan"),
+        )
         if self.accent_name not in ACCENT_PALETTES:
             self.accent_name = "cyan"
         application = QApplication.instance()
@@ -1726,6 +1730,8 @@ class ExcelMergerWindow(QMainWindow):
             progress.close()
 
         if result["status"] != "success" or not result["output_file"]:
+            if not error_detail and result.get("error_message"):
+                error_detail = f"\n\n错误信息：{result['error_message']}"
             self.document_status_label.setText(
                 "处理失败，请检查 PDF 文件和日志记录"
             )

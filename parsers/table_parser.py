@@ -7,7 +7,9 @@ from utils.file_helper import INVALID_XML_CHARS
 def excel_safe(value):
     if isinstance(value, str):
         value = INVALID_XML_CHARS.sub("", unicodedata.normalize("NFKC", value)).strip()
-        if value.startswith(("=", "+", "-", "@")):
+        if value.startswith(("=", "+", "@")) or (
+            value.startswith("-") and not re.fullmatch(r"-\d[\d,]*(?:\.\d+)?%?", value)
+        ):
             return "'" + value
     return value
 

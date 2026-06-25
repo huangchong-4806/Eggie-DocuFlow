@@ -86,9 +86,10 @@ def process_document(pdf_file, output_dir=None, progress_callback=None, log_root
                     f"elapsed={time.monotonic() - started:.2f}s"
                 )
     except Exception as error:
+        result["error_message"] = f"{type(error).__name__}: {error}"
         if session:
             session.error(
-                f"处理失败: {type(error).__name__}: {error}, "
+                f"处理失败: {result['error_message']}, "
                 f"elapsed={time.monotonic() - started:.2f}s",
                 exc_info=True,
             )

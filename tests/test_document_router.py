@@ -125,6 +125,21 @@ class DocumentRouterTests(unittest.TestCase):
         )
         self.assertEqual(detect_doc_type(text), CONTRACT)
 
+    def test_table_negative_numbers_and_failed_result_message(self):
+        self.assertEqual(document_router._excel_safe("-123"), "-123")
+        self.assertEqual(document_router._excel_safe("-1.25"), "-1.25")
+        self.assertEqual(document_router._excel_safe("-1,234.50"), "-1,234.50")
+        self.assertEqual(document_router._excel_safe("-cmd"), "'-cmd")
+        self.assertEqual(document_router._excel_safe("=SUM(A1:A2)"), "'=SUM(A1:A2)")
+
+        result = document_router.process_document(
+            self.root / "missing.pdf",
+            self.root / "output",
+            log_root=self.root / "logs",
+        )
+        self.assertEqual(result["status"], "failed")
+        self.assertIn("PDF 文件不存在", result["error_message"])
+
     def test_cli_keeps_json_stdout_and_reports_progress_on_stderr(self):
         expected = {
             "doc_type": CONTRACT,
