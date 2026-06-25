@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 PROJECT_ROOT = Path(SPECPATH).parent
-APP_BASENAME = "Eggie Excel Tool"
+APP_BASENAME = "Eggie DocuFlow"
 version_scope = {}
 exec((PROJECT_ROOT / "version.py").read_text(encoding="utf-8"), version_scope)
 APP_VERSION = version_scope["APP_VERSION"]
@@ -132,7 +132,7 @@ app = BUNDLE(
     coll,
     name=f"{APP_BASENAME}.app",
     icon=str(PROJECT_ROOT / "assets" / "app_icon.icns"),
-    bundle_identifier="com.huang.excelmerger",
+    bundle_identifier="com.huang.eggiedocuflow",
     version=APP_VERSION,
     info_plist={
         "CFBundleDisplayName": APP_BASENAME,

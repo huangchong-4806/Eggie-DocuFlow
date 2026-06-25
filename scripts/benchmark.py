@@ -14,7 +14,7 @@ from excel_merge_tool import build_merged_workbook, discover_excel_files
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Benchmark Eggie Excel Tool with a folder of workbooks."
+        description="Benchmark Eggie DocuFlow with a folder of workbooks."
     )
     parser.add_argument("folder", help="Folder containing .xlsx or .xlsm files")
     parser.add_argument(

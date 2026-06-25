@@ -22,7 +22,7 @@ def main():
         print(APP_VERSION)
         return
 
-    print(f"EggieExcelTool v{APP_VERSION}", flush=True)
+    print(f"Eggie DocuFlow v{APP_VERSION}", flush=True)
     application = QApplication(sys.argv)
     application.preferred_locale = preferred_system_locale()
     app_name = localized_app_name(application.preferred_locale)

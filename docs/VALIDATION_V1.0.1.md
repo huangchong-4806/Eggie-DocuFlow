@@ -20,7 +20,7 @@
 
 ## 应用验证
 
-- 应用名称：`Excel合并工具V1.0.1.app`
+- 应用名称：`EggieDocuFlow_V1.0.1.app`
 - 架构：Apple Silicon arm64
 - 应用体积：58 MB
 - 压缩包体积：20,930,577 字节，小于 20 MiB 发布上限
@@ -33,7 +33,7 @@
 
 文件名：
 
-`Excel合并工具V1.0.1-macOS-arm64.zip`
+`EggieDocuFlow_V1.0.1-macOS-arm64.zip`
 
 SHA-256：
 

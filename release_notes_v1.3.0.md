@@ -1,6 +1,6 @@
-# v1.3.0 - Document Intelligence System
+# v1.3.0 - Eggie DocuFlow
 
-本次版本属于架构升级版本和产品形态升级版本，标志着 EggieExcelTool 从单一 Excel/PDF 工具升级为具备文档智能路由能力的稳定发布候选版本。
+本次版本属于架构升级版本和产品形态升级版本，标志着 Eggie DocuFlow 从单一 Excel/PDF 工具升级为具备文档智能路由能力的稳定发布候选版本。
 
 ## 更新内容
 

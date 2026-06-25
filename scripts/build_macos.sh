@@ -3,10 +3,10 @@ set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PYTHON="${PYTHON:-python3}"
-DIST_APP_NAME="Eggie Excel Tool.app"
+DIST_APP_NAME="Eggie DocuFlow.app"
 APP_VERSION="$("$PYTHON" -c 'from version import APP_VERSION; print(APP_VERSION)')"
-APP_NAME="EggieExcelTool_V${APP_VERSION}_mac.app"
-ZIP_NAME="EggieExcelTool_V${APP_VERSION}_mac.zip"
+APP_NAME="EggieDocuFlow_V${APP_VERSION}_mac.app"
+ZIP_NAME="EggieDocuFlow_V${APP_VERSION}_mac.zip"
 DIST_DIR="$PROJECT_ROOT/dist"
 BUILD_DIR="$PROJECT_ROOT/build"
 RELEASE_DIR="$PROJECT_ROOT/release"
@@ -31,7 +31,7 @@ rm -f "$RELEASE_DIR/$ZIP_NAME"
   --clean \
   --distpath "$DIST_DIR" \
   --workpath "$BUILD_DIR" \
-  "$PROJECT_ROOT/packaging/ExcelMergeTool.spec"
+  "$PROJECT_ROOT/packaging/EggieDocuFlow.spec"
 
 APP_PATH="$DIST_DIR/$DIST_APP_NAME"
 if [[ ! -d "$APP_PATH" ]]; then

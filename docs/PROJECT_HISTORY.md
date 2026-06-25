@@ -44,8 +44,8 @@ V1.0.1 的验收目标是不超过 27 秒。
 
 ## 版本和发布规则
 
-- 版本名称使用 `Excel合并工具V主版本.次版本.修订号`。
+- 版本名称使用 `EggieDocuFlow_V主版本.次版本.修订号`。
 - 新版本不覆盖旧版本。
 - Git 标签使用小写前缀，例如 `v1.0.1`。
 - macOS 发布包命名为
-  `Excel合并工具V1.0.1-macOS-arm64.zip`。
+  `EggieDocuFlow_V1.0.1-macOS-arm64.zip`。

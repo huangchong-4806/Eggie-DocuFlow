@@ -52,8 +52,8 @@ from pdf_invoice_tool import (
 )
 
 
-APP_NAME_ZH = "Excel 合并拆分工具"
-APP_NAME_EN = "Eggie Excel Tool"
+APP_NAME_ZH = "Eggie文档处理系统"
+APP_NAME_EN = "Eggie DocuFlow"
 DOCUMENT_TYPE_LABELS = {
     "INVOICE": "发票",
     "CONTRACT": "合同",
@@ -447,7 +447,7 @@ class ExcelMergerWindow(QMainWindow):
         self.document_output_folder = ""
         self.document_result_file = ""
         self.refreshing_list = False
-        self.settings = QSettings("ExcelMergeTool", "MacSimpleOfficeTools")
+        self.settings = QSettings("EggieDocuFlow", "EggieDocuFlow")
         self.accent_name = self.settings.value("appearance/accent", "cyan")
         if self.accent_name not in ACCENT_PALETTES:
             self.accent_name = "cyan"
