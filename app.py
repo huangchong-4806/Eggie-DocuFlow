@@ -50,6 +50,8 @@ from document_router import process_document
 from pdf_invoice_tool import (
     convert_invoice_pdfs,
 )
+from v2.layout_engine import process_layout_document
+from version import APP_VERSION
 
 
 APP_NAME_ZH = "Eggie文档处理系统"
@@ -719,6 +721,10 @@ class ExcelMergerWindow(QMainWindow):
             self.home_tool_buttons.append(button)
 
         layout.addLayout(self.home_grid)
+        self.home_version_label = QLabel(f"版本 {APP_VERSION}")
+        self.home_version_label.setAlignment(Qt.AlignCenter)
+        self.home_version_label.setProperty("role", "hint")
+        layout.addWidget(self.home_version_label)
         return page
 
     def create_split_page(self):
@@ -977,6 +983,9 @@ class ExcelMergerWindow(QMainWindow):
         self.document_settings_button.setMinimumHeight(30)
         self.document_settings_button.setProperty("variant", "ghost")
         tool_header_layout.addWidget(self.document_back_home_button)
+        self.document_version_label = QLabel(f"版本 {APP_VERSION}")
+        self.document_version_label.setProperty("role", "hint")
+        tool_header_layout.addWidget(self.document_version_label)
         tool_header_layout.addStretch()
         tool_header_layout.addWidget(self.document_settings_button)
         layout.addLayout(tool_header_layout)
@@ -1016,6 +1025,12 @@ class ExcelMergerWindow(QMainWindow):
         output_layout.addWidget(self.document_output_path_edit, 1)
         output_layout.addWidget(self.choose_document_output_button)
         layout.addWidget(output_group)
+
+        self.document_enhanced_layout_checkbox = QCheckBox("增强排版转换（适合合同和表格）")
+        self.document_enhanced_layout_checkbox.setToolTip(
+            "仍由系统自动识别 PDF 类型；合同会套正式样式，表格会尽量保留边框和版式。"
+        )
+        layout.addWidget(self.document_enhanced_layout_checkbox)
 
         result_group = QGroupBox("处理结果")
         result_layout = QVBoxLayout(result_group)
@@ -1712,11 +1727,19 @@ class ExcelMergerWindow(QMainWindow):
         QApplication.setOverrideCursor(Qt.WaitCursor)
         error_detail = ""
         try:
-            result = process_document(
-                self.document_source_file,
-                self.document_output_folder,
-                progress_callback=update_progress,
-            )
+            if self.document_enhanced_layout_checkbox.isChecked():
+                result = process_layout_document(
+                    self.document_source_file,
+                    self.document_output_folder,
+                    progress_callback=update_progress,
+                    style_template="formal_contract",
+                )
+            else:
+                result = process_document(
+                    self.document_source_file,
+                    self.document_output_folder,
+                    progress_callback=update_progress,
+                )
         except Exception as error:
             result = {
                 "doc_type": "UNKNOWN",
@@ -1750,10 +1773,16 @@ class ExcelMergerWindow(QMainWindow):
         doc_type_label = DOCUMENT_TYPE_LABELS.get(
             result["doc_type"], result["doc_type"]
         )
-        confidence_percent = round(result["confidence"] * 100)
-        self.document_status_label.setText(
-            f"处理完成：{doc_type_label}（置信度 {confidence_percent}%）"
-        )
+        confidence = result.get("confidence")
+        if confidence is None:
+            confidence = result.get("data", {}).get("confidence")
+        if confidence is None:
+            self.document_status_label.setText(f"处理完成：{doc_type_label}")
+        else:
+            confidence_percent = round(confidence * 100)
+            self.document_status_label.setText(
+                f"处理完成：{doc_type_label}（置信度 {confidence_percent}%）"
+            )
         self.update_document_button_states()
 
         message = QMessageBox(self)
