@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
     QCheckBox,
+    QComboBox,
     QFileDialog,
     QGridLayout,
     QGroupBox,
@@ -45,6 +46,12 @@ from excel_merge_tool import (
     format_file_size,
     get_file_info,
     split_workbook_by_rows,
+)
+from batch_rename_tool import (
+    RenameOptions,
+    apply_renames,
+    discover_rename_files,
+    preview_renames,
 )
 from document_router import process_document
 from pdf_invoice_tool import (
@@ -178,7 +185,8 @@ def build_theme_stylesheet(colors):
     QWidget#excelPage,
     QWidget#splitPage,
     QWidget#invoicePage,
-    QWidget#documentPage {{
+    QWidget#documentPage,
+    QWidget#renamePage {{
         background: {colors["window_bg"]};
         color: {colors["text"]};
     }}
@@ -262,6 +270,7 @@ def build_theme_stylesheet(colors):
         font-weight: 600;
     }}
     QLineEdit,
+    QComboBox,
     QSpinBox {{
         background: {colors["input"]};
         color: {colors["text"]};
@@ -271,8 +280,20 @@ def build_theme_stylesheet(colors):
         min-height: 24px;
     }}
     QLineEdit:focus,
+    QComboBox:focus,
     QSpinBox:focus {{
         border: 1px solid {colors["accent"]};
+    }}
+    QComboBox::drop-down {{
+        border: none;
+        width: 30px;
+    }}
+    QComboBox QAbstractItemView {{
+        background: {colors["panel"]};
+        color: {colors["text"]};
+        border: 1px solid {colors["border"]};
+        selection-background-color: {colors["accent"]};
+        selection-color: white;
     }}
     QLineEdit:read-only {{
         color: {colors["muted"]};
@@ -448,6 +469,9 @@ class ExcelMergerWindow(QMainWindow):
         self.document_source_file = ""
         self.document_output_folder = ""
         self.document_result_file = ""
+        self.rename_source_files = []
+        self.rename_previews = []
+        self.rename_last_log_file = ""
         self.refreshing_list = False
         self.settings = QSettings("EggieDocuFlow", "EggieDocuFlow")
         old_settings = QSettings("ExcelMergeTool", "MacSimpleOfficeTools")
@@ -482,11 +506,13 @@ class ExcelMergerWindow(QMainWindow):
         self.split_page = self.create_split_page()
         self.invoice_page = self.create_invoice_page()
         self.document_page = self.create_document_page()
+        self.rename_page = self.create_rename_page()
         self.stack.addWidget(self.home_page)
         self.stack.addWidget(self.excel_page)
         self.stack.addWidget(self.split_page)
         self.stack.addWidget(self.invoice_page)
         self.stack.addWidget(self.document_page)
+        self.stack.addWidget(self.rename_page)
         self.update_home_responsive_layout()
 
         main_layout = QVBoxLayout(self.excel_page)
@@ -501,6 +527,9 @@ class ExcelMergerWindow(QMainWindow):
         self.excel_settings_button.setMinimumHeight(30)
         self.excel_settings_button.setProperty("variant", "ghost")
         tool_header_layout.addWidget(self.back_home_button)
+        self.excel_version_label = QLabel(f"版本 {APP_VERSION}")
+        self.excel_version_label.setProperty("role", "hint")
+        tool_header_layout.addWidget(self.excel_version_label)
         tool_header_layout.addStretch()
         tool_header_layout.addWidget(self.excel_settings_button)
         main_layout.addLayout(tool_header_layout)
@@ -709,6 +738,11 @@ class ExcelMergerWindow(QMainWindow):
                 button.setToolTip("自动识别 PDF 类型并生成对应结果")
                 button.setProperty("variant", "toolCardPrimary")
                 button.clicked.connect(self.show_document_tool)
+            elif index == 4:
+                button.setText("批量改名工具")
+                button.setToolTip("批量预览并重命名文件")
+                button.setProperty("variant", "toolCardPrimary")
+                button.clicked.connect(self.show_rename_tool)
             else:
                 button.setText("敬请期待")
                 button.setEnabled(False)
@@ -742,6 +776,9 @@ class ExcelMergerWindow(QMainWindow):
         self.split_settings_button.setMinimumHeight(30)
         self.split_settings_button.setProperty("variant", "ghost")
         tool_header_layout.addWidget(self.split_back_home_button)
+        self.split_version_label = QLabel(f"版本 {APP_VERSION}")
+        self.split_version_label.setProperty("role", "hint")
+        tool_header_layout.addWidget(self.split_version_label)
         tool_header_layout.addStretch()
         tool_header_layout.addWidget(self.split_settings_button)
         layout.addLayout(tool_header_layout)
@@ -861,6 +898,9 @@ class ExcelMergerWindow(QMainWindow):
         self.invoice_settings_button.setMinimumHeight(30)
         self.invoice_settings_button.setProperty("variant", "ghost")
         tool_header_layout.addWidget(self.invoice_back_home_button)
+        self.invoice_version_label = QLabel(f"版本 {APP_VERSION}")
+        self.invoice_version_label.setProperty("role", "hint")
+        tool_header_layout.addWidget(self.invoice_version_label)
         tool_header_layout.addStretch()
         tool_header_layout.addWidget(self.invoice_settings_button)
         layout.addLayout(tool_header_layout)
@@ -1084,6 +1124,223 @@ class ExcelMergerWindow(QMainWindow):
         self.update_document_button_states()
         return page
 
+    def create_rename_page(self):
+        page = QWidget()
+        page.setObjectName("renamePage")
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(22, 18, 22, 18)
+        layout.setSpacing(14)
+
+        tool_header_layout = QHBoxLayout()
+        self.rename_back_home_button = QPushButton("返回工具首页")
+        self.rename_back_home_button.setMinimumHeight(30)
+        self.rename_back_home_button.setProperty("variant", "ghost")
+        self.rename_settings_button = QPushButton("软件设置")
+        self.rename_settings_button.setMinimumHeight(30)
+        self.rename_settings_button.setProperty("variant", "ghost")
+        tool_header_layout.addWidget(self.rename_back_home_button)
+        self.rename_version_label = QLabel(f"版本 {APP_VERSION}")
+        self.rename_version_label.setProperty("role", "hint")
+        tool_header_layout.addWidget(self.rename_version_label)
+        tool_header_layout.addStretch()
+        tool_header_layout.addWidget(self.rename_settings_button)
+        layout.addLayout(tool_header_layout)
+
+        title = QLabel("批量改名工具")
+        title.setAlignment(Qt.AlignCenter)
+        title.setFont(QFont("PingFang SC", 20, QFont.Bold))
+        title.setProperty("role", "title")
+        layout.addWidget(title)
+
+        subtitle = QLabel("先预览新文件名，确认无重名和异常后再执行")
+        subtitle.setAlignment(Qt.AlignCenter)
+        subtitle.setProperty("role", "subtitle")
+        layout.addWidget(subtitle)
+
+        content_layout = QHBoxLayout()
+        content_layout.setSpacing(14)
+
+        left_group = QGroupBox("文件预览")
+        left_layout = QVBoxLayout(left_group)
+        left_layout.setContentsMargins(10, 14, 10, 10)
+        left_layout.setSpacing(8)
+
+        source_button_layout = QHBoxLayout()
+        source_button_layout.setSpacing(10)
+        self.rename_add_files_button = QPushButton("添加文件")
+        self.rename_add_folder_button = QPushButton("添加文件夹")
+        self.rename_delete_button = QPushButton("删除选中")
+        self.rename_clear_button = QPushButton("清空列表")
+        self.rename_add_files_button.setProperty("variant", "accent")
+        self.rename_add_folder_button.setProperty("variant", "accent")
+        self.rename_delete_button.setProperty("variant", "danger")
+        for button in (
+            self.rename_add_files_button,
+            self.rename_add_folder_button,
+            self.rename_delete_button,
+            self.rename_clear_button,
+        ):
+            button.setMinimumHeight(34)
+            source_button_layout.addWidget(button)
+        source_button_layout.addStretch()
+        left_layout.addLayout(source_button_layout)
+
+        self.rename_file_table = QTreeWidget()
+        self.rename_file_table.setColumnCount(5)
+        self.rename_file_table.setHeaderLabels(
+            ["序号", "原文件名", "新文件名", "状态", "文件路径"]
+        )
+        self.rename_file_table.headerItem().setTextAlignment(0, Qt.AlignCenter)
+        self.rename_file_table.setRootIsDecorated(False)
+        self.rename_file_table.setUniformRowHeights(True)
+        self.rename_file_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.rename_file_table.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.rename_file_table.setTextElideMode(Qt.TextElideMode.ElideNone)
+        self.rename_file_table.setAlternatingRowColors(True)
+        rename_header = self.rename_file_table.header()
+        rename_header.setSectionResizeMode(0, QHeaderView.Fixed)
+        rename_header.setSectionResizeMode(1, QHeaderView.Interactive)
+        rename_header.setSectionResizeMode(2, QHeaderView.Stretch)
+        rename_header.setSectionResizeMode(3, QHeaderView.Fixed)
+        rename_header.setSectionResizeMode(4, QHeaderView.Fixed)
+        self.rename_file_table.setColumnHidden(4, True)
+        self.rename_file_table.setColumnWidth(0, 70)
+        self.rename_file_table.setColumnWidth(1, 245)
+        self.rename_file_table.setColumnWidth(2, 285)
+        self.rename_file_table.setColumnWidth(3, 105)
+        left_layout.addWidget(self.rename_file_table, 1)
+        self.rename_status_label = QLabel("尚未添加文件")
+        self.rename_status_label.setProperty("role", "status")
+        left_layout.addWidget(self.rename_status_label)
+        content_layout.addWidget(left_group, 2)
+
+        right_layout = QVBoxLayout()
+        right_layout.setSpacing(12)
+
+        rules_group = QGroupBox("改名规则")
+        rules_layout = QVBoxLayout(rules_group)
+        rules_layout.setContentsMargins(12, 18, 12, 12)
+        rules_layout.setSpacing(7)
+
+        self.rename_rule_combo = QComboBox()
+        for label_text, rule_key in (
+            ("替换文字", "replace"),
+            ("删除指定文字", "delete_text"),
+            ("删除开头几个字", "trim_start"),
+            ("删除结尾几个字", "trim_end"),
+            ("前面追加文字", "prefix"),
+            ("后面追加文字", "suffix"),
+            ("修改后缀", "extension"),
+        ):
+            self.rename_rule_combo.addItem(label_text, rule_key)
+        self.rename_rule_primary_label = QLabel("查找文字：")
+        self.rename_rule_primary_edit = QLineEdit()
+        self.rename_rule_secondary_label = QLabel("替换为：")
+        self.rename_rule_secondary_edit = QLineEdit()
+        self.rename_rule_count_label = QLabel("删除数量：")
+        self.rename_rule_count_spinbox = QSpinBox()
+        self.rename_rule_count_spinbox.setRange(1, 999)
+        self.rename_rule_count_spinbox.setValue(1)
+        self.rename_numbering_checkbox = QCheckBox("添加编号")
+        self.rename_number_start_spinbox = QSpinBox()
+        self.rename_number_start_spinbox.setRange(0, 999999)
+        self.rename_number_start_spinbox.setValue(1)
+        self.rename_number_digits_spinbox = QSpinBox()
+        self.rename_number_digits_spinbox.setRange(1, 9)
+        self.rename_number_digits_spinbox.setValue(3)
+
+        rules_layout.addWidget(QLabel("改名方式："))
+        rules_layout.addWidget(self.rename_rule_combo)
+        rules_layout.addWidget(self.rename_rule_primary_label)
+        rules_layout.addWidget(self.rename_rule_primary_edit)
+        rules_layout.addWidget(self.rename_rule_secondary_label)
+        rules_layout.addWidget(self.rename_rule_secondary_edit)
+        rules_layout.addWidget(self.rename_rule_count_label)
+        rules_layout.addWidget(self.rename_rule_count_spinbox)
+
+        number_layout = QHBoxLayout()
+        number_layout.setSpacing(8)
+        self.rename_number_start_spinbox.setMinimumWidth(90)
+        self.rename_number_digits_spinbox.setMinimumWidth(78)
+        number_layout.addWidget(self.rename_numbering_checkbox)
+        number_layout.addWidget(QLabel("起始"))
+        number_layout.addWidget(self.rename_number_start_spinbox)
+        number_layout.addWidget(QLabel("位数"))
+        number_layout.addWidget(self.rename_number_digits_spinbox)
+        rules_layout.addLayout(number_layout)
+        right_layout.addWidget(rules_group)
+
+        log_group = QGroupBox("操作日志")
+        log_layout = QVBoxLayout(log_group)
+        log_layout.setContentsMargins(12, 14, 12, 10)
+        log_layout.setSpacing(8)
+        self.rename_log_path_edit = QLineEdit()
+        self.rename_log_path_edit.setReadOnly(True)
+        self.rename_log_path_edit.setPlaceholderText("暂无日志")
+        self.rename_log_path_edit.setMinimumHeight(34)
+        self.rename_open_log_button = QPushButton("打开日志")
+        self.rename_open_log_button.setMinimumHeight(34)
+        log_layout.addWidget(self.rename_log_path_edit)
+        log_layout.addWidget(self.rename_open_log_button)
+        right_layout.addWidget(log_group)
+
+        action_layout = QHBoxLayout()
+        self.rename_preview_button = QPushButton("刷新预览")
+        self.rename_execute_button = QPushButton("开始改名")
+        self.rename_preview_button.setMinimumHeight(44)
+        self.rename_execute_button.setMinimumHeight(48)
+        self.rename_execute_button.setMinimumWidth(170)
+        self.rename_execute_button.setFont(QFont("PingFang SC", 14, QFont.Bold))
+        self.rename_execute_button.setProperty("variant", "primary")
+        action_layout.addWidget(self.rename_preview_button)
+        action_layout.addWidget(self.rename_execute_button, 1)
+        right_layout.addLayout(action_layout)
+        right_layout.addStretch(1)
+        content_layout.addLayout(right_layout, 1)
+        layout.addLayout(content_layout, 1)
+
+        self.rename_back_home_button.clicked.connect(self.show_home)
+        self.rename_settings_button.clicked.connect(self.show_settings)
+        self.rename_add_files_button.clicked.connect(self.add_rename_files)
+        self.rename_add_folder_button.clicked.connect(self.add_rename_folder)
+        self.rename_delete_button.clicked.connect(self.delete_selected_rename_files)
+        self.rename_clear_button.clicked.connect(self.clear_rename_files)
+        self.rename_preview_button.clicked.connect(
+            self.refresh_rename_preview_with_warning
+        )
+        self.rename_execute_button.clicked.connect(self.rename_files)
+        self.rename_open_log_button.clicked.connect(
+            lambda: self.open_output_file(self.rename_last_log_file)
+        )
+        self.rename_file_table.itemSelectionChanged.connect(
+            self.update_rename_button_states
+        )
+
+        self.rename_rule_combo.currentIndexChanged.connect(
+            self.handle_rename_rule_changed
+        )
+        self.rename_rule_primary_edit.textChanged.connect(
+            lambda _text: self.refresh_rename_file_list()
+        )
+        self.rename_rule_secondary_edit.textChanged.connect(
+            lambda _text: self.refresh_rename_file_list()
+        )
+        self.rename_rule_count_spinbox.valueChanged.connect(
+            lambda _value: self.refresh_rename_file_list()
+        )
+        self.rename_numbering_checkbox.toggled.connect(
+            lambda _checked: self.refresh_rename_file_list()
+        )
+        self.rename_number_start_spinbox.valueChanged.connect(
+            lambda _value: self.refresh_rename_file_list()
+        )
+        self.rename_number_digits_spinbox.valueChanged.connect(
+            lambda _value: self.refresh_rename_file_list()
+        )
+        self.update_rename_rule_inputs()
+        self.refresh_rename_file_list()
+        return page
+
     def update_home_responsive_layout(self):
         if not hasattr(self, "home_tool_buttons"):
             return
@@ -1172,6 +1429,10 @@ class ExcelMergerWindow(QMainWindow):
     def show_document_tool(self):
         self.stack.setCurrentWidget(self.document_page)
         self.setWindowTitle(f"{self.app_name} - 文档智能处理")
+
+    def show_rename_tool(self):
+        self.stack.setCurrentWidget(self.rename_page)
+        self.setWindowTitle(f"{self.app_name} - 批量改名工具")
 
     def show_settings(self):
         accent_keys = list(ACCENT_PALETTES)
@@ -1472,6 +1733,298 @@ class ExcelMergerWindow(QMainWindow):
         self.output_path_edit.setText(self.output_file)
         self.output_path_edit.setToolTip(self.output_file)
         self.update_button_states()
+
+    def current_rename_rule(self):
+        return self.rename_rule_combo.currentData() or "replace"
+
+    def handle_rename_rule_changed(self, *_args):
+        self.rename_rule_primary_edit.clear()
+        self.rename_rule_secondary_edit.clear()
+        self.rename_rule_count_spinbox.setValue(1)
+        self.update_rename_rule_inputs()
+        self.refresh_rename_file_list()
+
+    def update_rename_rule_inputs(self):
+        rule = self.current_rename_rule()
+        count_rule = rule in ("trim_start", "trim_end")
+        two_text_rule = rule == "replace"
+        one_text_rule = rule in ("delete_text", "prefix", "suffix", "extension")
+
+        labels = {
+            "replace": ("查找文字：", "替换为："),
+            "delete_text": ("删除文字：", ""),
+            "prefix": ("前面追加：", ""),
+            "suffix": ("后面追加：", ""),
+            "extension": ("新后缀：", ""),
+            "trim_start": ("删除数量：", ""),
+            "trim_end": ("删除数量：", ""),
+        }
+        primary_label, secondary_label = labels.get(rule, labels["replace"])
+        self.rename_rule_primary_label.setText(primary_label)
+        self.rename_rule_secondary_label.setText(secondary_label)
+
+        self.rename_rule_primary_label.setVisible(one_text_rule or two_text_rule)
+        self.rename_rule_primary_edit.setVisible(one_text_rule or two_text_rule)
+        self.rename_rule_secondary_label.setVisible(two_text_rule)
+        self.rename_rule_secondary_edit.setVisible(two_text_rule)
+        self.rename_rule_count_label.setVisible(count_rule)
+        self.rename_rule_count_spinbox.setVisible(count_rule)
+
+    def rename_options(self):
+        rule = self.current_rename_rule()
+        primary_text = self.rename_rule_primary_edit.text()
+        return RenameOptions(
+            find_text=primary_text if rule == "replace" else "",
+            replace_text=(
+                self.rename_rule_secondary_edit.text() if rule == "replace" else ""
+            ),
+            delete_text=primary_text if rule == "delete_text" else "",
+            trim_start_count=(
+                self.rename_rule_count_spinbox.value() if rule == "trim_start" else 0
+            ),
+            trim_end_count=(
+                self.rename_rule_count_spinbox.value() if rule == "trim_end" else 0
+            ),
+            prefix=primary_text if rule == "prefix" else "",
+            suffix=primary_text if rule == "suffix" else "",
+            extension=primary_text if rule == "extension" else "",
+            numbering_enabled=self.rename_numbering_checkbox.isChecked(),
+            number_start=self.rename_number_start_spinbox.value(),
+            number_digits=self.rename_number_digits_spinbox.value(),
+        )
+
+    def refresh_rename_file_list(self):
+        self.rename_file_table.clear()
+        self.rename_previews = list(
+            preview_renames(self.rename_source_files, self.rename_options())
+        )
+        if not self.rename_source_files:
+            empty_item = QTreeWidgetItem(
+                ["", "暂无文件，请添加需要改名的文件", "", "", ""]
+            )
+            empty_item.setFlags(Qt.NoItemFlags)
+            self.rename_file_table.addTopLevelItem(empty_item)
+            self.rename_status_label.setText("尚未添加文件")
+        else:
+            for index, preview in enumerate(self.rename_previews, start=1):
+                blank_preview = (
+                    preview.blocked and "新文件名不能为空" in preview.message
+                )
+                target_name = (
+                    preview.message
+                    if blank_preview
+                    else Path(preview.target_path).name
+                )
+                item = QTreeWidgetItem(
+                    [
+                        f"{index:03d}",
+                        Path(preview.source_path).name,
+                        target_name,
+                        preview.status,
+                        preview.source_path,
+                    ]
+                )
+                item.setData(0, Qt.UserRole, preview.source_path)
+                item.setTextAlignment(0, Qt.AlignCenter)
+                item.setTextAlignment(3, Qt.AlignCenter)
+                item.setToolTip(1, preview.source_path)
+                item.setToolTip(2, preview.message or preview.target_path)
+                item.setToolTip(4, preview.source_path)
+                self.rename_file_table.addTopLevelItem(item)
+
+            blocked_count = sum(1 for preview in self.rename_previews if preview.blocked)
+            rename_count = sum(
+                1 for preview in self.rename_previews if preview.will_rename
+            )
+            if blocked_count:
+                self.rename_status_label.setText(
+                    f"共 {len(self.rename_previews)} 个文件，{blocked_count} 个需要处理"
+                )
+            elif rename_count:
+                self.rename_status_label.setText(
+                    f"共 {len(self.rename_previews)} 个文件，{rename_count} 个将被改名"
+                )
+            else:
+                self.rename_status_label.setText("当前规则不会改变文件名")
+        self.update_rename_button_states()
+
+    def blank_rename_previews(self):
+        return [
+            preview
+            for preview in self.rename_previews
+            if preview.blocked and "新文件名不能为空" in preview.message
+        ]
+
+    def warn_blank_rename_preview(self):
+        blank_previews = self.blank_rename_previews()
+        if not blank_previews:
+            return False
+
+        preview_names = "\n".join(
+            Path(preview.source_path).name for preview in blank_previews[:5]
+        )
+        more_text = ""
+        if len(blank_previews) > 5:
+            more_text = f"\n等 {len(blank_previews)} 个文件"
+        QMessageBox.warning(
+            self,
+            "预览结果为空",
+            "部分文件改名后会变成空白文件名，已阻止执行。\n\n"
+            f"{preview_names}{more_text}\n\n"
+            "请减少删除数量，或改用其他规则。",
+        )
+        return True
+
+    def refresh_rename_preview_with_warning(self):
+        self.refresh_rename_file_list()
+        self.warn_blank_rename_preview()
+
+    def update_rename_button_states(self):
+        has_files = bool(self.rename_source_files)
+        has_selection = any(
+            item.data(0, Qt.UserRole)
+            for item in self.rename_file_table.selectedItems()
+        )
+        can_rename = (
+            has_files
+            and not any(preview.blocked for preview in self.rename_previews)
+            and any(preview.will_rename for preview in self.rename_previews)
+        )
+        self.rename_delete_button.setEnabled(has_selection)
+        self.rename_clear_button.setEnabled(has_files)
+        self.rename_preview_button.setEnabled(has_files)
+        self.rename_execute_button.setEnabled(can_rename)
+        self.rename_open_log_button.setEnabled(
+            bool(self.rename_last_log_file and Path(self.rename_last_log_file).exists())
+        )
+
+    def add_rename_paths(self, paths):
+        existing = set(self.rename_source_files)
+        for path in paths:
+            normalized = os.path.abspath(path)
+            if normalized not in existing and Path(normalized).is_file():
+                self.rename_source_files.append(normalized)
+                existing.add(normalized)
+        self.refresh_rename_file_list()
+
+    def add_rename_files(self):
+        filenames, _ = QFileDialog.getOpenFileNames(
+            self,
+            "选择需要改名的文件",
+            str(Path.home() / "Downloads"),
+            "所有文件 (*)",
+        )
+        if filenames:
+            self.add_rename_paths(filenames)
+
+    def add_rename_folder(self):
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            "选择需要批量改名的文件夹",
+            str(Path.home() / "Downloads"),
+            QFileDialog.ShowDirsOnly,
+        )
+        if not folder:
+            return
+        try:
+            files = discover_rename_files(folder)
+        except OSError as error:
+            QMessageBox.critical(self, "无法读取文件夹", str(error))
+            return
+        if not files:
+            QMessageBox.warning(self, "未找到文件", "所选文件夹中没有找到可改名文件。")
+            return
+        self.add_rename_paths(files)
+
+    def delete_selected_rename_files(self):
+        selected = {
+            item.data(0, Qt.UserRole)
+            for item in self.rename_file_table.selectedItems()
+            if item.data(0, Qt.UserRole)
+        }
+        if not selected:
+            return
+        self.rename_source_files = [
+            filename for filename in self.rename_source_files if filename not in selected
+        ]
+        self.refresh_rename_file_list()
+
+    def clear_rename_files(self):
+        if not self.rename_source_files:
+            return
+        if not self.confirm_list_change("是否清空待改名文件列表"):
+            return
+        self.rename_source_files = []
+        self.rename_previews = []
+        self.refresh_rename_file_list()
+
+    def show_rename_complete_message(self, result):
+        message = QMessageBox(self)
+        message.setWindowTitle("批量改名完成")
+        message.setIcon(
+            QMessageBox.Warning if result.failed_count else QMessageBox.Information
+        )
+        message.setText(
+            f"成功 {result.success_count} 个，跳过 {result.skipped_count} 个，"
+            f"失败 {result.failed_count} 个"
+        )
+        message.setInformativeText(f"日志文件：\n{result.log_file}")
+        failures = [
+            f"{Path(action.source_path).name}：{action.error}"
+            for action in result.actions
+            if action.status == "失败"
+        ]
+        if failures:
+            message.setDetailedText("\n".join(failures))
+        open_button = message.addButton("打开日志", QMessageBox.ActionRole)
+        ok_button = message.addButton("确 定", QMessageBox.AcceptRole)
+        for button in (ok_button, open_button):
+            button.setFixedSize(112, 36)
+        message.setDefaultButton(ok_button)
+        message.exec()
+        if message.clickedButton() == open_button:
+            self.open_output_file(result.log_file)
+
+    def rename_files(self):
+        self.refresh_rename_file_list()
+        if not self.rename_source_files:
+            QMessageBox.warning(self, "尚未添加文件", "请先添加需要改名的文件。")
+            return
+        if self.warn_blank_rename_preview():
+            return
+        blocked = [preview for preview in self.rename_previews if preview.blocked]
+        if blocked:
+            QMessageBox.warning(
+                self,
+                "预览中有问题",
+                "请先处理重名、目标已存在或文件名不合法的问题。",
+            )
+            return
+        rename_count = sum(1 for preview in self.rename_previews if preview.will_rename)
+        if not rename_count:
+            QMessageBox.information(self, "无需改名", "当前规则不会改变文件名。")
+            return
+        if not self.confirm_list_change(f"即将改名 {rename_count} 个文件，是否继续"):
+            return
+
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            result = apply_renames(self.rename_previews)
+        except Exception as error:
+            QMessageBox.critical(self, "改名失败", str(error))
+            return
+        finally:
+            QApplication.restoreOverrideCursor()
+
+        self.rename_last_log_file = result.log_file
+        self.rename_log_path_edit.setText(result.log_file)
+        self.rename_log_path_edit.setToolTip(result.log_file)
+        self.rename_source_files = [
+            action.target_path if action.status == "成功" else action.source_path
+            for action in result.actions
+        ]
+        self.refresh_rename_file_list()
+        self.show_rename_complete_message(result)
 
     def refresh_invoice_file_list(self):
         self.invoice_file_table.clear()
