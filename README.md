@@ -295,10 +295,6 @@ and image plugins.
 - 首个正式版本 / Initial public release
 - 支持文件、文件夹、排序、保存路径和格式保留 / Added file and folder selection, ordering, output paths, and formatting preservation
 
-更多项目历史见 [docs/PROJECT_HISTORY.md](docs/PROJECT_HISTORY.md)。
-
-See [docs/PROJECT_HISTORY.md](docs/PROJECT_HISTORY.md) for additional project history.
-
 ## 许可证
 
 本项目采用 MIT License 开源协议。
