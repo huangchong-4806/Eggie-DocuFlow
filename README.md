@@ -125,7 +125,7 @@ run the source code.
 合并 Excel：
 
 1. 添加 Excel 文件或包含 Excel 文件的文件夹。 / Add Excel files or a folder containing Excel files.
-2. 使用“上移 / 下移”确认文件顺序。 / Confirm the merge order with **Move Up / Down**.
+2. 使用“上移 / 下移”确认文件顺序。 / Confirm the merge order with **Move Up / Move Down**.
 3. 设置后续文件跳过的行数。 / Set the number of rows to skip in subsequent files.
 4. 选择输出文件位置并点击“开始合并”。 / Choose an output location and click **Start Merge**.
 
@@ -241,7 +241,7 @@ and image plugins.
 ### V1.3.0
 
 - 文档智能路由系统上线 / Added the document intelligence routing system
-- 支持发票、合同、表格和未知文档自动分类 / Added automatic classification for invoices, contracts, tables, and unknown documents
+- 支持发票、合同、表格和未知文档自动分类 / Added automatic classification for invoices, contracts, tables, or unknown documents
 - App 入口新增“文档智能处理”，支持文件选择和拖拽 PDF / Added the Document Intelligence app entry with file selection and PDF drag-and-drop
 - 完成 core / parsers / exporters / utils 模块化架构 / Completed the core / parsers / exporters / utils modular architecture
 - 新增统一版本标识和日志版本号 / Added unified version metadata and versioned logs
@@ -259,7 +259,7 @@ and image plugins.
 - 输出发票头信息、明细表和校验结果 / Added structured header, item, and validation sheets
 - 新增金额、税额与价税合计校验 / Added amount, tax, and total validation
 - 修复免税行、跨行字段和长项目名称的解析 / Fixed tax-exempt rows, wrapped fields, and long item names
-- 防止未确认覆盖已有 Excel 文件 / Prevented unconfirmed overwrites of existing files
+- 防止未确认覆盖已有 Excel 文件 / Prevented unconfirmed overwrites of existing Excel files
 - 扫描件和多票 PDF 会明确提示，不生成错账文件 / Scanned and multi-invoice PDFs are rejected safely
 
 ### V1.1.1
