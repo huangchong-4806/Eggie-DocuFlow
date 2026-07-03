@@ -288,7 +288,7 @@ and image plugins.
 ### V1.3.0
 
 - 文档智能路由系统上线 / Added the document intelligence routing system
-- 支持发票、合同、表格和未知文档自动分类 / Added automatic classification for invoices, contracts, tables, and unknown documents
+- 支持发票、合同、表格和未知文档自动分类 / Added automatic classification for invoices, contracts, tables, or unknown documents
 - App 入口新增“文档智能处理”，支持文件选择和拖拽 PDF / Added the Document Intelligence app entry with file selection and PDF drag-and-drop
 - 完成 core / parsers / exporters / utils 模块化架构 / Completed the core / parsers / exporters / utils modular architecture
 - 新增统一版本标识和日志版本号 / Added unified version metadata and versioned logs
