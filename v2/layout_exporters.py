@@ -52,7 +52,7 @@ def _paragraph_xml(line, page_width, left_margin):
 
 
 def _formal_contract_paragraph_xml(line, is_title=False):
-    text = escape(INVALID_XML_CHARS.sub("", line["text"]))
+    text = escape(INVALID_XML_CHARS.sub("", _clean_formal_text(line["text"])))
     if not text:
         return ""
     style = FORMAL_CONTRACT_STYLE
@@ -138,8 +138,105 @@ def _line_inside_table(line, tables):
     return False
 
 
+def _clean_formal_text(text):
+    text = re.sub(r"\s+", " ", text or "").strip()
+    text = re.sub(r"\s*/\s*", "/", text)
+    text = re.sub(r"\s+([，。；：、！？）】》”])", r"\1", text)
+    text = re.sub(r"([（【《“])\s+", r"\1", text)
+    text = re.sub(r"(?<=[\u4e00-\u9fff])\s+(?=[\u4e00-\u9fffA-Za-z0-9])", "", text)
+    text = re.sub(r"(?<=[A-Za-z0-9])\s+(?=[\u4e00-\u9fff])", "", text)
+    return text
+
+
+def _is_noise_line(text):
+    return bool(re.fullmatch(r"[-–—\s]+", text or ""))
+
+
+def _starts_formal_paragraph(text):
+    return bool(
+        re.match(
+            r"^(第[一二三四五六七八九十百\d]+条|[一二三四五六七八九十]+、|\d+[.、]|\d+(?:\.\d+)+|（[一二三四五六七八九十\d]+）|"
+            r"合同编号[:：]?|鉴于[:：]?|[甲乙丙丁]方[（:：]|统一社会信用代码[:：]|法定代表人[:：]|联系地址[:：])",
+            text,
+        )
+    )
+
+
+def _join_formal_text(left, right):
+    if left and right and left[-1].isalnum() and right[0].isalnum() and left[-1].isascii() and right[0].isascii():
+        return f"{left} {right}"
+    return f"{left}{right}"
+
+
+def _continues_formal_paragraph(left, right):
+    left = _clean_formal_text(left)
+    right = _clean_formal_text(right)
+    if not left or not right or left.endswith(tuple("。；;：:！？!?")):
+        return False
+    return not _starts_formal_paragraph(right) and not _is_formal_contract_title(right, 0)
+
+
+def _merge_cross_page_formal_lines(pages):
+    merged_pages = []
+    for page in pages:
+        new_page = dict(page)
+        new_page["lines"] = [dict(line) for line in page.get("lines", [])]
+        new_page["tables"] = page.get("tables") or []
+        if merged_pages:
+            previous = merged_pages[-1]
+            previous_lines = [
+                line for line in previous["lines"] if not _line_inside_table(line, previous.get("tables") or [])
+            ]
+            current_lines = [
+                line for line in new_page["lines"] if not _line_inside_table(line, new_page.get("tables") or [])
+            ]
+            if previous_lines and current_lines and _continues_formal_paragraph(previous_lines[-1].get("text"), current_lines[0].get("text")):
+                previous_lines[-1]["text"] = _join_formal_text(
+                    _clean_formal_text(previous_lines[-1].get("text")),
+                    _clean_formal_text(current_lines[0].get("text")),
+                )
+                new_page["lines"] = [line for line in new_page["lines"] if line is not current_lines[0]]
+        merged_pages.append(new_page)
+    return merged_pages
+
+
+def _merge_formal_lines(lines):
+    merged = []
+    current = None
+    end_marks = "。；;：:！？!?"
+    for original in lines:
+        text = _clean_formal_text(original.get("text"))
+        if not text or _is_noise_line(text):
+            continue
+        line = dict(original, text=text)
+        start_new = (
+            current is None
+            or current["text"].endswith(tuple(end_marks))
+            or _starts_formal_paragraph(text)
+            or _is_formal_contract_title(text, len(merged))
+        )
+        if start_new:
+            if current:
+                merged.append(current)
+            current = line
+            continue
+        current["text"] = _join_formal_text(current["text"], text)
+        current["x1"] = max(float(current["x1"]), float(line["x1"]))
+        current["bottom"] = float(line["bottom"])
+    if current:
+        merged.append(current)
+    return merged
+
+
+def _drop_first_page_header(lines):
+    for index, line in enumerate(lines[:6]):
+        if _is_formal_contract_title(line.get("text"), index):
+            return lines[index:]
+    return lines
+
+
 def _is_formal_contract_title(text, line_index):
-    text = (text or "").strip()
+    text = _clean_formal_text(text)
     return (
         line_index < 4
         and 2 <= len(text) <= 40
@@ -152,6 +249,8 @@ def export_contract_layout(layout, output_file, style_template=None):
     pages = layout.get("pages") or []
     if not pages:
         raise ValueError("未提取到合同版式。")
+    if style_template == "formal_contract":
+        pages = _merge_cross_page_formal_lines(pages)
     first_page = pages[0]
     lines = [line for page in pages for line in page["lines"] if line.get("text")]
     left_margin = min((float(line["x0"]) * 20 for line in lines), default=720)
@@ -179,10 +278,14 @@ def export_contract_layout(layout, output_file, style_template=None):
                     parts.append('<w:p><w:r><w:br w:type="page"/></w:r></w:p>')
                 if style_template == "formal_contract":
                     tables = page.get("tables") or []
+                    page_lines = [
+                        line for line in page["lines"] if not _line_inside_table(line, tables)
+                    ]
+                    if page_index == 0:
+                        page_lines = _drop_first_page_header(page_lines)
                     blocks = [
                         ("line", line)
-                        for line in page["lines"]
-                        if not _line_inside_table(line, tables)
+                        for line in _merge_formal_lines(page_lines)
                     ]
                     blocks.extend(("table", table) for table in tables)
                     for block_type, block in sorted(blocks, key=lambda item: item[1]["bbox"][1] if item[0] == "table" else item[1]["top"]):

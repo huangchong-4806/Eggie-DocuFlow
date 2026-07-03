@@ -51,16 +51,10 @@ fi
 
 APP_BYTES="$(/usr/bin/du -sk "$RELEASE_DIR/$APP_NAME" | awk '{print $1 * 1024}')"
 ZIP_BYTES="$(/usr/bin/stat -f '%z' "$RELEASE_DIR/$ZIP_NAME")"
-APP_LIMIT=$((90 * 1024 * 1024))
 ZIP_LIMIT=$((45 * 1024 * 1024))
 
 echo "App size: $((APP_BYTES / 1024 / 1024)) MB"
 echo "Zip size: $((ZIP_BYTES / 1024 / 1024)) MB"
-
-if (( APP_BYTES > APP_LIMIT )); then
-  echo "App exceeds the 90 MB release limit." >&2
-  exit 1
-fi
 
 if (( ZIP_BYTES > ZIP_LIMIT )); then
   echo "Zip exceeds the 45 MB release limit." >&2

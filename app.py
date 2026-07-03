@@ -2,23 +2,26 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 from PySide6.QtCore import (
     QLibraryInfo,
     QLocale,
+    QMimeData,
     QSize,
     QSettings,
     Qt,
     QTranslator,
     QUrl,
 )
-from PySide6.QtGui import QDesktopServices, QFont, QIcon, QPixmap
+from PySide6.QtGui import QDesktopServices, QDrag, QFont, QIcon, QPixmap, QTransform
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
     QCheckBox,
     QComboBox,
+    QDialog,
     QFileDialog,
     QGridLayout,
     QGroupBox,
@@ -31,9 +34,11 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QProgressDialog,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QSpinBox,
     QStackedWidget,
+    QTabWidget,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -57,6 +62,21 @@ from document_router import process_document
 from pdf_invoice_tool import (
     convert_invoice_pdfs,
 )
+from pdf_toolbox import (
+    COMPRESSION_PRESETS,
+    IMAGE_SUFFIXES,
+    PdfPageRef,
+    compress_pdf,
+    default_output_name,
+    estimate_compressed_size,
+    images_to_pdf,
+    is_supported_image_file,
+    output_path,
+    page_count,
+    pdf_to_images,
+    render_page_thumbnail,
+    save_pages,
+)
 from v2.layout_engine import process_layout_document
 from version import APP_VERSION
 
@@ -69,6 +89,13 @@ DOCUMENT_TYPE_LABELS = {
     "TABLE": "表格",
     "UNKNOWN": "未知文档",
 }
+PDF_PAGE_DRAG_MIME = "application/x-eggie-pdf-page-card"
+PDF_IMAGE_DRAG_MIME = "application/x-eggie-pdf-image-card"
+PDF_PAGE_CARD_WIDTH = 176
+PDF_PAGE_CARD_HEIGHT = 282
+PDF_PAGE_CARD_H_SPACING = 18
+PDF_PAGE_CARD_V_SPACING = 34
+PDF_PAGE_THUMBNAIL_SIZE = QSize(132, 180)
 
 
 def is_chinese_locale(locale):
@@ -82,6 +109,336 @@ def localized_app_name(locale):
 def resource_path(relative_path):
     base_path = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
     return base_path / relative_path
+
+
+class PdfPageCard(QWidget):
+    def __init__(self, owner, data):
+        super().__init__()
+        self.owner = owner
+        self.data = data
+        self.drag_start_position = None
+        self.setAcceptDrops(True)
+        self.setFixedSize(PDF_PAGE_CARD_WIDTH, PDF_PAGE_CARD_HEIGHT)
+        self.setProperty("pdfCard", "true")
+        self.setProperty("checked", "false")
+        self.setProperty("dragging", "false")
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(6)
+
+        self.thumbnail_box = QWidget()
+        self.thumbnail_box.setObjectName("pdfThumbnailBox")
+        self.thumbnail_box.setFixedSize(148, 192)
+        thumbnail_layout = QGridLayout(self.thumbnail_box)
+        thumbnail_layout.setContentsMargins(6, 6, 6, 6)
+        self.image_label = QLabel()
+        self.image_label.setAlignment(Qt.AlignCenter)
+        self.checkbox = QCheckBox()
+        self.checkbox.setFixedSize(24, 24)
+        thumbnail_layout.addWidget(self.image_label, 0, 0, Qt.AlignCenter)
+        thumbnail_layout.addWidget(self.checkbox, 0, 0, Qt.AlignLeft | Qt.AlignTop)
+        layout.addWidget(self.thumbnail_box, 0, Qt.AlignHCenter)
+
+        self.page_label = QLabel()
+        self.page_label.setAlignment(Qt.AlignCenter)
+        self.page_label.setFixedHeight(24)
+        self.page_label.setProperty("pdfCardTitle", "true")
+        self.file_label = QLabel()
+        self.file_label.setAlignment(Qt.AlignCenter)
+        self.file_label.setFixedHeight(22)
+        self.file_label.setWordWrap(False)
+        self.file_label.setProperty("pdfCardName", "true")
+        layout.addWidget(self.page_label)
+        layout.addWidget(self.file_label)
+        layout.addStretch(1)
+
+        self.checkbox.stateChanged.connect(self.handle_checked_changed)
+
+    def polish(self):
+        self.style().unpolish(self)
+        self.style().polish(self)
+
+    def is_checked(self):
+        return self.checkbox.isChecked()
+
+    def set_checked(self, checked):
+        self.checkbox.setChecked(checked)
+
+    def set_dragging(self, dragging):
+        self.setProperty("dragging", "true" if dragging else "false")
+        self.polish()
+
+    def handle_checked_changed(self):
+        self.setProperty("checked", "true" if self.is_checked() else "false")
+        self.polish()
+        self.owner.refresh_pdf_page_numbers()
+
+    def update_display(self, index):
+        rotation = self.data.get("rotation", 0) % 360
+        pixmap = QPixmap(self.data.get("thumbnail", ""))
+        if rotation and not pixmap.isNull():
+            pixmap = pixmap.transformed(QTransform().rotate(rotation), Qt.SmoothTransformation)
+        if not pixmap.isNull():
+            pixmap = pixmap.scaled(
+                PDF_PAGE_THUMBNAIL_SIZE,
+                Qt.KeepAspectRatio,
+                Qt.SmoothTransformation,
+            )
+            self.image_label.setPixmap(pixmap)
+        self.page_label.setText(f"第 {index:03d} 页")
+        name = Path(self.data["source_file"]).name
+        self.file_label.setText(
+            self.file_label.fontMetrics().elidedText(name, Qt.ElideMiddle, PDF_PAGE_CARD_WIDTH - 18)
+        )
+        self.file_label.setToolTip(name)
+        self.setToolTip(
+            f"{Path(self.data['source_file']).name}\n"
+            f"当前序号：{index}\n"
+            f"原页码：{self.data['page_index'] + 1}\n"
+            "双击可放大预览，拖拽可调整顺序"
+        )
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.drag_start_position = event.position().toPoint()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if not (event.buttons() & Qt.LeftButton) or self.drag_start_position is None:
+            super().mouseMoveEvent(event)
+            return
+        distance = (event.position().toPoint() - self.drag_start_position).manhattanLength()
+        if distance < QApplication.startDragDistance():
+            super().mouseMoveEvent(event)
+            return
+
+        source_index = self.owner.pdf_page_cards.index(self)
+        mime_data = QMimeData()
+        mime_data.setData(PDF_PAGE_DRAG_MIME, str(source_index).encode("utf-8"))
+        drag = QDrag(self)
+        drag.setMimeData(mime_data)
+        pixmap = self.image_label.pixmap()
+        if pixmap:
+            drag.setPixmap(pixmap)
+        self.set_dragging(True)
+        try:
+            drag.exec(Qt.MoveAction)
+        finally:
+            self.set_dragging(False)
+
+    def mouseDoubleClickEvent(self, event):
+        self.owner.preview_pdf_page(self)
+        event.accept()
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasFormat(PDF_PAGE_DRAG_MIME):
+            event.acceptProposedAction()
+
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasFormat(PDF_PAGE_DRAG_MIME):
+            event.acceptProposedAction()
+
+    def dropEvent(self, event):
+        if not event.mimeData().hasFormat(PDF_PAGE_DRAG_MIME):
+            return
+        source_index = int(bytes(event.mimeData().data(PDF_PAGE_DRAG_MIME)).decode("utf-8"))
+        target_index = self.owner.pdf_page_cards.index(self)
+        if event.position().x() > self.width() / 2:
+            target_index += 1
+        self.owner.reorder_pdf_page(source_index, target_index)
+        event.acceptProposedAction()
+
+
+class PdfPageBoard(QWidget):
+    def __init__(self, owner):
+        super().__init__()
+        self.owner = owner
+        self.setAcceptDrops(True)
+        self.grid = QGridLayout(self)
+        self.grid.setContentsMargins(8, 8, 8, 8)
+        self.grid.setHorizontalSpacing(PDF_PAGE_CARD_H_SPACING)
+        self.grid.setVerticalSpacing(PDF_PAGE_CARD_V_SPACING)
+        self.grid.setAlignment(Qt.AlignLeft | Qt.AlignTop)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.owner.refresh_pdf_page_cards_layout()
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasFormat(PDF_PAGE_DRAG_MIME):
+            event.acceptProposedAction()
+
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasFormat(PDF_PAGE_DRAG_MIME):
+            event.acceptProposedAction()
+
+    def dropEvent(self, event):
+        if not event.mimeData().hasFormat(PDF_PAGE_DRAG_MIME):
+            return
+        source_index = int(bytes(event.mimeData().data(PDF_PAGE_DRAG_MIME)).decode("utf-8"))
+        self.owner.reorder_pdf_page(source_index, len(self.owner.pdf_page_cards))
+        event.acceptProposedAction()
+
+
+class PdfImageCard(QWidget):
+    def __init__(self, owner, image_file):
+        super().__init__()
+        self.owner = owner
+        self.image_file = image_file
+        self.drag_start_position = None
+        self.setAcceptDrops(True)
+        self.setFixedSize(PDF_PAGE_CARD_WIDTH, PDF_PAGE_CARD_HEIGHT)
+        self.setProperty("pdfCard", "true")
+        self.setProperty("checked", "false")
+        self.setProperty("dragging", "false")
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(6)
+
+        self.thumbnail_box = QWidget()
+        self.thumbnail_box.setObjectName("pdfThumbnailBox")
+        self.thumbnail_box.setFixedSize(148, 192)
+        thumbnail_layout = QGridLayout(self.thumbnail_box)
+        thumbnail_layout.setContentsMargins(6, 6, 6, 6)
+        self.image_label = QLabel()
+        self.image_label.setAlignment(Qt.AlignCenter)
+        self.checkbox = QCheckBox()
+        self.checkbox.setFixedSize(24, 24)
+        thumbnail_layout.addWidget(self.image_label, 0, 0, Qt.AlignCenter)
+        thumbnail_layout.addWidget(self.checkbox, 0, 0, Qt.AlignLeft | Qt.AlignTop)
+        layout.addWidget(self.thumbnail_box, 0, Qt.AlignHCenter)
+
+        self.page_label = QLabel()
+        self.page_label.setAlignment(Qt.AlignCenter)
+        self.page_label.setFixedHeight(24)
+        self.page_label.setProperty("pdfCardTitle", "true")
+        self.file_label = QLabel()
+        self.file_label.setAlignment(Qt.AlignCenter)
+        self.file_label.setFixedHeight(22)
+        self.file_label.setWordWrap(False)
+        self.file_label.setProperty("pdfCardName", "true")
+        layout.addWidget(self.page_label)
+        layout.addWidget(self.file_label)
+        layout.addStretch(1)
+
+        self.checkbox.stateChanged.connect(self.handle_checked_changed)
+
+    def polish(self):
+        self.style().unpolish(self)
+        self.style().polish(self)
+
+    def is_checked(self):
+        return self.checkbox.isChecked()
+
+    def set_dragging(self, dragging):
+        self.setProperty("dragging", "true" if dragging else "false")
+        self.polish()
+
+    def handle_checked_changed(self):
+        self.setProperty("checked", "true" if self.is_checked() else "false")
+        self.polish()
+        self.owner.refresh_pdf_image_cards()
+
+    def update_display(self, index):
+        pixmap = QPixmap(self.image_file)
+        if not pixmap.isNull():
+            pixmap = pixmap.scaled(
+                PDF_PAGE_THUMBNAIL_SIZE,
+                Qt.KeepAspectRatio,
+                Qt.SmoothTransformation,
+            )
+            self.image_label.setPixmap(pixmap)
+        else:
+            self.image_label.setText("无法预览")
+        name = Path(self.image_file).name
+        self.page_label.setText(f"第 {index:03d} 张")
+        self.file_label.setText(
+            self.file_label.fontMetrics().elidedText(name, Qt.ElideMiddle, PDF_PAGE_CARD_WIDTH - 18)
+        )
+        self.file_label.setToolTip(self.image_file)
+        self.setToolTip(f"{name}\n双击可放大预览，拖拽可调整顺序")
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.drag_start_position = event.position().toPoint()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if not (event.buttons() & Qt.LeftButton) or self.drag_start_position is None:
+            super().mouseMoveEvent(event)
+            return
+        distance = (event.position().toPoint() - self.drag_start_position).manhattanLength()
+        if distance < QApplication.startDragDistance():
+            super().mouseMoveEvent(event)
+            return
+        source_index = self.owner.pdf_image_cards.index(self)
+        mime_data = QMimeData()
+        mime_data.setData(PDF_IMAGE_DRAG_MIME, str(source_index).encode("utf-8"))
+        drag = QDrag(self)
+        drag.setMimeData(mime_data)
+        pixmap = self.image_label.pixmap()
+        if pixmap:
+            drag.setPixmap(pixmap)
+        self.set_dragging(True)
+        try:
+            drag.exec(Qt.MoveAction)
+        finally:
+            self.set_dragging(False)
+
+    def mouseDoubleClickEvent(self, event):
+        self.owner.preview_pdf_image(self)
+        event.accept()
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasFormat(PDF_IMAGE_DRAG_MIME):
+            event.acceptProposedAction()
+
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasFormat(PDF_IMAGE_DRAG_MIME):
+            event.acceptProposedAction()
+
+    def dropEvent(self, event):
+        if not event.mimeData().hasFormat(PDF_IMAGE_DRAG_MIME):
+            return
+        source_index = int(bytes(event.mimeData().data(PDF_IMAGE_DRAG_MIME)).decode("utf-8"))
+        target_index = self.owner.pdf_image_cards.index(self)
+        if event.position().x() > self.width() / 2:
+            target_index += 1
+        self.owner.reorder_pdf_image(source_index, target_index)
+        event.acceptProposedAction()
+
+
+class PdfImageBoard(QWidget):
+    def __init__(self, owner):
+        super().__init__()
+        self.owner = owner
+        self.setAcceptDrops(True)
+        self.grid = QGridLayout(self)
+        self.grid.setContentsMargins(8, 8, 8, 8)
+        self.grid.setHorizontalSpacing(PDF_PAGE_CARD_H_SPACING)
+        self.grid.setVerticalSpacing(PDF_PAGE_CARD_V_SPACING)
+        self.grid.setAlignment(Qt.AlignLeft | Qt.AlignTop)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.owner.refresh_pdf_image_cards_layout()
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasFormat(PDF_IMAGE_DRAG_MIME):
+            event.acceptProposedAction()
+
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasFormat(PDF_IMAGE_DRAG_MIME):
+            event.acceptProposedAction()
+
+    def dropEvent(self, event):
+        if not event.mimeData().hasFormat(PDF_IMAGE_DRAG_MIME):
+            return
+        source_index = int(bytes(event.mimeData().data(PDF_IMAGE_DRAG_MIME)).decode("utf-8"))
+        self.owner.reorder_pdf_image(source_index, len(self.owner.pdf_image_cards))
+        event.acceptProposedAction()
 
 
 ACCENT_PALETTES = {
@@ -186,6 +543,7 @@ def build_theme_stylesheet(colors):
     QWidget#splitPage,
     QWidget#invoicePage,
     QWidget#documentPage,
+    QWidget#pdfPage,
     QWidget#renamePage {{
         background: {colors["window_bg"]};
         color: {colors["text"]};
@@ -259,6 +617,48 @@ def build_theme_stylesheet(colors):
     QTreeWidget::indicator:checked:selected {{
         background: #FFFFFF;
         border: 1px solid #FFFFFF;
+    }}
+    QWidget[pdfCard="true"] {{
+        background: {colors["table_row"]};
+        border: 1px solid {colors["border_soft"]};
+        border-radius: 8px;
+    }}
+    QWidget[pdfCard="true"][checked="true"] {{
+        background: {colors["accent_soft"]};
+        border: 1px solid {colors["accent"]};
+    }}
+    QWidget[pdfCard="true"][dragging="true"] {{
+        border: 2px solid {colors["accent"]};
+    }}
+    QWidget#pdfThumbnailBox {{
+        background: #FFFFFF;
+        border: 1px solid {colors["border_soft"]};
+        border-radius: 6px;
+    }}
+    QLabel[pdfCardTitle="true"] {{
+        color: #000000;
+        font-size: 13px;
+        font-weight: 600;
+    }}
+    QLabel[pdfCardName="true"] {{
+        color: #000000;
+        font-size: 12px;
+    }}
+    QTabWidget::pane {{
+        border: 1px solid {colors["border"]};
+        border-radius: 10px;
+        background: {colors["panel"]};
+    }}
+    QTabBar::tab {{
+        background: {colors["panel_alt"]};
+        color: {colors["text"]};
+        padding: 8px 14px;
+        border: 1px solid {colors["border"]};
+        border-bottom: none;
+    }}
+    QTabBar::tab:selected {{
+        background: {colors["accent_soft"]};
+        color: {colors["title"]};
     }}
     QHeaderView::section {{
         background: {colors["table_header"]};
@@ -472,6 +872,15 @@ class ExcelMergerWindow(QMainWindow):
         self.rename_source_files = []
         self.rename_previews = []
         self.rename_last_log_file = ""
+        self.pdf_output_folder = ""
+        self.pdf_page_cards = []
+        self.pdf_compress_source_file = ""
+        self.pdf_image_source_files = []
+        self.pdf_image_cards = []
+        self.pdf_export_source_file = ""
+        self.pdf_thumbnail_tempdir = tempfile.TemporaryDirectory(
+            prefix="eggie-pdf-thumbs-"
+        )
         self.refreshing_list = False
         self.settings = QSettings("EggieDocuFlow", "EggieDocuFlow")
         old_settings = QSettings("ExcelMergeTool", "MacSimpleOfficeTools")
@@ -493,7 +902,7 @@ class ExcelMergerWindow(QMainWindow):
             self.setWindowIcon(self.app_icon)
 
         self.setWindowTitle(self.app_name)
-        self.resize(1120, 740)
+        self.resize(1280, 820)
         self.setMinimumSize(900, 580)
         self.setAcceptDrops(True)
 
@@ -507,12 +916,14 @@ class ExcelMergerWindow(QMainWindow):
         self.invoice_page = self.create_invoice_page()
         self.document_page = self.create_document_page()
         self.rename_page = self.create_rename_page()
+        self.pdf_page = self.create_pdf_page()
         self.stack.addWidget(self.home_page)
         self.stack.addWidget(self.excel_page)
         self.stack.addWidget(self.split_page)
         self.stack.addWidget(self.invoice_page)
         self.stack.addWidget(self.document_page)
         self.stack.addWidget(self.rename_page)
+        self.stack.addWidget(self.pdf_page)
         self.update_home_responsive_layout()
 
         main_layout = QVBoxLayout(self.excel_page)
@@ -743,6 +1154,11 @@ class ExcelMergerWindow(QMainWindow):
                 button.setToolTip("批量预览并重命名文件")
                 button.setProperty("variant", "toolCardPrimary")
                 button.clicked.connect(self.show_rename_tool)
+            elif index == 5:
+                button.setText("PDF 工具箱")
+                button.setToolTip("整理页面、压缩 PDF，并支持图片和 PDF 互转")
+                button.setProperty("variant", "toolCardPrimary")
+                button.clicked.connect(self.show_pdf_tool)
             else:
                 button.setText("敬请期待")
                 button.setEnabled(False)
@@ -1341,6 +1757,301 @@ class ExcelMergerWindow(QMainWindow):
         self.refresh_rename_file_list()
         return page
 
+    def create_pdf_page(self):
+        page = QWidget()
+        page.setObjectName("pdfPage")
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(22, 18, 22, 18)
+        layout.setSpacing(14)
+
+        tool_header_layout = QHBoxLayout()
+        self.pdf_back_home_button = QPushButton("返回工具首页")
+        self.pdf_back_home_button.setMinimumHeight(30)
+        self.pdf_back_home_button.setProperty("variant", "ghost")
+        self.pdf_settings_button = QPushButton("软件设置")
+        self.pdf_settings_button.setMinimumHeight(30)
+        self.pdf_settings_button.setProperty("variant", "ghost")
+        tool_header_layout.addWidget(self.pdf_back_home_button)
+        self.pdf_version_label = QLabel(f"版本 {APP_VERSION}")
+        self.pdf_version_label.setProperty("role", "hint")
+        tool_header_layout.addWidget(self.pdf_version_label)
+        tool_header_layout.addStretch()
+        tool_header_layout.addWidget(self.pdf_settings_button)
+        layout.addLayout(tool_header_layout)
+
+        title = QLabel("PDF 工具箱")
+        title.setAlignment(Qt.AlignCenter)
+        title.setFont(QFont("PingFang SC", 20, QFont.Bold))
+        title.setProperty("role", "title")
+        layout.addWidget(title)
+
+        subtitle = QLabel("整理页面、压缩文件，并支持图片和 PDF 互转")
+        subtitle.setAlignment(Qt.AlignCenter)
+        subtitle.setProperty("role", "subtitle")
+        layout.addWidget(subtitle)
+
+        self.pdf_tabs = QTabWidget()
+        self.pdf_tabs.addTab(self.create_pdf_organizer_tab(), "页面整理")
+        self.pdf_tabs.addTab(self.create_pdf_compress_tab(), "PDF 压缩")
+        self.pdf_tabs.addTab(self.create_pdf_convert_tab(), "图片 / PDF 互转")
+        layout.addWidget(self.pdf_tabs, 1)
+
+        self.pdf_back_home_button.clicked.connect(self.show_home)
+        self.pdf_settings_button.clicked.connect(self.show_settings)
+        self.update_pdf_button_states()
+        return page
+
+    def create_pdf_organizer_tab(self):
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(12, 14, 12, 12)
+        layout.setSpacing(10)
+
+        button_layout = QHBoxLayout()
+        self.pdf_add_button = QPushButton("添加 PDF")
+        self.pdf_clear_button = QPushButton("清空页面")
+        self.pdf_check_all_button = QPushButton("全选")
+        self.pdf_uncheck_all_button = QPushButton("取消全选")
+        self.pdf_move_previous_button = QPushButton("前移")
+        self.pdf_move_next_button = QPushButton("后移")
+        self.pdf_rotate_left_button = QPushButton("左转")
+        self.pdf_rotate_right_button = QPushButton("右转")
+        self.pdf_rotate_180_button = QPushButton("旋转 180 度")
+        self.pdf_delete_pages_button = QPushButton("删除勾选")
+        self.pdf_split_selected_button = QPushButton("拆分勾选")
+        self.pdf_save_pages_button = QPushButton("保存当前顺序")
+        self.pdf_add_button.setProperty("variant", "accent")
+        self.pdf_delete_pages_button.setProperty("variant", "danger")
+        self.pdf_save_pages_button.setProperty("variant", "primary")
+        for button in (
+            self.pdf_add_button,
+            self.pdf_clear_button,
+            self.pdf_check_all_button,
+            self.pdf_uncheck_all_button,
+            self.pdf_move_previous_button,
+            self.pdf_move_next_button,
+            self.pdf_rotate_left_button,
+            self.pdf_rotate_right_button,
+            self.pdf_rotate_180_button,
+            self.pdf_delete_pages_button,
+            self.pdf_split_selected_button,
+            self.pdf_save_pages_button,
+        ):
+            button.setMinimumHeight(34)
+            button_layout.addWidget(button)
+        layout.addLayout(button_layout)
+
+        self.pdf_page_scroll = QScrollArea()
+        self.pdf_page_scroll.setWidgetResizable(True)
+        self.pdf_page_board = PdfPageBoard(self)
+        self.pdf_page_scroll.setWidget(self.pdf_page_board)
+        layout.addWidget(self.pdf_page_scroll, 1)
+
+        save_group = QGroupBox("输出设置")
+        save_layout = QHBoxLayout(save_group)
+        save_layout.setContentsMargins(12, 14, 12, 10)
+        self.pdf_output_folder_edit = QLineEdit()
+        self.pdf_output_folder_edit.setReadOnly(True)
+        self.pdf_output_folder_edit.setPlaceholderText("请选择结果保存文件夹")
+        self.pdf_choose_output_folder_button = QPushButton("选择文件夹")
+        self.pdf_output_name_edit = QLineEdit()
+        self.pdf_output_name_edit.setPlaceholderText(default_output_name("PDF合并结果"))
+        save_layout.addWidget(QLabel("文件夹："))
+        save_layout.addWidget(self.pdf_output_folder_edit, 2)
+        save_layout.addWidget(self.pdf_choose_output_folder_button)
+        save_layout.addWidget(QLabel("文件名："))
+        save_layout.addWidget(self.pdf_output_name_edit, 1)
+        layout.addWidget(save_group)
+
+        self.pdf_status_label = QLabel("尚未添加 PDF")
+        self.pdf_status_label.setProperty("role", "status")
+        layout.addWidget(self.pdf_status_label)
+
+        self.pdf_add_button.clicked.connect(self.add_pdf_files)
+        self.pdf_clear_button.clicked.connect(self.clear_pdf_pages)
+        self.pdf_check_all_button.clicked.connect(lambda: self.set_all_pdf_page_checks(True))
+        self.pdf_uncheck_all_button.clicked.connect(lambda: self.set_all_pdf_page_checks(False))
+        self.pdf_move_previous_button.clicked.connect(lambda: self.move_checked_pdf_pages(-1))
+        self.pdf_move_next_button.clicked.connect(lambda: self.move_checked_pdf_pages(1))
+        self.pdf_rotate_left_button.clicked.connect(lambda: self.rotate_selected_pdf_pages(-90))
+        self.pdf_rotate_right_button.clicked.connect(lambda: self.rotate_selected_pdf_pages(90))
+        self.pdf_rotate_180_button.clicked.connect(lambda: self.rotate_selected_pdf_pages(180))
+        self.pdf_delete_pages_button.clicked.connect(self.delete_selected_pdf_pages)
+        self.pdf_split_selected_button.clicked.connect(self.split_selected_pdf_pages)
+        self.pdf_save_pages_button.clicked.connect(self.save_pdf_pages)
+        self.pdf_choose_output_folder_button.clicked.connect(self.choose_pdf_output_folder)
+        return tab
+
+    def create_pdf_compress_tab(self):
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(12, 14, 12, 12)
+        layout.setSpacing(12)
+
+        source_group = QGroupBox("选择 PDF")
+        source_layout = QHBoxLayout(source_group)
+        source_layout.setContentsMargins(12, 14, 12, 10)
+        self.pdf_compress_source_edit = QLineEdit()
+        self.pdf_compress_source_edit.setReadOnly(True)
+        self.pdf_compress_source_edit.setPlaceholderText("请选择需要压缩的 PDF")
+        self.pdf_choose_compress_button = QPushButton("选择 PDF")
+        self.pdf_choose_compress_button.setProperty("variant", "accent")
+        source_layout.addWidget(self.pdf_compress_source_edit, 1)
+        source_layout.addWidget(self.pdf_choose_compress_button)
+        layout.addWidget(source_group)
+
+        preset_group = QGroupBox("压缩档位")
+        preset_layout = QHBoxLayout(preset_group)
+        preset_layout.setContentsMargins(12, 14, 12, 10)
+        self.pdf_compress_preset_combo = QComboBox()
+        for key in ("clear", "standard", "small"):
+            self.pdf_compress_preset_combo.addItem(COMPRESSION_PRESETS[key]["label"], key)
+        self.pdf_compress_preset_combo.setCurrentIndex(1)
+        self.pdf_compress_size_label = QLabel("原始大小：-    预计压缩后：-    预计缩小：-")
+        self.pdf_compress_size_label.setProperty("role", "hint")
+        preset_layout.addWidget(QLabel("档位："))
+        preset_layout.addWidget(self.pdf_compress_preset_combo)
+        preset_layout.addWidget(self.pdf_compress_size_label, 1)
+        layout.addWidget(preset_group)
+
+        output_group = QGroupBox("输出设置")
+        output_layout = QHBoxLayout(output_group)
+        output_layout.setContentsMargins(12, 14, 12, 10)
+        self.pdf_compress_output_folder_edit = QLineEdit()
+        self.pdf_compress_output_folder_edit.setReadOnly(True)
+        self.pdf_choose_compress_output_button = QPushButton("选择文件夹")
+        self.pdf_compress_output_name_edit = QLineEdit()
+        self.pdf_compress_output_name_edit.setPlaceholderText(default_output_name("PDF压缩结果"))
+        output_layout.addWidget(QLabel("文件夹："))
+        output_layout.addWidget(self.pdf_compress_output_folder_edit, 2)
+        output_layout.addWidget(self.pdf_choose_compress_output_button)
+        output_layout.addWidget(QLabel("文件名："))
+        output_layout.addWidget(self.pdf_compress_output_name_edit, 1)
+        layout.addWidget(output_group)
+
+        self.pdf_compress_button = QPushButton("开始压缩")
+        self.pdf_compress_button.setMinimumHeight(48)
+        self.pdf_compress_button.setProperty("variant", "primary")
+        layout.addWidget(self.pdf_compress_button)
+        self.pdf_compress_status_label = QLabel("尚未选择 PDF")
+        self.pdf_compress_status_label.setProperty("role", "status")
+        layout.addWidget(self.pdf_compress_status_label)
+        layout.addStretch(1)
+
+        self.pdf_choose_compress_button.clicked.connect(self.choose_pdf_compress_source)
+        self.pdf_choose_compress_output_button.clicked.connect(
+            self.choose_pdf_compress_output_folder
+        )
+        self.pdf_compress_preset_combo.currentIndexChanged.connect(
+            self.update_pdf_compress_estimate
+        )
+        self.pdf_compress_button.clicked.connect(self.compress_selected_pdf)
+        return tab
+
+    def create_pdf_convert_tab(self):
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(12, 14, 12, 12)
+        layout.setSpacing(10)
+
+        mode_layout = QHBoxLayout()
+        self.pdf_image_mode_button = QPushButton("图片转 PDF")
+        self.pdf_export_mode_button = QPushButton("PDF 转图片")
+        for button in (self.pdf_image_mode_button, self.pdf_export_mode_button):
+            button.setCheckable(True)
+            button.setMinimumHeight(34)
+            mode_layout.addWidget(button)
+        mode_layout.addStretch()
+        layout.addLayout(mode_layout)
+
+        self.pdf_convert_stack = QStackedWidget()
+        layout.addWidget(self.pdf_convert_stack, 1)
+
+        image_group = QGroupBox("图片转 PDF")
+        image_layout = QVBoxLayout(image_group)
+        image_layout.setContentsMargins(12, 14, 12, 10)
+        image_button_layout = QHBoxLayout()
+        self.pdf_add_images_button = QPushButton("添加图片")
+        self.pdf_add_image_folder_button = QPushButton("添加文件夹")
+        self.pdf_delete_checked_images_button = QPushButton("删除勾选")
+        self.pdf_clear_images_button = QPushButton("清空图片")
+        self.pdf_add_images_button.setProperty("variant", "accent")
+        self.pdf_add_image_folder_button.setProperty("variant", "accent")
+        self.pdf_delete_checked_images_button.setProperty("variant", "danger")
+        image_button_layout.addWidget(self.pdf_add_images_button)
+        image_button_layout.addWidget(self.pdf_add_image_folder_button)
+        image_button_layout.addWidget(self.pdf_delete_checked_images_button)
+        image_button_layout.addWidget(self.pdf_clear_images_button)
+        image_button_layout.addStretch()
+        image_layout.addLayout(image_button_layout)
+        self.pdf_image_scroll = QScrollArea()
+        self.pdf_image_scroll.setWidgetResizable(True)
+        self.pdf_image_board = PdfImageBoard(self)
+        self.pdf_image_scroll.setWidget(self.pdf_image_board)
+        image_layout.addWidget(self.pdf_image_scroll, 1)
+        self.pdf_image_output_folder_edit = QLineEdit()
+        self.pdf_image_output_folder_edit.setReadOnly(True)
+        self.pdf_image_output_name_edit = QLineEdit()
+        self.pdf_image_output_name_edit.setPlaceholderText(default_output_name("图片合成PDF"))
+        self.pdf_choose_image_output_button = QPushButton("选择文件夹")
+        image_layout.addWidget(QLabel("保存文件夹："))
+        image_layout.addWidget(self.pdf_image_output_folder_edit)
+        image_layout.addWidget(self.pdf_choose_image_output_button)
+        image_layout.addWidget(QLabel("输出文件名："))
+        image_layout.addWidget(self.pdf_image_output_name_edit)
+        self.pdf_images_to_pdf_button = QPushButton("合成 PDF")
+        self.pdf_images_to_pdf_button.setMinimumHeight(44)
+        self.pdf_images_to_pdf_button.setProperty("variant", "primary")
+        image_layout.addWidget(self.pdf_images_to_pdf_button)
+        self.pdf_image_status_label = QLabel("尚未添加图片")
+        self.pdf_image_status_label.setProperty("role", "status")
+        image_layout.addWidget(self.pdf_image_status_label)
+        self.pdf_convert_stack.addWidget(image_group)
+
+        export_group = QGroupBox("PDF 转图片")
+        export_layout = QVBoxLayout(export_group)
+        export_layout.setContentsMargins(12, 14, 12, 10)
+        self.pdf_export_source_edit = QLineEdit()
+        self.pdf_export_source_edit.setReadOnly(True)
+        self.pdf_export_source_edit.setPlaceholderText("请选择需要导出图片的 PDF")
+        self.pdf_choose_export_source_button = QPushButton("选择 PDF")
+        self.pdf_choose_export_source_button.setProperty("variant", "accent")
+        self.pdf_export_output_folder_edit = QLineEdit()
+        self.pdf_export_output_folder_edit.setReadOnly(True)
+        self.pdf_choose_export_output_button = QPushButton("选择文件夹")
+        self.pdf_export_format_combo = QComboBox()
+        self.pdf_export_format_combo.addItems(["JPG", "PNG"])
+        self.pdf_export_button = QPushButton("导出图片")
+        self.pdf_export_button.setMinimumHeight(44)
+        self.pdf_export_button.setProperty("variant", "primary")
+        export_layout.addWidget(self.pdf_export_source_edit)
+        export_layout.addWidget(self.pdf_choose_export_source_button)
+        export_layout.addWidget(QLabel("保存文件夹："))
+        export_layout.addWidget(self.pdf_export_output_folder_edit)
+        export_layout.addWidget(self.pdf_choose_export_output_button)
+        export_layout.addWidget(QLabel("图片格式："))
+        export_layout.addWidget(self.pdf_export_format_combo)
+        export_layout.addWidget(self.pdf_export_button)
+        self.pdf_export_status_label = QLabel("尚未选择 PDF")
+        self.pdf_export_status_label.setProperty("role", "status")
+        export_layout.addWidget(self.pdf_export_status_label)
+        export_layout.addStretch(1)
+        self.pdf_convert_stack.addWidget(export_group)
+
+        self.pdf_image_mode_button.clicked.connect(lambda: self.show_pdf_convert_mode(0))
+        self.pdf_export_mode_button.clicked.connect(lambda: self.show_pdf_convert_mode(1))
+        self.pdf_add_images_button.clicked.connect(self.add_pdf_images)
+        self.pdf_add_image_folder_button.clicked.connect(self.add_pdf_image_folder)
+        self.pdf_delete_checked_images_button.clicked.connect(self.delete_checked_pdf_images)
+        self.pdf_clear_images_button.clicked.connect(self.clear_pdf_images)
+        self.pdf_choose_image_output_button.clicked.connect(self.choose_pdf_image_output_folder)
+        self.pdf_images_to_pdf_button.clicked.connect(self.convert_images_to_pdf)
+        self.pdf_choose_export_source_button.clicked.connect(self.choose_pdf_export_source)
+        self.pdf_choose_export_output_button.clicked.connect(self.choose_pdf_export_output_folder)
+        self.pdf_export_button.clicked.connect(self.export_pdf_to_images)
+        self.show_pdf_convert_mode(0)
+        return tab
+
     def update_home_responsive_layout(self):
         if not hasattr(self, "home_tool_buttons"):
             return
@@ -1434,6 +2145,10 @@ class ExcelMergerWindow(QMainWindow):
         self.stack.setCurrentWidget(self.rename_page)
         self.setWindowTitle(f"{self.app_name} - 批量改名工具")
 
+    def show_pdf_tool(self):
+        self.stack.setCurrentWidget(self.pdf_page)
+        self.setWindowTitle(f"{self.app_name} - PDF 工具箱")
+
     def show_settings(self):
         accent_keys = list(ACCENT_PALETTES)
         labels = [ACCENT_PALETTES[key]["label"] for key in accent_keys]
@@ -1456,9 +2171,742 @@ class ExcelMergerWindow(QMainWindow):
         self.settings.sync()
         self.apply_theme()
 
+    def dialog_folder(self, key, fallback=""):
+        downloads = str(Path.home() / "Downloads")
+        for candidate in (self.settings.value(f"dialogs/{key}", ""), fallback, downloads):
+            if not candidate:
+                continue
+            path = Path(str(candidate)).expanduser()
+            if path.exists() and path.is_file():
+                path = path.parent
+            elif not path.exists() and path.parent.exists():
+                path = path.parent
+            if path.exists() and path.is_dir():
+                return str(path)
+        return downloads
+
+    def remember_dialog_folder(self, key, selected_path):
+        if not selected_path:
+            return
+        path = Path(str(selected_path)).expanduser()
+        if path.exists() and path.is_file():
+            path = path.parent
+        elif not path.exists() and path.parent.exists():
+            path = path.parent
+        if path.exists() and path.is_dir():
+            self.settings.setValue(f"dialogs/{key}", str(path.resolve()))
+            self.settings.sync()
+
     def apply_theme(self):
         colors = build_theme_colors(self.accent_name)
         self.setStyleSheet(build_theme_stylesheet(colors))
+
+    def selected_pdf_page_items(self):
+        return [card for card in self.pdf_page_cards if card.is_checked()]
+
+    def pdf_page_refs_from_items(self, items):
+        refs = []
+        for card in items:
+            data = card.data
+            refs.append(
+                PdfPageRef(
+                    data["source_file"],
+                    data["page_index"],
+                    data.get("rotation", 0),
+                )
+            )
+        return refs
+
+    def all_pdf_page_items(self):
+        return list(self.pdf_page_cards)
+
+    def set_pdf_output_defaults(self, source_files):
+        if not source_files:
+            return
+        if not self.pdf_output_folder:
+            self.pdf_output_folder = str(Path(source_files[0]).parent / "output")
+            self.pdf_output_folder_edit.setText(self.pdf_output_folder)
+            self.pdf_output_folder_edit.setToolTip(self.pdf_output_folder)
+        if not self.pdf_page_cards:
+            label = (
+                "PDF合并结果"
+                if len(source_files) > 1
+                else f"{Path(source_files[0]).stem}_页面整理"
+            )
+            self.pdf_output_name_edit.setText(default_output_name(label))
+
+    def update_pdf_button_states(self):
+        if not hasattr(self, "pdf_page_cards"):
+            return
+        has_pages = len(self.pdf_page_cards) > 0
+        has_selection = bool(self.selected_pdf_page_items())
+        self.pdf_clear_button.setEnabled(has_pages)
+        self.pdf_check_all_button.setEnabled(has_pages)
+        self.pdf_uncheck_all_button.setEnabled(has_pages)
+        self.pdf_move_previous_button.setEnabled(has_selection)
+        self.pdf_move_next_button.setEnabled(has_selection)
+        self.pdf_rotate_left_button.setEnabled(has_selection)
+        self.pdf_rotate_right_button.setEnabled(has_selection)
+        self.pdf_rotate_180_button.setEnabled(has_selection)
+        self.pdf_delete_pages_button.setEnabled(has_selection)
+        self.pdf_split_selected_button.setEnabled(has_selection)
+        self.pdf_save_pages_button.setEnabled(has_pages and bool(self.pdf_output_folder))
+        if hasattr(self, "pdf_compress_button"):
+            self.pdf_compress_button.setEnabled(
+                bool(self.pdf_compress_source_file)
+                and bool(self.pdf_compress_output_folder_edit.text())
+            )
+        if hasattr(self, "pdf_images_to_pdf_button"):
+            self.pdf_images_to_pdf_button.setEnabled(
+                bool(self.pdf_image_source_files)
+                and bool(self.pdf_image_output_folder_edit.text())
+            )
+        if hasattr(self, "pdf_delete_checked_images_button"):
+            self.pdf_delete_checked_images_button.setEnabled(
+                bool(self.selected_pdf_image_cards())
+            )
+        if hasattr(self, "pdf_export_button"):
+            self.pdf_export_button.setEnabled(
+                bool(self.pdf_export_source_file)
+                and bool(self.pdf_export_output_folder_edit.text())
+            )
+
+    def refresh_pdf_page_cards_layout(self):
+        if not hasattr(self, "pdf_page_board"):
+            return
+        if getattr(self, "refreshing_pdf_card_layout", False):
+            return
+        self.refreshing_pdf_card_layout = True
+        while self.pdf_page_board.grid.count():
+            item = self.pdf_page_board.grid.takeAt(0)
+            if item.widget():
+                item.widget().setParent(None)
+        try:
+            viewport_width = max(self.pdf_page_scroll.viewport().width(), PDF_PAGE_CARD_WIDTH)
+            columns = max(
+                1,
+                (viewport_width - 28) // (PDF_PAGE_CARD_WIDTH + PDF_PAGE_CARD_H_SPACING),
+            )
+            row_count = (len(self.pdf_page_cards) + columns - 1) // columns
+            content_height = (
+                16
+                + row_count * PDF_PAGE_CARD_HEIGHT
+                + max(0, row_count - 1) * PDF_PAGE_CARD_V_SPACING
+            )
+            self.pdf_page_board.setMinimumHeight(content_height)
+            for index, card in enumerate(self.pdf_page_cards):
+                row = index // columns
+                column = index % columns
+                self.pdf_page_board.grid.addWidget(card, row, column)
+        finally:
+            self.refreshing_pdf_card_layout = False
+
+    def reorder_pdf_page(self, source_index, insert_index):
+        if source_index < 0 or source_index >= len(self.pdf_page_cards):
+            return
+        insert_index = max(0, min(insert_index, len(self.pdf_page_cards)))
+        card = self.pdf_page_cards.pop(source_index)
+        if source_index < insert_index:
+            insert_index -= 1
+        self.pdf_page_cards.insert(insert_index, card)
+        self.refresh_pdf_page_cards_layout()
+        self.refresh_pdf_page_numbers()
+
+    def refresh_pdf_page_numbers(self):
+        if getattr(self, "updating_pdf_page_numbers", False):
+            return
+        self.updating_pdf_page_numbers = True
+        try:
+            for index, card in enumerate(self.pdf_page_cards, 1):
+                card.update_display(index)
+        finally:
+            self.updating_pdf_page_numbers = False
+        total = len(self.pdf_page_cards)
+        checked = len(self.selected_pdf_page_items())
+        if total:
+            self.pdf_status_label.setText(
+                f"当前共有 {total} 页，已勾选 {checked} 页。双击页面可放大预览。"
+            )
+        else:
+            self.pdf_status_label.setText("尚未添加 PDF")
+        self.update_pdf_button_states()
+
+    def set_all_pdf_page_checks(self, checked):
+        for card in self.pdf_page_cards:
+            old_state = card.checkbox.blockSignals(True)
+            card.checkbox.setChecked(checked)
+            card.checkbox.blockSignals(old_state)
+            card.setProperty("checked", "true" if checked else "false")
+            card.polish()
+        self.refresh_pdf_page_numbers()
+
+    def move_checked_pdf_pages(self, delta):
+        rows = [
+            self.pdf_page_cards.index(card)
+            for card in self.selected_pdf_page_items()
+        ]
+        if not rows:
+            return
+        row_set = set(rows)
+        if delta < 0:
+            for row in rows:
+                if row <= 0 or row - 1 in row_set:
+                    continue
+                self.pdf_page_cards[row - 1], self.pdf_page_cards[row] = (
+                    self.pdf_page_cards[row],
+                    self.pdf_page_cards[row - 1],
+                )
+                row_set.remove(row)
+                row_set.add(row - 1)
+        else:
+            for row in reversed(rows):
+                if row >= len(self.pdf_page_cards) - 1 or row + 1 in row_set:
+                    continue
+                self.pdf_page_cards[row + 1], self.pdf_page_cards[row] = (
+                    self.pdf_page_cards[row],
+                    self.pdf_page_cards[row + 1],
+                )
+                row_set.remove(row)
+                row_set.add(row + 1)
+        self.refresh_pdf_page_cards_layout()
+        self.refresh_pdf_page_numbers()
+
+    def preview_pdf_page(self, card):
+        data = card.data
+        if not data:
+            return
+        preview_file = Path(self.pdf_thumbnail_tempdir.name) / (
+            f"preview_{id(card)}_{data.get('rotation', 0)}.png"
+        )
+        render_page_thumbnail(
+            data["source_file"],
+            data["page_index"],
+            preview_file,
+            max_width=900,
+        )
+        pixmap = QPixmap(str(preview_file))
+        rotation = data.get("rotation", 0) % 360
+        if rotation and not pixmap.isNull():
+            pixmap = pixmap.transformed(QTransform().rotate(rotation), Qt.SmoothTransformation)
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle(
+            f"{Path(data['source_file']).name} - 第 {data['page_index'] + 1} 页"
+        )
+        dialog_layout = QVBoxLayout(dialog)
+        image_label = QLabel()
+        image_label.setAlignment(Qt.AlignCenter)
+        image_label.setPixmap(pixmap)
+        scroll_area = QScrollArea()
+        scroll_area.setWidget(image_label)
+        scroll_area.setWidgetResizable(True)
+        dialog_layout.addWidget(scroll_area, 1)
+        close_button = QPushButton("关闭")
+        close_button.clicked.connect(dialog.accept)
+        dialog_layout.addWidget(close_button)
+        dialog.resize(960, 760)
+        dialog.exec()
+
+    def add_pdf_paths(self, pdf_files):
+        pdf_files = [os.path.abspath(path) for path in pdf_files if path]
+        if not pdf_files:
+            return
+        self.set_pdf_output_defaults(pdf_files)
+        progress = QProgressDialog("正在生成页面缩略图…", "", 0, len(pdf_files), self)
+        progress.setWindowTitle("PDF 工具箱")
+        progress.setCancelButton(None)
+        progress.setMinimumDuration(0)
+        progress.setWindowModality(Qt.WindowModal)
+        progress.show()
+
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            for file_index, pdf_file in enumerate(pdf_files, 1):
+                progress.setLabelText(f"正在读取：{Path(pdf_file).name}")
+                QApplication.processEvents()
+                for page_index in range(page_count(pdf_file)):
+                    thumbnail = Path(self.pdf_thumbnail_tempdir.name) / (
+                        f"thumb_{len(self.pdf_page_cards)}_{page_index}.png"
+                    )
+                    data = {
+                        "source_file": pdf_file,
+                        "page_index": page_index,
+                        "rotation": 0,
+                        "thumbnail": render_page_thumbnail(pdf_file, page_index, thumbnail),
+                    }
+                    card = PdfPageCard(self, data)
+                    card.update_display(len(self.pdf_page_cards) + 1)
+                    self.pdf_page_cards.append(card)
+                progress.setValue(file_index)
+        except Exception as error:
+            QMessageBox.critical(self, "读取 PDF 失败", str(error))
+        finally:
+            QApplication.restoreOverrideCursor()
+            progress.close()
+
+        self.refresh_pdf_page_numbers()
+        self.refresh_pdf_page_cards_layout()
+
+    def add_pdf_files(self):
+        filenames, _ = QFileDialog.getOpenFileNames(
+            self,
+            "选择一个或多个 PDF",
+            self.dialog_folder("open"),
+            "PDF 文件 (*.pdf)",
+        )
+        if filenames:
+            self.remember_dialog_folder("open", filenames[0])
+        self.add_pdf_paths(filenames)
+
+    def choose_pdf_output_folder(self):
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            "选择 PDF 结果保存文件夹",
+            self.dialog_folder("save", self.pdf_output_folder),
+            QFileDialog.ShowDirsOnly,
+        )
+        if not folder:
+            return
+        self.pdf_output_folder = os.path.abspath(folder)
+        self.remember_dialog_folder("save", self.pdf_output_folder)
+        self.pdf_output_folder_edit.setText(self.pdf_output_folder)
+        self.pdf_output_folder_edit.setToolTip(self.pdf_output_folder)
+        self.update_pdf_button_states()
+
+    def clear_pdf_pages(self):
+        if self.pdf_page_cards and not self.confirm_list_change("是否清空所有 PDF 页面"):
+            return
+        for card in self.pdf_page_cards:
+            card.setParent(None)
+            card.deleteLater()
+        self.pdf_page_cards = []
+        self.refresh_pdf_page_cards_layout()
+        self.refresh_pdf_page_numbers()
+
+    def rotate_selected_pdf_pages(self, degrees):
+        for card in self.selected_pdf_page_items():
+            data = dict(card.data)
+            data["rotation"] = (data.get("rotation", 0) + degrees) % 360
+            card.data = data
+        self.refresh_pdf_page_numbers()
+
+    def delete_selected_pdf_pages(self):
+        selected = self.selected_pdf_page_items()
+        if not selected:
+            return
+        if not self.confirm_list_change(f"是否删除勾选的 {len(selected)} 页"):
+            return
+        for card in selected:
+            self.pdf_page_cards.remove(card)
+            card.setParent(None)
+            card.deleteLater()
+        self.refresh_pdf_page_cards_layout()
+        self.refresh_pdf_page_numbers()
+
+    def save_pdf_result_message(self, title, result, extra_text=""):
+        open_target = result.output_file or (
+            str(Path(result.image_files[0]).parent) if result.image_files else ""
+        )
+        message = QMessageBox(self)
+        message.setWindowTitle(title)
+        message.setIcon(QMessageBox.Information)
+        message.setText(title)
+        detail = extra_text
+        if result.output_file:
+            detail += f"\n\n结果文件：\n{result.output_file}"
+        if result.image_files:
+            detail += f"\n\n生成图片：{len(result.image_files)} 张"
+        detail += f"\n\n日志文件：\n{result.log_file}"
+        message.setInformativeText(detail.strip())
+        open_button = message.addButton("打开结果", QMessageBox.ActionRole)
+        ok_button = message.addButton("确 定", QMessageBox.AcceptRole)
+        for button in (ok_button, open_button):
+            button.setFixedSize(112, 36)
+        message.setDefaultButton(ok_button)
+        message.exec()
+        if message.clickedButton() == open_button and open_target:
+            self.open_output_file(open_target)
+
+    def save_pdf_pages(self):
+        if not self.pdf_page_cards:
+            QMessageBox.warning(self, "没有页面", "请先添加 PDF 页面。")
+            return
+        try:
+            output_file = output_path(
+                self.pdf_output_folder,
+                self.pdf_output_name_edit.text(),
+                default_output_name("PDF合并结果"),
+            )
+            result = save_pages(
+                self.pdf_page_refs_from_items(self.all_pdf_page_items()),
+                output_file,
+                "PDF 页面整理",
+            )
+        except Exception as error:
+            QMessageBox.critical(self, "保存失败", str(error))
+            return
+        self.pdf_status_label.setText(f"已保存：{Path(result.output_file).name}")
+        self.save_pdf_result_message("PDF 保存完成", result)
+
+    def split_selected_pdf_pages(self):
+        selected = self.selected_pdf_page_items()
+        if not selected:
+            return
+        try:
+            output_file = output_path(
+                self.pdf_output_folder,
+                default_output_name("PDF拆分结果"),
+                default_output_name("PDF拆分结果"),
+            )
+            result = save_pages(
+                self.pdf_page_refs_from_items(selected),
+                output_file,
+                "PDF 拆分选中页面",
+            )
+        except Exception as error:
+            QMessageBox.critical(self, "拆分失败", str(error))
+            return
+        self.pdf_status_label.setText(f"已拆分：{Path(result.output_file).name}")
+        self.save_pdf_result_message("PDF 拆分完成", result)
+
+    def choose_pdf_compress_source(self):
+        filename, _ = QFileDialog.getOpenFileName(
+            self,
+            "选择需要压缩的 PDF",
+            self.dialog_folder("open"),
+            "PDF 文件 (*.pdf)",
+        )
+        if not filename:
+            return
+        self.remember_dialog_folder("open", filename)
+        self.pdf_compress_source_file = os.path.abspath(filename)
+        self.pdf_compress_source_edit.setText(self.pdf_compress_source_file)
+        self.pdf_compress_source_edit.setToolTip(self.pdf_compress_source_file)
+        folder = str(Path(self.pdf_compress_source_file).parent / "output")
+        self.pdf_compress_output_folder_edit.setText(folder)
+        self.pdf_compress_output_folder_edit.setToolTip(folder)
+        self.pdf_compress_output_name_edit.setText(
+            default_output_name(f"{Path(filename).stem}_压缩")
+        )
+        self.pdf_compress_status_label.setText("已选择 PDF，可开始压缩")
+        self.update_pdf_compress_estimate()
+        self.update_pdf_button_states()
+
+    def choose_pdf_compress_output_folder(self):
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            "选择压缩结果保存文件夹",
+            self.dialog_folder("save", self.pdf_compress_output_folder_edit.text()),
+            QFileDialog.ShowDirsOnly,
+        )
+        if folder:
+            self.remember_dialog_folder("save", folder)
+            self.pdf_compress_output_folder_edit.setText(os.path.abspath(folder))
+            self.update_pdf_button_states()
+
+    def current_pdf_compression_preset(self):
+        if not hasattr(self, "pdf_compress_preset_combo"):
+            return "standard"
+        return self.pdf_compress_preset_combo.currentData() or "standard"
+
+    def update_pdf_compress_estimate(self):
+        if not getattr(self, "pdf_compress_source_file", ""):
+            self.pdf_compress_size_label.setText("原始大小：-    预计压缩后：-    预计缩小：-")
+            return
+        source = Path(self.pdf_compress_source_file)
+        if not source.exists():
+            self.pdf_compress_size_label.setText(
+                "原始大小：文件不存在    预计压缩后：-    预计缩小：-"
+            )
+            return
+        source_size = source.stat().st_size
+        low, high = estimate_compressed_size(
+            source_size,
+            self.current_pdf_compression_preset(),
+        )
+        saved_low = max(0, round((source_size - high) / source_size * 100))
+        saved_high = max(0, round((source_size - low) / source_size * 100))
+        self.pdf_compress_size_label.setText(
+            f"原始大小：{format_file_size(source_size)}    "
+            f"预计压缩后：{format_file_size(low)} - {format_file_size(high)}    "
+            f"预计缩小：{saved_low}% - {saved_high}%"
+        )
+
+    def compress_selected_pdf(self):
+        try:
+            output_file = output_path(
+                self.pdf_compress_output_folder_edit.text(),
+                self.pdf_compress_output_name_edit.text(),
+                default_output_name("PDF压缩结果"),
+            )
+            result = compress_pdf(
+                self.pdf_compress_source_file,
+                output_file,
+                self.current_pdf_compression_preset(),
+            )
+        except Exception as error:
+            QMessageBox.critical(self, "压缩失败", str(error))
+            return
+
+        if result.saved_percent > 0:
+            text = (
+                f"压缩完成：{format_file_size(result.source_size)} → "
+                f"{format_file_size(result.output_size)}，节省 {result.saved_percent}%"
+            )
+        else:
+            text = "压缩完成，但这个 PDF 压缩效果不明显。"
+        self.pdf_compress_status_label.setText(text)
+        self.save_pdf_result_message("PDF 压缩完成", result, text)
+
+    def show_pdf_convert_mode(self, index):
+        self.pdf_convert_stack.setCurrentIndex(index)
+        self.pdf_image_mode_button.setChecked(index == 0)
+        self.pdf_export_mode_button.setChecked(index == 1)
+        self.pdf_image_mode_button.setProperty("variant", "primary" if index == 0 else "ghost")
+        self.pdf_export_mode_button.setProperty("variant", "primary" if index == 1 else "ghost")
+        self.pdf_image_mode_button.style().unpolish(self.pdf_image_mode_button)
+        self.pdf_image_mode_button.style().polish(self.pdf_image_mode_button)
+        self.pdf_export_mode_button.style().unpolish(self.pdf_export_mode_button)
+        self.pdf_export_mode_button.style().polish(self.pdf_export_mode_button)
+
+    def sync_pdf_image_source_files(self):
+        self.pdf_image_source_files = [card.image_file for card in self.pdf_image_cards]
+
+    def selected_pdf_image_cards(self):
+        return [card for card in self.pdf_image_cards if card.is_checked()]
+
+    def refresh_pdf_image_cards_layout(self):
+        if not hasattr(self, "pdf_image_board"):
+            return
+        if getattr(self, "refreshing_pdf_image_layout", False):
+            return
+        self.refreshing_pdf_image_layout = True
+        while self.pdf_image_board.grid.count():
+            item = self.pdf_image_board.grid.takeAt(0)
+            if item.widget():
+                item.widget().setParent(None)
+        try:
+            viewport_width = max(self.pdf_image_scroll.viewport().width(), PDF_PAGE_CARD_WIDTH)
+            columns = max(
+                1,
+                (viewport_width - 28) // (PDF_PAGE_CARD_WIDTH + PDF_PAGE_CARD_H_SPACING),
+            )
+            row_count = (len(self.pdf_image_cards) + columns - 1) // columns
+            content_height = (
+                16
+                + row_count * PDF_PAGE_CARD_HEIGHT
+                + max(0, row_count - 1) * PDF_PAGE_CARD_V_SPACING
+            )
+            self.pdf_image_board.setMinimumHeight(content_height)
+            for index, card in enumerate(self.pdf_image_cards):
+                row = index // columns
+                column = index % columns
+                self.pdf_image_board.grid.addWidget(card, row, column)
+        finally:
+            self.refreshing_pdf_image_layout = False
+
+    def refresh_pdf_image_cards(self):
+        self.sync_pdf_image_source_files()
+        for index, card in enumerate(self.pdf_image_cards, 1):
+            card.update_display(index)
+        count = len(self.pdf_image_cards)
+        checked = len(self.selected_pdf_image_cards())
+        if count:
+            self.pdf_image_status_label.setText(
+                f"已添加 {count} 张图片，已勾选 {checked} 张。双击图片可放大预览。"
+            )
+        else:
+            self.pdf_image_status_label.setText("尚未添加图片")
+        self.update_pdf_button_states()
+
+    def reorder_pdf_image(self, source_index, insert_index):
+        if source_index < 0 or source_index >= len(self.pdf_image_cards):
+            return
+        insert_index = max(0, min(insert_index, len(self.pdf_image_cards)))
+        card = self.pdf_image_cards.pop(source_index)
+        if source_index < insert_index:
+            insert_index -= 1
+        self.pdf_image_cards.insert(insert_index, card)
+        self.refresh_pdf_image_cards_layout()
+        self.refresh_pdf_image_cards()
+
+    def preview_pdf_image(self, card):
+        pixmap = QPixmap(card.image_file)
+        if pixmap.isNull():
+            QMessageBox.warning(self, "无法预览", "这张图片无法预览。")
+            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle(Path(card.image_file).name)
+        dialog_layout = QVBoxLayout(dialog)
+        image_label = QLabel()
+        image_label.setAlignment(Qt.AlignCenter)
+        image_label.setPixmap(pixmap)
+        scroll_area = QScrollArea()
+        scroll_area.setWidget(image_label)
+        scroll_area.setWidgetResizable(True)
+        dialog_layout.addWidget(scroll_area, 1)
+        close_button = QPushButton("关闭")
+        close_button.clicked.connect(dialog.accept)
+        dialog_layout.addWidget(close_button)
+        dialog.resize(960, 760)
+        dialog.exec()
+
+    def add_pdf_image_paths(self, filenames):
+        if not filenames:
+            return 0, 0
+        existing = {card.image_file for card in self.pdf_image_cards}
+        added = 0
+        skipped = 0
+        for filename in filenames:
+            normalized = os.path.abspath(filename)
+            if not is_supported_image_file(normalized):
+                skipped += 1
+                continue
+            if normalized not in existing:
+                self.pdf_image_cards.append(PdfImageCard(self, normalized))
+                existing.add(normalized)
+                added += 1
+        if self.pdf_image_cards and not self.pdf_image_output_folder_edit.text():
+            folder = str(Path(self.pdf_image_cards[0].image_file).parent / "output")
+            self.pdf_image_output_folder_edit.setText(folder)
+            self.pdf_image_output_folder_edit.setToolTip(folder)
+        if not self.pdf_image_output_name_edit.text():
+            self.pdf_image_output_name_edit.setText(default_output_name("图片合成PDF"))
+        self.refresh_pdf_image_cards_layout()
+        self.refresh_pdf_image_cards()
+        return added, skipped
+
+    def add_pdf_images(self):
+        suffixes = " ".join(f"*{suffix}" for suffix in sorted(IMAGE_SUFFIXES))
+        filenames, _ = QFileDialog.getOpenFileNames(
+            self,
+            "选择图片",
+            self.dialog_folder("open"),
+            f"图片文件 ({suffixes})",
+        )
+        if filenames:
+            self.remember_dialog_folder("open", filenames[0])
+        added, skipped = self.add_pdf_image_paths(filenames)
+        if skipped:
+            self.pdf_image_status_label.setText(
+                f"已添加 {len(self.pdf_image_cards)} 张图片，跳过 {skipped} 个非图片或无法读取文件。"
+            )
+
+    def add_pdf_image_folder(self):
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            "选择图片文件夹",
+            self.dialog_folder("open"),
+            QFileDialog.ShowDirsOnly,
+        )
+        if not folder:
+            return
+        self.remember_dialog_folder("open", folder)
+        image_files = [
+            str(path)
+            for path in sorted(Path(folder).iterdir(), key=lambda item: item.name.lower())
+            if path.is_file()
+        ]
+        added, skipped = self.add_pdf_image_paths(image_files)
+        if not added:
+            QMessageBox.information(self, "没有图片", "这个文件夹里没有可用图片。")
+            return
+        if skipped:
+            self.pdf_image_status_label.setText(
+                f"已添加 {len(self.pdf_image_cards)} 张图片，跳过 {skipped} 个非图片或无法读取文件。"
+            )
+
+    def clear_pdf_images(self):
+        for card in self.pdf_image_cards:
+            card.setParent(None)
+            card.deleteLater()
+        self.pdf_image_cards = []
+        self.refresh_pdf_image_cards_layout()
+        self.refresh_pdf_image_cards()
+
+    def delete_checked_pdf_images(self):
+        selected = self.selected_pdf_image_cards()
+        if not selected:
+            return
+        if not self.confirm_list_change(f"是否删除勾选的 {len(selected)} 张图片"):
+            return
+        for card in selected:
+            self.pdf_image_cards.remove(card)
+            card.setParent(None)
+            card.deleteLater()
+        self.refresh_pdf_image_cards_layout()
+        self.refresh_pdf_image_cards()
+
+    def choose_pdf_image_output_folder(self):
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            "选择图片合成 PDF 保存文件夹",
+            self.dialog_folder("save", self.pdf_image_output_folder_edit.text()),
+            QFileDialog.ShowDirsOnly,
+        )
+        if folder:
+            self.remember_dialog_folder("save", folder)
+            self.pdf_image_output_folder_edit.setText(os.path.abspath(folder))
+            self.update_pdf_button_states()
+
+    def convert_images_to_pdf(self):
+        try:
+            output_file = output_path(
+                self.pdf_image_output_folder_edit.text(),
+                self.pdf_image_output_name_edit.text(),
+                default_output_name("图片合成PDF"),
+            )
+            self.sync_pdf_image_source_files()
+            result = images_to_pdf(self.pdf_image_source_files, output_file)
+        except Exception as error:
+            QMessageBox.critical(self, "合成失败", str(error))
+            return
+        self.pdf_image_status_label.setText(f"已生成：{Path(result.output_file).name}")
+        self.save_pdf_result_message("图片合成 PDF 完成", result)
+
+    def choose_pdf_export_source(self):
+        filename, _ = QFileDialog.getOpenFileName(
+            self,
+            "选择需要导出图片的 PDF",
+            self.dialog_folder("open"),
+            "PDF 文件 (*.pdf)",
+        )
+        if not filename:
+            return
+        self.remember_dialog_folder("open", filename)
+        self.pdf_export_source_file = os.path.abspath(filename)
+        self.pdf_export_source_edit.setText(self.pdf_export_source_file)
+        self.pdf_export_source_edit.setToolTip(self.pdf_export_source_file)
+        folder = str(Path(self.pdf_export_source_file).parent / f"{Path(filename).stem}_图片")
+        self.pdf_export_output_folder_edit.setText(folder)
+        self.pdf_export_output_folder_edit.setToolTip(folder)
+        self.pdf_export_status_label.setText("已选择 PDF，可导出图片")
+        self.update_pdf_button_states()
+
+    def choose_pdf_export_output_folder(self):
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            "选择图片保存文件夹",
+            self.dialog_folder("save", self.pdf_export_output_folder_edit.text()),
+            QFileDialog.ShowDirsOnly,
+        )
+        if folder:
+            self.remember_dialog_folder("save", folder)
+            self.pdf_export_output_folder_edit.setText(os.path.abspath(folder))
+            self.update_pdf_button_states()
+
+    def export_pdf_to_images(self):
+        try:
+            result = pdf_to_images(
+                self.pdf_export_source_file,
+                self.pdf_export_output_folder_edit.text(),
+                self.pdf_export_format_combo.currentText().lower(),
+            )
+        except Exception as error:
+            QMessageBox.critical(self, "导出失败", str(error))
+            return
+        self.pdf_export_status_label.setText(f"已导出 {len(result.image_files)} 张图片")
+        self.save_pdf_result_message("PDF 导出图片完成", result)
 
     def refresh_file_list(self, selected_row=None):
         self.refreshing_list = True
@@ -1603,15 +3051,15 @@ class ExcelMergerWindow(QMainWindow):
         return len(new_paths)
 
     def add_files(self):
-        downloads = str(Path.home() / "Downloads")
         filenames, _ = QFileDialog.getOpenFileNames(
             self,
             "选择 Excel 文件",
-            downloads,
+            self.dialog_folder("open"),
             "Excel 文件 (*.xlsx *.xlsm)",
         )
         if not filenames:
             return
+        self.remember_dialog_folder("open", filenames[0])
 
         added_count = self.add_paths(filenames)
         self.status_label.setText(
@@ -1619,14 +3067,14 @@ class ExcelMergerWindow(QMainWindow):
         )
 
     def add_folder(self):
-        downloads = str(Path.home() / "Downloads")
         folder = QFileDialog.getExistingDirectory(
             self,
             "选择 Excel 文件夹",
-            downloads,
+            self.dialog_folder("open"),
             QFileDialog.ShowDirsOnly,
         )
         if folder:
+            self.remember_dialog_folder("open", folder)
             self.load_folder(folder)
 
     def load_folder(self, folder, show_messages=True):
@@ -1715,9 +3163,7 @@ class ExcelMergerWindow(QMainWindow):
         self.refresh_file_list()
 
     def choose_output_file(self):
-        default_path = Path.home() / "Downloads" / default_output_filename(
-            self.system_locale
-        )
+        default_path = Path(self.dialog_folder("save")) / default_output_filename(self.system_locale)
         output_file, _ = QFileDialog.getSaveFileName(
             self,
             "保存合并结果",
@@ -1730,6 +3176,7 @@ class ExcelMergerWindow(QMainWindow):
             output_file += ".xlsx"
 
         self.output_file = os.path.abspath(output_file)
+        self.remember_dialog_folder("save", self.output_file)
         self.output_path_edit.setText(self.output_file)
         self.output_path_edit.setToolTip(self.output_file)
         self.update_button_states()
@@ -1911,21 +3358,23 @@ class ExcelMergerWindow(QMainWindow):
         filenames, _ = QFileDialog.getOpenFileNames(
             self,
             "选择需要改名的文件",
-            str(Path.home() / "Downloads"),
+            self.dialog_folder("open"),
             "所有文件 (*)",
         )
         if filenames:
+            self.remember_dialog_folder("open", filenames[0])
             self.add_rename_paths(filenames)
 
     def add_rename_folder(self):
         folder = QFileDialog.getExistingDirectory(
             self,
             "选择需要批量改名的文件夹",
-            str(Path.home() / "Downloads"),
+            self.dialog_folder("open"),
             QFileDialog.ShowDirsOnly,
         )
         if not folder:
             return
+        self.remember_dialog_folder("open", folder)
         try:
             files = discover_rename_files(folder)
         except OSError as error:
@@ -2072,11 +3521,12 @@ class ExcelMergerWindow(QMainWindow):
         filenames, _ = QFileDialog.getOpenFileNames(
             self,
             "选择一个或多个 PDF 发票",
-            str(Path.home() / "Downloads"),
+            self.dialog_folder("open"),
             "PDF 文件 (*.pdf)",
         )
         if not filenames:
             return
+        self.remember_dialog_folder("open", filenames[0])
         existing = set(self.invoice_source_files)
         for filename in filenames:
             normalized = os.path.abspath(filename)
@@ -2107,11 +3557,12 @@ class ExcelMergerWindow(QMainWindow):
         output_folder = QFileDialog.getExistingDirectory(
             self,
             "选择批量结果保存文件夹",
-            self.invoice_output_folder or str(Path.home() / "Downloads"),
+            self.dialog_folder("save", self.invoice_output_folder),
         )
         if not output_folder:
             return
         self.invoice_output_folder = os.path.abspath(output_folder)
+        self.remember_dialog_folder("save", self.invoice_output_folder)
         self.invoice_output_path_edit.setText(self.invoice_output_folder)
         self.invoice_output_path_edit.setToolTip(self.invoice_output_folder)
         self.update_invoice_button_states()
@@ -2228,25 +3679,27 @@ class ExcelMergerWindow(QMainWindow):
         filename, _ = QFileDialog.getOpenFileName(
             self,
             "选择要智能处理的 PDF",
-            str(Path.home() / "Downloads"),
+            self.dialog_folder("open"),
             "PDF 文件 (*.pdf)",
         )
         if not filename:
             return
 
+        self.remember_dialog_folder("open", filename)
         self.set_document_source_file(filename)
 
     def choose_document_output_folder(self):
         folder = QFileDialog.getExistingDirectory(
             self,
             "选择结果保存文件夹",
-            self.document_output_folder or str(Path.home() / "Downloads"),
+            self.dialog_folder("save", self.document_output_folder),
             QFileDialog.ShowDirsOnly,
         )
         if not folder:
             return
 
         self.document_output_folder = os.path.abspath(folder)
+        self.remember_dialog_folder("save", self.document_output_folder)
         self.document_result_file = ""
         self.document_output_path_edit.setText(self.document_output_folder)
         self.document_output_path_edit.setToolTip(self.document_output_folder)
@@ -2353,15 +3806,15 @@ class ExcelMergerWindow(QMainWindow):
             self.open_output_file(self.document_result_file)
 
     def choose_split_source_file(self):
-        downloads = str(Path.home() / "Downloads")
         filename, _ = QFileDialog.getOpenFileName(
             self,
             "选择要拆分的 Excel 文件",
-            downloads,
+            self.dialog_folder("open"),
             "Excel 文件 (*.xlsx)",
         )
         if not filename:
             return
+        self.remember_dialog_folder("open", filename)
 
         if Path(filename).suffix.lower() != ".xlsx":
             QMessageBox.warning(
@@ -2390,17 +3843,17 @@ class ExcelMergerWindow(QMainWindow):
             )
 
     def choose_split_output_folder(self):
-        downloads = str(Path.home() / "Downloads")
         folder = QFileDialog.getExistingDirectory(
             self,
             "选择输出文件夹",
-            downloads,
+            self.dialog_folder("save", self.split_output_folder),
             QFileDialog.ShowDirsOnly,
         )
         if not folder:
             return
 
         self.split_output_folder = os.path.abspath(folder)
+        self.remember_dialog_folder("save", self.split_output_folder)
         self.split_result_folder = ""
         self.split_output_folder_edit.setText(self.split_output_folder)
         self.split_output_folder_edit.setToolTip(self.split_output_folder)

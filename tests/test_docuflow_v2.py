@@ -5,6 +5,7 @@ from zipfile import ZipFile
 
 from core.classifier import CONTRACT, TABLE
 from v2.batch_engine import BatchEngine
+from v2.layout_extractor import _add_contract_table
 from v2.layout_engine import process_layout_document
 from v2.layout_exporters import export_contract_layout
 from v2.ocr_plugins import BaiduOCR
@@ -116,6 +117,15 @@ class DocuFlowV2Tests(unittest.TestCase):
         self.assertIn('w:line="360"', document_xml)
         self.assertIn('w:top="1440"', document_xml)
 
+    def test_contract_layout_merges_one_row_table_continuation(self):
+        pages = [{"tables": [{"bbox": (80, 600, 520, 760), "rows": [["首付款", "30%"], ["初验款", "40%"]]}]}]
+        tables = []
+
+        _add_contract_table(pages, tables, (80, 72, 520, 106), [["合计", "100%"]])
+
+        self.assertEqual(tables, [])
+        self.assertEqual(pages[-1]["tables"][-1]["rows"][-1], ["合计", "100%"])
+
     def test_formal_contract_style_keeps_subtitle_as_centered_title(self):
         output_file = self.root / "formal.docx"
         layout = {
@@ -163,6 +173,69 @@ class DocuFlowV2Tests(unittest.TestCase):
         self.assertIn("<w:tbl>", document_xml)
         self.assertIn("对账及结算单", document_xml)
         self.assertEqual(document_xml.count("对账及结算单"), 1)
+
+    def test_formal_contract_style_cleans_text_and_merges_wrapped_lines(self):
+        output_file = self.root / "formal_clean.docx"
+        layout = {
+            "pages": [
+                {
+                    "number": 1,
+                    "width": 595,
+                    "height": 842,
+                    "lines": [
+                        {"text": "委托投标及项目利润分配协议", "x0": 160, "x1": 430, "top": 120, "bottom": 145},
+                        {"text": "- -", "x0": 400, "x1": 430, "top": 150, "bottom": 165},
+                        {"text": "甲方（委托方 / 名义签约方）：深圳市怡通数科创新发展有限公司", "x0": 90, "x1": 500, "top": 200, "bottom": 220},
+                        {"text": "联系地址：深圳市宝安区新安街道海滨社区滨港二路 31 号怡亚通大厦", "x0": 90, "x1": 500, "top": 230, "bottom": 250},
+                        {"text": "9F 南侧", "x0": 90, "x1": 150, "top": 255, "bottom": 275},
+                        {"text": "1.甲方为一家依法设立并有效存续的公司，具备签署对外服务合同及参与项目投标的", "x0": 90, "x1": 500, "top": 300, "bottom": 320},
+                        {"text": "主体资格，拥有自有技术开发团队及项目实施能力。", "x0": 90, "x1": 450, "top": 325, "bottom": 345},
+                    ],
+                }
+            ]
+        }
+
+        export_contract_layout(layout, output_file, style_template="formal_contract")
+
+        with ZipFile(output_file) as contract:
+            document_xml = contract.read("word/document.xml").decode("utf-8")
+        self.assertNotIn("委托方 / 名义", document_xml)
+        self.assertNotIn("- -", document_xml)
+        self.assertIn("委托方/名义签约方", document_xml)
+        self.assertIn("滨港二路31号怡亚通大厦9F南侧", document_xml)
+        self.assertIn("参与项目投标的主体资格", document_xml)
+
+    def test_formal_contract_style_merges_cross_page_sentence(self):
+        output_file = self.root / "formal_cross_page.docx"
+        layout = {
+            "pages": [
+                {
+                    "number": 1,
+                    "width": 595,
+                    "height": 842,
+                    "lines": [
+                        {"text": "委托投标及项目利润分配协议", "x0": 160, "x1": 430, "top": 120, "bottom": 145},
+                        {"text": "签署过程文件时，甲方应在收到书面请求后2个工作日内完成审核并提供必要的盖章", "x0": 90, "x1": 500, "top": 730, "bottom": 750},
+                    ],
+                },
+                {
+                    "number": 2,
+                    "width": 595,
+                    "height": 842,
+                    "lines": [
+                        {"text": "或授权支持，但甲方有权对文件内容进行合理审查。", "x0": 90, "x1": 450, "top": 75, "bottom": 95},
+                        {"text": "3.3对外关系：各子项目的实际履约方在项目执行中与最终用户的所有往来函件。", "x0": 90, "x1": 500, "top": 120, "bottom": 140},
+                    ],
+                },
+            ]
+        }
+
+        export_contract_layout(layout, output_file, style_template="formal_contract")
+
+        with ZipFile(output_file) as contract:
+            document_xml = contract.read("word/document.xml").decode("utf-8")
+        self.assertIn("提供必要的盖章或授权支持", document_xml)
+        self.assertNotIn("盖章</w:t>", document_xml)
 
     def test_table_layout_export_adds_borders_and_page_setup(self):
         from openpyxl import load_workbook

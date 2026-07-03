@@ -30,13 +30,28 @@ def _line_from_words(words):
     }
 
 
+def _layout_text_lines(page):
+    text = page.extract_text(layout=True) or ""
+    return [line.strip() for line in text.splitlines() if line.strip()]
+
+
 def _table_rows(table):
     rows = []
     for row in table.extract() or []:
         values = [None if value is None else str(value).strip() for value in row]
         if any(value not in (None, "") for value in values):
             rows.append(values)
-    return rows if len(rows) >= 2 and max(len(row) for row in rows) >= 2 else []
+    return rows if rows and max(len(row) for row in rows) >= 2 else []
+
+
+def _add_contract_table(pages, tables, bbox, rows):
+    if len(rows) == 1 and bbox[1] < 140 and pages and pages[-1]["tables"]:
+        previous = pages[-1]["tables"][-1]
+        if max(len(row) for row in previous["rows"]) == len(rows[0]):
+            previous["rows"].extend(rows)
+            return
+    tables.append({"bbox": bbox, "rows": rows})
+
 
 
 def extract_contract_layout(pdf_file, progress_callback=None):
@@ -60,6 +75,11 @@ def extract_contract_layout(pdf_file, progress_callback=None):
             if current:
                 lines.append(_line_from_words(current))
 
+            layout_lines = _layout_text_lines(page)
+            if len(layout_lines) == len(lines):
+                for line, text in zip(lines, layout_lines):
+                    line["text"] = text
+
             tables = []
             try:
                 page_tables = page.find_tables()
@@ -68,7 +88,7 @@ def extract_contract_layout(pdf_file, progress_callback=None):
             for table in page_tables:
                 rows = _table_rows(table)
                 if rows:
-                    tables.append({"bbox": tuple(float(value) for value in table.bbox), "rows": rows})
+                    _add_contract_table(pages, tables, tuple(float(value) for value in table.bbox), rows)
 
             pages.append(
                 {
