@@ -1,4 +1,5 @@
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from zipfile import ZipFile
@@ -54,6 +55,38 @@ class DocuFlowV2Tests(unittest.TestCase):
         self.assertEqual(results[1]["data"]["confidence"], 0.86)
         self.assertTrue((self.root / "output" / "ok.txt").is_file())
         self.assertIn("发现 2 个 PDF", progress[0])
+
+    def test_batch_engine_processes_two_files_at_once_by_default(self):
+        (self.root / "a.pdf").write_text("a", encoding="utf-8")
+        (self.root / "b.pdf").write_text("b", encoding="utf-8")
+        lock = threading.Lock()
+        both_started = threading.Event()
+        running = {"count": 0, "peak": 0}
+
+        def router(pdf_file, output_dir, progress_callback=None, log_root=None):
+            with lock:
+                running["count"] += 1
+                running["peak"] = max(running["peak"], running["count"])
+                if running["count"] == 2:
+                    both_started.set()
+            both_started.wait(1)
+            with lock:
+                running["count"] -= 1
+            return {
+                "doc_type": "CONTRACT",
+                "output_file": str(Path(output_dir) / f"{Path(pdf_file).stem}.txt"),
+                "status": "success",
+            }
+
+        results = BatchEngine(router=router).process_folder(self.root)
+
+        self.assertEqual(running["peak"], 2)
+        self.assertEqual([Path(item["data"]["source_file"]).name for item in results], ["a.pdf", "b.pdf"])
+        self.assertEqual([item["status"] for item in results], ["success", "success"])
+        log_text = (self.root / "output" / "queue_errors.log").read_text(encoding="utf-8")
+        self.assertIn("event=start", log_text)
+        self.assertIn("event=success", log_text)
+        self.assertIn("output_file=", log_text)
 
     def test_queue_retries_and_writes_error_log(self):
         log_file = self.root / "queue.log"

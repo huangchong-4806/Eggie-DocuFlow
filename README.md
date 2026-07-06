@@ -268,6 +268,10 @@ and image plugins.
 - 图片转 PDF 自动过滤非图片和无法读取文件 / Images-to-PDF now filters non-image and unreadable files automatically
 - 优化缩略图布局，避免图片和文字重叠 / Improved thumbnail layout to prevent overlap
 - PDF 工具操作会生成 txt 日志 / Added txt logs for PDF toolbox operations
+- 批量 PDF 处理默认同时处理 2 个文件 / Batch PDF processing now handles 2 files at once by default
+- 批量处理日志记录每个文件的开始、成功、失败原因和输出位置 / Batch logs now record each file's start, success, failure reason, and output path
+- 并发输出时自动保护同名结果文件，避免互相覆盖 / Concurrent output now protects duplicate result filenames from collisions
+- 优化正式合同增强排版的跨页文字合并和表格续接 / Improved formal contract layout conversion for cross-page text and continued tables
 
 ### V1.3.2
 

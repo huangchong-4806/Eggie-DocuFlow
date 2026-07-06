@@ -29,7 +29,12 @@ def temporary_output(output_file):
 
 
 def publish_output(temporary_file, output_file):
-    output_file = available_output_path(output_file)
     os.chmod(temporary_file, 0o644)
-    os.link(temporary_file, output_file)
-    return str(Path(output_file).resolve())
+    for _ in range(10000):
+        final_file = available_output_path(output_file)
+        try:
+            os.link(temporary_file, final_file)
+            return str(Path(final_file).resolve())
+        except FileExistsError:
+            continue
+    raise FileExistsError("无法生成不重复的输出文件名。")

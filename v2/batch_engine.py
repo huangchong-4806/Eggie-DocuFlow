@@ -33,10 +33,11 @@ def _v2_result(router_result, source_file):
 
 
 class BatchEngine:
-    def __init__(self, router=None, max_retries=0, log_file=None):
+    def __init__(self, router=None, max_retries=0, log_file=None, max_workers=2):
         self.router = router or document_router.process_document
         self.max_retries = max_retries
         self.log_file = log_file
+        self.max_workers = max_workers
 
     def scan(self, input_folder, recursive=False):
         folder = Path(input_folder).expanduser().resolve()
@@ -66,10 +67,11 @@ class BatchEngine:
             progress_callback(0, len(pdf_files), f"发现 {len(pdf_files)} 个 PDF")
 
         def worker(pdf_file):
+            router_progress = progress_callback if self.max_workers == 1 else None
             result = self.router(
                 pdf_file,
                 output_dir,
-                progress_callback=progress_callback,
+                progress_callback=router_progress,
                 log_root=log_root,
             )
             return _v2_result(result, pdf_file)
@@ -78,6 +80,7 @@ class BatchEngine:
             worker,
             max_retries=self.max_retries,
             log_file=self.log_file or output_dir / "queue_errors.log",
+            max_workers=self.max_workers,
         )
         return queue.run(pdf_files, progress_callback=progress_callback)
 
@@ -96,11 +99,16 @@ def main(argv=None):
     parser.add_argument("-o", "--output-dir", help="输出文件夹，默认 input/output")
     parser.add_argument("--recursive", action="store_true", help="扫描子文件夹")
     parser.add_argument("--retries", type=int, default=0, help="失败重试次数")
+    parser.add_argument("--workers", type=int, default=2, help="同时处理文件数，默认 2")
     parser.add_argument("--log-dir", help="沿用 v1 日志目录")
     parser.add_argument("--queue-log", help="队列错误日志文件")
     args = parser.parse_args(argv)
 
-    results = BatchEngine(max_retries=args.retries, log_file=args.queue_log).process_folder(
+    results = BatchEngine(
+        max_retries=args.retries,
+        log_file=args.queue_log,
+        max_workers=args.workers,
+    ).process_folder(
         args.input_folder,
         args.output_dir,
         recursive=args.recursive,
