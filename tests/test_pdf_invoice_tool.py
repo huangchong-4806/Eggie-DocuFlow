@@ -14,6 +14,7 @@ from pdf_invoice_tool import (
     ITEM_FIELDS,
     InvoiceData,
     InvoiceItem,
+    PdfInvoiceResult,
     ScannedPdfUnsupportedError,
     TextBlock,
     _extract_party,
@@ -23,6 +24,7 @@ from pdf_invoice_tool import (
     extract_invoice,
     parse_invoice_blocks,
     validate_invoice,
+    write_invoice_ledger,
     write_invoice_workbook,
 )
 
@@ -314,6 +316,43 @@ class PdfInvoiceToolTests(unittest.TestCase):
             self.assertFalse(
                 any(name.startswith("xl/tables/") for name in archive.namelist())
             )
+
+    def test_invoice_ledger_workbook_opens_and_logs_key_fields(self):
+        result = PdfInvoiceResult(
+            output_file=str(self.root / "invoice.xlsx"),
+            item_count=2,
+            abnormal_count=1,
+            source_file=str(self.root / "发票.pdf"),
+            invoice_number="12345678",
+            invoice_date="2026年6月23日",
+            buyer_name="购方公司",
+            seller_name="销方公司",
+            amount=Decimal("100.00"),
+            tax_amount=Decimal("13.00"),
+            total_amount=Decimal("113.00"),
+        )
+
+        ledger = write_invoice_ledger(
+            [result],
+            [(self.root / "失败.pdf", "无法解析")],
+            self.root,
+        )
+
+        workbook = load_workbook(ledger.output_file)
+        try:
+            sheet = workbook.active
+            self.assertEqual(sheet.title, "发票台账")
+            self.assertEqual(sheet["B2"].value, "12345678")
+            self.assertEqual(sheet["F2"].value, 100)
+            self.assertEqual(sheet["I2"].value, 1)
+        finally:
+            workbook.close()
+
+        log_text = Path(ledger.log_file).read_text(encoding="utf-8")
+        self.assertIn("匹配结果", log_text)
+        self.assertIn("invoice_number=12345678", log_text)
+        self.assertIn("失败 source_file=", log_text)
+        self.assertIn("文件生成状态", log_text)
 
     def test_existing_output_is_preserved_without_confirmation(self):
         invoice = parse_invoice_blocks(invoice_blocks())

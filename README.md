@@ -1,6 +1,6 @@
 # Eggie DocuFlow / Eggie文档处理系统
 
-![Version](https://img.shields.io/badge/version-1.3.3-blue)
+![Version](https://img.shields.io/badge/version-1.3.4-blue)
 ![Platform](https://img.shields.io/badge/macOS-Apple%20Silicon-black)
 ![Python](https://img.shields.io/badge/Python-3.9%2B-green)
 
@@ -57,7 +57,7 @@ The current release focuses on:
 
 1. 打开本项目右侧的 **Releases**
 2. 下载最新版安装包
-3. 解压后运行 `EggieDocuFlow_V1.3.3_mac.app`
+3. 解压后运行 `EggieDocuFlow_V1.3.4_mac.app`
 4. 本版本未做 Apple 公证；如果 macOS 阻止打开，请在 Finder 中右键 App，选择“打开”，再确认“打开”
 
 If you only want to use the application, you do not need to install Python or
@@ -65,7 +65,7 @@ run the source code.
 
 1. Open **Releases** on the right side of this repository
 2. Download the latest application package
-3. Extract the package and launch `EggieDocuFlow_V1.3.3_mac.app`
+3. Extract the package and launch `EggieDocuFlow_V1.3.4_mac.app`
 4. This release is not Apple-notarized. If macOS blocks it, right-click the App in Finder, choose **Open**, then confirm **Open**
 
 > 当前正式版主要支持 Apple 芯片 macOS，Windows 版本后续再考虑。
@@ -143,7 +143,7 @@ run the source code.
 
 ## 使用方法 / Usage
 
-1. 打开 `EggieDocuFlow_V1.3.3_mac.app`。 / Open `EggieDocuFlow_V1.3.3_mac.app`.
+1. 打开 `EggieDocuFlow_V1.3.4_mac.app`。 / Open `EggieDocuFlow_V1.3.4_mac.app`.
 2. 选择需要使用的工具。 / Choose the tool you need.
 
 合并 Excel：
@@ -243,8 +243,8 @@ PYTHON=.venv/bin/python scripts/build_macos.sh
 
 构建结果位于 `release/`，正式版文件名为：
 
-- `EggieDocuFlow_V1.3.3_mac.app`
-- `EggieDocuFlow_V1.3.3_mac.zip`
+- `EggieDocuFlow_V1.3.4_mac.app`
+- `EggieDocuFlow_V1.3.4_mac.zip`
 
 打包脚本保留所有 `qtbase` 系统语言翻译，并移除本工具不使用的 Qt 网络、TLS、
 SVG 和图片插件。
@@ -254,6 +254,17 @@ Build artifacts are written to `release/`. The packaging script keeps all
 and image plugins.
 
 ## 版本记录 / Changelog
+
+### V1.3.4
+
+- 首页改为左侧导航、常用工具卡片和右侧信息面板 / Redesigned the home page with sidebar navigation, tool cards, and an information panel
+- 统一首页和所有工具页的浅色界面风格 / Unified the light workspace style across the home page and all tool pages
+- 统一按钮、输入框、表格、卡片边框和页面底色 / Unified buttons, inputs, tables, card borders, and page backgrounds
+- Excel 合并增加合并前预览，显示行数、列数和合并单元格数量 / Added pre-merge preview for rows, columns, and merged-cell count
+- Excel 拆分增加预计生成文件数量提示 / Added estimated output file count before Excel splitting
+- PDF 发票解析新增发票台账汇总和汇总日志 / Added invoice ledger summary and ledger logs
+- 修复打包版首页左上角 logo 不显示的问题 / Fixed the missing logo in the packaged app home page
+- 保存整套页面截图作为后续 UI 调整参考 / Saved full-page UI screenshots for future design iteration
 
 ### V1.3.3
 
