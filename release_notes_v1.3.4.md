@@ -27,3 +27,9 @@
 - Version: 1.3.4
 - Build Type: release
 - Build Date: 2026-07-09
+
+## 界面截图
+
+![首页新版 UI](https://github.com/huangchong-4806/Eggie-DocuFlow/raw/main/docs/ui/home_runtime_check_20260709.png)
+
+![全部页面总览](https://github.com/huangchong-4806/Eggie-DocuFlow/raw/main/docs/ui/all_pages_runtime_check_20260709.png)

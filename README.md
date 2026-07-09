@@ -2,7 +2,7 @@
 
 ![Version](https://img.shields.io/badge/version-1.3.4-blue)
 ![Platform](https://img.shields.io/badge/macOS-Apple%20Silicon-black)
-![Python](https://img.shields.io/badge/Python-3.9%2B-green)
+![Python](https://img.shields.io/badge/Python-3.10%2B-green)
 
 Eggie DocuFlow 是一个面向日常办公场景的 Excel、PDF 与文件处理工具。当前版本支持
 Excel 合并、Excel 拆分、文本型 PDF 发票结构化解析、PDF 文档智能处理、批量文件改名，以及 PDF 工具箱。
@@ -71,17 +71,25 @@ run the source code.
 > 当前正式版主要支持 Apple 芯片 macOS，Windows 版本后续再考虑。
 > The current release primarily supports Apple Silicon macOS. A Windows version may be considered in the future.
 
-## 软件界面 / Screenshot
+## 软件界面 / Screenshots
 
-![Eggie DocuFlow](docs/screenshot.jpg)
+![Eggie DocuFlow 工作台](docs/ui/home_runtime_check_20260709.png)
 
-### PDF 工具箱截图 / PDF Toolbox Screenshots
+### 统一后的工具页面 / Unified Tool Pages
 
-![PDF 页面整理](docs/screenshot-pdf-pages.jpg)
+![全部工具页总览](docs/ui/all_pages_runtime_check_20260709.png)
 
-![PDF 压缩](docs/screenshot-pdf-compress.jpg)
+![Excel 合并工具](docs/ui/excel_merge_runtime_check_20260709.png)
 
-![图片转 PDF](docs/screenshot-pdf-convert.jpg)
+![Excel 拆分工具](docs/ui/excel_split_runtime_check_20260709.png)
+
+![PDF 发票解析](docs/ui/invoice_runtime_check_20260709.png)
+
+![文档智能处理](docs/ui/document_runtime_check_20260709.png)
+
+![批量改名工具](docs/ui/rename_runtime_check_20260709.png)
+
+![PDF 工具箱](docs/ui/pdf_runtime_check_20260709.png)
 
 ## 主要功能 / Features
 
