@@ -66,6 +66,7 @@ a = Analysis(
     binaries=[],
     datas=[
         (str(PROJECT_ROOT / "assets" / "software_logo.png"), "assets"),
+        (str(PROJECT_ROOT / "assets" / "app_icon.png"), "assets"),
         (str(PROJECT_ROOT / "assets" / "app_icon.icns"), "assets"),
         (
             str(PROJECT_ROOT / "assets" / "en.lproj" / "InfoPlist.strings"),
@@ -135,7 +136,7 @@ app = BUNDLE(
         "CFBundleDisplayName": APP_BASENAME,
         "CFBundleName": APP_BASENAME,
         "CFBundleShortVersionString": APP_VERSION,
-        "CFBundleVersion": "7",
+        "CFBundleVersion": "8",
         "CFBundleAllowMixedLocalizations": True,
         "CFBundleDevelopmentRegion": "zh-Hans",
         "CFBundleLocalizations": ["en", "zh-Hans", "zh-Hant"],

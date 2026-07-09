@@ -82,8 +82,25 @@ class ExcelMergeToolTests(unittest.TestCase):
         file_info = get_file_info(broken)
 
         self.assertEqual(metadata.row_count, 2)
+        self.assertEqual(metadata.column_count, 4)
         self.assertEqual(file_info["rows"], 2)
+        self.assertEqual(file_info["columns"], 4)
+        self.assertEqual(file_info["merged_cells"], 0)
         self.assertIn((1, 1, 22.0), metadata.column_widths)
+
+    def test_metadata_column_count_ignores_empty_width_only_columns(self):
+        source = self.create_workbook("width-only-column.xlsx")
+        workbook = load_workbook(source)
+        try:
+            worksheet = workbook.active
+            worksheet.column_dimensions["Z"].width = 28
+            workbook.save(source)
+        finally:
+            workbook.close()
+
+        file_info = get_file_info(source)
+
+        self.assertEqual(file_info["columns"], 4)
 
     def test_streaming_merge_preserves_values_formulas_and_styles(self):
         first = self.create_workbook("001.xlsx")

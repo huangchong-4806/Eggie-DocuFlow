@@ -11,6 +11,8 @@ from typing import Optional
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 
+from utils.file_helper import available_output_path
+
 
 HEADER_FIELDS = (
     "发票代码",
@@ -97,6 +99,20 @@ class PdfInvoiceResult:
     output_file: str
     item_count: int
     abnormal_count: int
+    source_file: str = ""
+    invoice_number: str = ""
+    invoice_date: str = ""
+    buyer_name: str = ""
+    seller_name: str = ""
+    amount: Optional[Decimal] = None
+    tax_amount: Optional[Decimal] = None
+    total_amount: Optional[Decimal] = None
+
+
+@dataclass(frozen=True)
+class InvoiceLedgerResult:
+    output_file: str
+    log_file: str
 
 
 def _clean_text(value):
@@ -855,13 +871,125 @@ def write_invoice_workbook(invoice, output_file, overwrite=False):
     return output_file
 
 
+LEDGER_FIELDS = (
+    "文件名",
+    "发票号码",
+    "开票日期",
+    "购买方",
+    "销售方",
+    "金额",
+    "税额",
+    "价税合计",
+    "异常数量",
+    "结果文件路径",
+)
+
+
+def _ledger_log_path(output_folder):
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return available_output_path(Path(output_folder) / f"发票台账汇总日志_{stamp}.txt")
+
+
+def _write_invoice_ledger_log(log_file, results, failures, ledger_file):
+    total_items = sum(result.item_count for result in results)
+    total_abnormal = sum(result.abnormal_count for result in results)
+    with Path(log_file).open("w", encoding="utf-8") as handle:
+        handle.write("发票台账汇总日志\n")
+        handle.write(f"生成时间：{datetime.now():%Y-%m-%d %H:%M:%S}\n")
+        handle.write(f"台账文件：{ledger_file}\n\n")
+        handle.write("匹配结果：\n")
+        for result in results:
+            handle.write(
+                "成功 "
+                f"source_file={result.source_file} "
+                f"invoice_number={result.invoice_number} "
+                f"output_file={result.output_file}\n"
+            )
+        for source_file, error in failures:
+            handle.write(f"失败 source_file={source_file} error={error}\n")
+        handle.write("\n计算过程：\n")
+        handle.write(f"成功发票数={len(results)}\n")
+        handle.write(f"失败发票数={len(failures)}\n")
+        handle.write(f"明细行数合计={total_items}\n")
+        handle.write(f"校验异常合计={total_abnormal}\n")
+        handle.write("\n文件生成状态：\n")
+        handle.write(f"ledger_file={ledger_file}\n")
+        handle.write(f"log_file={log_file}\n")
+
+
+def write_invoice_ledger(results, failures, output_folder):
+    if not results:
+        raise ValueError("没有可汇总的发票。")
+    output_folder = Path(output_folder).expanduser().resolve()
+    output_folder.mkdir(parents=True, exist_ok=True)
+    ledger_file = available_output_path(
+        output_folder / f"发票台账汇总_{datetime.now():%Y%m%d}.xlsx"
+    )
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "发票台账"
+    sheet.append(LEDGER_FIELDS)
+    for result in results:
+        sheet.append(
+            [
+                Path(result.source_file or result.output_file).name,
+                result.invoice_number,
+                _date_value(result.invoice_date),
+                result.buyer_name,
+                result.seller_name,
+                _excel_value(result.amount),
+                _excel_value(result.tax_amount),
+                _excel_value(result.total_amount),
+                result.abnormal_count,
+                result.output_file,
+            ]
+        )
+    _style_sheet(
+        sheet,
+        [32, 18, 16, 28, 28, 14, 14, 14, 12, 64],
+    )
+    file_descriptor, temporary_file = tempfile.mkstemp(
+        prefix=f".{Path(ledger_file).stem}-",
+        suffix=".xlsx",
+        dir=output_folder,
+    )
+    os.close(file_descriptor)
+    try:
+        workbook.save(temporary_file)
+        os.chmod(temporary_file, 0o644)
+        os.link(temporary_file, ledger_file)
+        os.unlink(temporary_file)
+    except Exception:
+        try:
+            os.unlink(temporary_file)
+        except FileNotFoundError:
+            pass
+        raise
+    finally:
+        workbook.close()
+
+    log_file = _ledger_log_path(output_folder)
+    _write_invoice_ledger_log(log_file, results, failures, ledger_file)
+    return InvoiceLedgerResult(str(ledger_file), str(log_file))
+
+
 def convert_invoice_pdf(pdf_file, output_file, progress_callback=None, overwrite=False):
     invoice = extract_invoice(pdf_file, progress_callback)
     write_invoice_workbook(invoice, output_file, overwrite=overwrite)
+    header = invoice.header
     return PdfInvoiceResult(
         output_file=os.path.abspath(output_file),
         item_count=len(invoice.items),
         abnormal_count=sum(record.abnormal for record in invoice.validations),
+        source_file=os.path.abspath(pdf_file),
+        invoice_number=header.get("发票号码", ""),
+        invoice_date=header.get("开票日期", ""),
+        buyer_name=header.get("购买方名称", ""),
+        seller_name=header.get("销售方名称", ""),
+        amount=header.get("合计金额（不含税）"),
+        tax_amount=header.get("合计税额"),
+        total_amount=header.get("价税合计（小写）"),
     )
 
 

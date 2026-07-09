@@ -31,6 +31,10 @@ _ROW_PATTERN = re.compile(
     rb"<(?:[A-Za-z_][A-Za-z0-9_.-]*:)?row\b[^>]*"
     rb"\br\s*=\s*(?:\"(\d+)\"|'(\d+)')"
 )
+_CELL_PATTERN = re.compile(
+    rb"<(?:[A-Za-z_][A-Za-z0-9_.-]*:)?c\b[^>]*"
+    rb"\br\s*=\s*(?:\"([A-Z]+)\d+\"|'([A-Z]+)\d+')"
+)
 _COLUMN_PATTERN = re.compile(
     rb"<(?:[A-Za-z_][A-Za-z0-9_.-]*:)?col\b[^>]*/?>"
 )
@@ -43,6 +47,7 @@ _MERGED_CELL_PATTERN = re.compile(
 @dataclass(frozen=True)
 class WorkbookMetadata:
     row_count: int
+    column_count: int
     column_widths: tuple
     merged_ranges: tuple
     worksheet_path: str
@@ -178,9 +183,27 @@ def _dimension_row_count(dimension_reference):
     return max_row or 0
 
 
+def _dimension_column_count(dimension_reference):
+    if not dimension_reference:
+        return 0
+    try:
+        _, _, max_column, _ = range_boundaries(dimension_reference)
+    except (TypeError, ValueError):
+        return 0
+    return max_column or 0
+
+
+def _column_letters_to_number(value):
+    number = 0
+    for character in value:
+        number = number * 26 + ord(character) - 64
+    return number
+
+
 def _scan_worksheet_metadata(archive, worksheet_path):
     dimension_reference = None
     max_row = 0
+    max_column = 0
     column_widths = {}
     merged_ranges = set()
     tail = b""
@@ -201,15 +224,19 @@ def _scan_worksheet_metadata(archive, worksheet_path):
                 row_number = int(match.group(1) or match.group(2))
                 max_row = max(max_row, row_number)
 
+            for match in _CELL_PATTERN.finditer(data):
+                column_letters = (match.group(1) or match.group(2)).decode("ascii")
+                max_column = max(max_column, _column_letters_to_number(column_letters))
+
             for match in _COLUMN_PATTERN.finditer(data):
                 attributes = _attribute_values(match.group(0))
                 try:
                     min_column = int(attributes["min"])
-                    max_column = int(attributes["max"])
+                    column_width_max = int(attributes["max"])
                     width = float(attributes["width"])
                 except (KeyError, TypeError, ValueError):
                     continue
-                column_widths[(min_column, max_column)] = width
+                column_widths[(min_column, column_width_max)] = width
 
             for match in _MERGED_CELL_PATTERN.finditer(data):
                 merged_ranges.add(_matched_value(match))
@@ -219,9 +246,11 @@ def _scan_worksheet_metadata(archive, worksheet_path):
     row_count = max(max_row, _dimension_row_count(dimension_reference))
     if row_count == 0 and dimension_reference:
         row_count = 1
+    column_count = max(max_column, _dimension_column_count(dimension_reference))
 
     return WorkbookMetadata(
         row_count=row_count,
+        column_count=column_count,
         column_widths=tuple(
             (min_column, max_column, width)
             for (min_column, max_column), width in sorted(column_widths.items())
@@ -318,6 +347,8 @@ def get_file_info(filename):
     return {
         "size": format_file_size(file_size),
         "rows": metadata.row_count,
+        "columns": metadata.column_count,
+        "merged_cells": len(metadata.merged_ranges),
     }
 
 
