@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test:
+    name: 测试
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+          cache: pip
+
+      - name: 安装测试依赖
+        run: |
+          pip install openpyxl==3.1.5 pdfplumber==0.11.8 pypdf==6.10.0 \
+                      Pillow==12.2.0 pypdfium2==5.10.1
+
+      - name: 运行所有测试
+        run: python -m unittest discover -s tests -v
