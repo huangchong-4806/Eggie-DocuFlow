@@ -104,6 +104,7 @@ class PdfInvoiceResult:
     invoice_date: str = ""
     buyer_name: str = ""
     seller_name: str = ""
+    seller_tax_id: str = ""
     amount: Optional[Decimal] = None
     tax_amount: Optional[Decimal] = None
     total_amount: Optional[Decimal] = None
@@ -444,10 +445,20 @@ def _parties_from_blocks(blocks):
                 and candidate.x0 >= block.x1 - 6
                 and candidate.x0 < maximum
             ]
+            values.sort(key=lambda candidate: candidate.x0)
+            if field in ("名称", "税号") and values:
+                adjacent = [values[0]]
+                for candidate in values[1:]:
+                    if candidate.x0 - adjacent[-1].x1 > 10:
+                        break
+                    adjacent.append(candidate)
+                values = adjacent
             value = "".join(
                 _clean_text(candidate.text)
-                for candidate in sorted(values, key=lambda candidate: candidate.x0)
+                for candidate in values
             )
+            if field == "税号":
+                value = re.sub(r"[^0-9A-Z]", "", value.upper())
             if value:
                 result[field] = value
         return result
@@ -903,6 +914,8 @@ def _write_invoice_ledger_log(log_file, results, failures, ledger_file):
                 "成功 "
                 f"source_file={result.source_file} "
                 f"invoice_number={result.invoice_number} "
+                f"seller_name={result.seller_name} "
+                f"seller_tax_id={result.seller_tax_id} "
                 f"output_file={result.output_file}\n"
             )
         for source_file, error in failures:
@@ -976,6 +989,18 @@ def write_invoice_ledger(results, failures, output_folder):
 
 def convert_invoice_pdf(pdf_file, output_file, progress_callback=None, overwrite=False):
     invoice = extract_invoice(pdf_file, progress_callback)
+    output_path = Path(output_file)
+    if output_path.suffix.lower() != ".xlsx":
+        invoice_number = re.sub(
+            r"[^0-9A-Z]",
+            "",
+            str(invoice.header.get("发票号码", "")).upper(),
+        )
+        if not invoice_number:
+            raise ValueError("未能识别发票号码，未生成 Excel。")
+        output_path = available_output_path(output_path / f"{invoice_number}.xlsx")
+        overwrite = False
+    output_file = str(output_path)
     write_invoice_workbook(invoice, output_file, overwrite=overwrite)
     header = invoice.header
     return PdfInvoiceResult(
@@ -987,6 +1012,7 @@ def convert_invoice_pdf(pdf_file, output_file, progress_callback=None, overwrite
         invoice_date=header.get("开票日期", ""),
         buyer_name=header.get("购买方名称", ""),
         seller_name=header.get("销售方名称", ""),
+        seller_tax_id=header.get("销售方税号", ""),
         amount=header.get("合计金额（不含税）"),
         tax_amount=header.get("合计税额"),
         total_amount=header.get("价税合计（小写）"),
@@ -1004,15 +1030,8 @@ def convert_invoice_pdfs(pdf_files, output_folder, progress_callback=None):
     for index, pdf_file in enumerate(pdf_files, 1):
         if progress_callback:
             progress_callback(index - 1, total, f"正在解析：{Path(pdf_file).name}")
-        output_file = Path(output_folder) / f"{Path(pdf_file).stem}_发票结构化.xlsx"
-        number = 1
-        while output_file.exists():
-            output_file = output_file.with_name(
-                f"{Path(pdf_file).stem}_发票结构化_{number}.xlsx"
-            )
-            number += 1
         try:
-            results.append(convert_invoice_pdf(pdf_file, output_file))
+            results.append(convert_invoice_pdf(pdf_file, output_folder))
         except Exception as error:
             failures.append((os.path.abspath(pdf_file), str(error)))
 

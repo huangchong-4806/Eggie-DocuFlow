@@ -15,7 +15,17 @@ from PySide6.QtCore import (
     QTranslator,
     QUrl,
 )
-from PySide6.QtGui import QDesktopServices, QDrag, QFont, QIcon, QPixmap, QTransform
+from PySide6.QtGui import (
+    QColor,
+    QDesktopServices,
+    QDrag,
+    QFont,
+    QIcon,
+    QPainter,
+    QPen,
+    QPixmap,
+    QTransform,
+)
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -38,6 +48,8 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QSpinBox,
     QStackedWidget,
+    QStyle,
+    QStyleOptionSpinBox,
     QTabWidget,
     QTreeWidget,
     QTreeWidgetItem,
@@ -444,15 +456,15 @@ class PdfImageBoard(QWidget):
 
 ACCENT_PALETTES = {
     "cyan": {
-        "label": "青蓝",
-        "accent": "#22D3EE",
-        "accent_hover": "#06B6D4",
-        "accent_pressed": "#0891B2",
+        "label": "科技蓝",
+        "accent": "#3B9DFF",
+        "accent_hover": "#2389F0",
+        "accent_pressed": "#1675D1",
         "accent_soft_dark": "#0E2B36",
         "accent_border_dark": "#164E63",
-        "primary": "#06B6D4",
-        "primary_hover": "#0891B2",
-        "primary_pressed": "#0E7490",
+        "primary": "#3198F5",
+        "primary_hover": "#2389F0",
+        "primary_pressed": "#1675D1",
     },
     "green": {
         "label": "翡翠绿",
@@ -490,7 +502,7 @@ ACCENT_PALETTES = {
 }
 
 ACCENT_SOFT_COLORS = {
-    "cyan": "#E8F4F4",
+    "cyan": "#E8F3FF",
     "green": "#EEF7F1",
     "blue": "#EFF6FF",
     "purple": "#F3E8FF",
@@ -498,17 +510,17 @@ ACCENT_SOFT_COLORS = {
 
 THEME_BASES = {
     "dark": {
-        "window_bg": "#F4F7FA",
+        "window_bg": "#FFFFFF",
         "panel": "#FFFFFF",
-        "panel_alt": "#F8FAFC",
-        "panel_hover": "#F1F5F7",
-        "text": "#4E5A67",
-        "title": "#202832",
-        "muted": "#7A8795",
-        "placeholder": "#9AA6B2",
-        "border": "#D9E2EA",
-        "border_soft": "#E8EEF3",
-        "table_header": "#F1F4F7",
+        "panel_alt": "#F5F5F6",
+        "panel_hover": "#ECEFF2",
+        "text": "#50555C",
+        "title": "#202327",
+        "muted": "#8A8F96",
+        "placeholder": "#A1A6AD",
+        "border": "#DFE2E6",
+        "border_soft": "#EAECF0",
+        "table_header": "#F3F4F6",
         "table_row": "#FFFFFF",
         "table_row_alt": "#FAFBFC",
         "input": "#FFFFFF",
@@ -545,6 +557,9 @@ def build_theme_stylesheet(colors):
     QMainWindow {{
         background: {colors["window_bg"]};
         color: {colors["text"]};
+    }}
+    QWidget#appShell {{
+        background: {colors["window_bg"]};
     }}
     QWidget#homePage,
     QWidget#excelPage,
@@ -694,6 +709,35 @@ def build_theme_stylesheet(colors):
         padding: 6px 10px;
         min-height: 24px;
     }}
+    QSpinBox {{
+        padding-right: 34px;
+    }}
+    QSpinBox::up-button,
+    QSpinBox::down-button {{
+        subcontrol-origin: border;
+        width: 30px;
+        background: {colors["panel_alt"]};
+        border-left: 1px solid {colors["border"]};
+    }}
+    QSpinBox::up-button {{
+        subcontrol-position: top right;
+        border-bottom: 1px solid {colors["border"]};
+        border-top-right-radius: 8px;
+    }}
+    QSpinBox::down-button {{
+        subcontrol-position: bottom right;
+        border-bottom-right-radius: 8px;
+    }}
+    QSpinBox::up-button:hover,
+    QSpinBox::down-button:hover {{
+        background: {colors["accent_soft"]};
+    }}
+    QSpinBox::up-arrow,
+    QSpinBox::down-arrow {{
+        image: none;
+        width: 0;
+        height: 0;
+    }}
     QLineEdit:focus,
     QComboBox:focus,
     QSpinBox:focus {{
@@ -815,7 +859,7 @@ def build_theme_stylesheet(colors):
         color: {colors["title"]};
     }}
     QWidget#homeSidebar {{
-        background: {colors["panel"]};
+        background: {colors["panel_alt"]};
         border-right: 1px solid {colors["border"]};
     }}
     QWidget#homeMain {{
@@ -823,9 +867,17 @@ def build_theme_stylesheet(colors):
     }}
     QWidget[homePanel="true"],
     QWidget[homeCard="true"] {{
-        background: {colors["panel"]};
+        background: {colors["panel_alt"]};
         border: 1px solid {colors["border"]};
         border-radius: 12px;
+    }}
+    QWidget[homeStatus="true"] {{
+        background: {colors["accent_soft"]};
+        border-left: 4px solid {colors["primary"]};
+    }}
+    QWidget[homeHero="true"] {{
+        background: {colors["accent_soft"]};
+        border-left: 4px solid {colors["primary"]};
     }}
     QWidget[homeCard="true"]:hover {{
         border: 1px solid {colors["primary"]};
@@ -843,6 +895,11 @@ def build_theme_stylesheet(colors):
     QLabel[homeRole="cardTitle"] {{
         color: {colors["title"]};
         font-size: 18px;
+        font-weight: 700;
+    }}
+    QLabel[homeRole="brand"] {{
+        color: {colors["title"]};
+        font-size: 15px;
         font-weight: 700;
     }}
     QLabel[homeRole="body"] {{
@@ -868,8 +925,8 @@ def build_theme_stylesheet(colors):
         color: {colors["primary"]};
     }}
     QPushButton[variant="homeNavActive"] {{
-        background: {colors["accent_soft"]};
-        color: {colors["primary"]};
+        background: {colors["primary"]};
+        color: #FFFFFF;
         border: none;
         border-radius: 10px;
         padding: 10px 14px;
@@ -965,6 +1022,47 @@ def format_elapsed_seconds(seconds):
     return f"{minutes} 分 {remaining_seconds:.2f} 秒"
 
 
+class ClearSpinBox(QSpinBox):
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        option = QStyleOptionSpinBox()
+        self.initStyleOption(option)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        pen = QPen(QColor("#46515D" if self.isEnabled() else "#AAB2BB"))
+        pen.setWidthF(2.2)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        painter.setPen(pen)
+
+        for control, direction in (
+            (QStyle.SubControl.SC_SpinBoxUp, -1),
+            (QStyle.SubControl.SC_SpinBoxDown, 1),
+        ):
+            rect = self.style().subControlRect(
+                QStyle.ComplexControl.CC_SpinBox,
+                option,
+                control,
+                self,
+            )
+            center_x = rect.center().x()
+            center_y = rect.center().y()
+            half_width = max(4, min(6, rect.width() // 4))
+            half_height = 3
+            painter.drawLine(
+                center_x - half_width,
+                center_y - direction * half_height,
+                center_x,
+                center_y + direction * half_height,
+            )
+            painter.drawLine(
+                center_x,
+                center_y + direction * half_height,
+                center_x + half_width,
+                center_y - direction * half_height,
+            )
+
+
 class ExcelMergerWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -1018,8 +1116,16 @@ class ExcelMergerWindow(QMainWindow):
         self.setMinimumSize(1180, 720)
         self.setAcceptDrops(True)
 
+        self.app_shell = QWidget()
+        self.app_shell.setObjectName("appShell")
+        shell_layout = QHBoxLayout(self.app_shell)
+        shell_layout.setContentsMargins(0, 0, 0, 0)
+        shell_layout.setSpacing(0)
+        self.sidebar = self.create_sidebar()
         self.stack = QStackedWidget()
-        self.setCentralWidget(self.stack)
+        shell_layout.addWidget(self.sidebar)
+        shell_layout.addWidget(self.stack, 1)
+        self.setCentralWidget(self.app_shell)
 
         self.home_page = self.create_home_page()
         self.excel_page = QWidget()
@@ -1036,35 +1142,21 @@ class ExcelMergerWindow(QMainWindow):
         self.stack.addWidget(self.document_page)
         self.stack.addWidget(self.rename_page)
         self.stack.addWidget(self.pdf_page)
+        self.set_active_navigation("home")
         self.update_home_responsive_layout()
 
         main_layout = QVBoxLayout(self.excel_page)
         main_layout.setContentsMargins(22, 18, 22, 18)
         main_layout.setSpacing(14)
 
-        tool_header_layout = QHBoxLayout()
-        self.back_home_button = QPushButton("返回工具首页")
-        self.back_home_button.setMinimumHeight(30)
-        self.back_home_button.setProperty("variant", "ghost")
-        self.excel_settings_button = QPushButton("软件设置")
-        self.excel_settings_button.setMinimumHeight(30)
-        self.excel_settings_button.setProperty("variant", "ghost")
-        tool_header_layout.addWidget(self.back_home_button)
-        self.excel_version_label = QLabel(f"版本 {APP_VERSION}")
-        self.excel_version_label.setProperty("role", "hint")
-        tool_header_layout.addWidget(self.excel_version_label)
-        tool_header_layout.addStretch()
-        tool_header_layout.addWidget(self.excel_settings_button)
-        main_layout.addLayout(tool_header_layout)
-
-        title = QLabel("Excel 合并工具")
-        title.setAlignment(Qt.AlignCenter)
-        title.setFont(QFont("PingFang SC", 20, QFont.Bold))
+        title = QLabel("Excel 合并")
+        title.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        title.setFont(QFont("PingFang SC", 24, QFont.Bold))
         title.setProperty("role", "title")
         main_layout.addWidget(title)
 
-        subtitle = QLabel("选择 Excel 文件或文件夹，按列表顺序合并并保留单元格格式")
-        subtitle.setAlignment(Qt.AlignCenter)
+        subtitle = QLabel("按顺序合并多个表格，并保留主要格式")
+        subtitle.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         subtitle.setProperty("role", "subtitle")
         main_layout.addWidget(subtitle)
 
@@ -1160,7 +1252,7 @@ class ExcelMergerWindow(QMainWindow):
         options_layout.setSpacing(28)
 
         skip_rows_label = QLabel("后续文件跳过行数：")
-        self.skip_rows_spinbox = QSpinBox()
+        self.skip_rows_spinbox = ClearSpinBox()
         self.skip_rows_spinbox.setRange(0, 99)
         self.skip_rows_spinbox.setValue(1)
         self.skip_rows_spinbox.setSuffix(" 行")
@@ -1194,21 +1286,76 @@ class ExcelMergerWindow(QMainWindow):
         self.clear_button.clicked.connect(self.clear_files)
         self.choose_output_button.clicked.connect(self.choose_output_file)
         self.merge_button.clicked.connect(self.merge_files)
-        self.back_home_button.clicked.connect(self.show_home)
-        self.excel_settings_button.clicked.connect(self.show_settings)
         self.file_table.itemSelectionChanged.connect(self.update_button_states)
 
         self.refresh_file_list()
         self.apply_theme()
 
+    def create_sidebar(self):
+        sidebar = QWidget()
+        sidebar.setObjectName("homeSidebar")
+        sidebar.setAttribute(Qt.WA_StyledBackground, True)
+        sidebar.setFixedWidth(220)
+        layout = QVBoxLayout(sidebar)
+        layout.setContentsMargins(20, 22, 18, 20)
+        layout.setSpacing(8)
+
+        brand = QHBoxLayout()
+        brand.setSpacing(10)
+        self.home_logo_pixmap = QPixmap(str(resource_path("assets/app_icon.png")))
+        self.home_logo_label = QLabel()
+        self.home_logo_label.setFixedSize(52, 52)
+        brand.addWidget(self.home_logo_label)
+
+        brand_text = QVBoxLayout()
+        brand_text.setSpacing(2)
+        name = QLabel("Eggie DocuFlow")
+        name.setProperty("homeRole", "brand")
+        subtitle = QLabel("文档处理系统")
+        subtitle.setProperty("homeRole", "muted")
+        brand_text.addWidget(name)
+        brand_text.addWidget(subtitle)
+        brand.addLayout(brand_text, 1)
+        layout.addLayout(brand)
+        layout.addSpacing(16)
+
+        self.nav_buttons = {}
+
+        def add_nav(key, text, handler):
+            button = QPushButton(text)
+            button.setMinimumHeight(44)
+            button.setProperty("variant", "homeNav")
+            button.clicked.connect(handler)
+            layout.addWidget(button)
+            self.nav_buttons[key] = button
+
+        add_nav("home", "工作台", self.show_home)
+        add_nav("excel", "Excel 合并", self.show_excel_tool)
+        add_nav("split", "Excel 拆分", self.show_split_tool)
+        add_nav("invoice", "发票解析", self.show_invoice_tool)
+        add_nav("document", "文档处理", self.show_document_tool)
+        add_nav("rename", "批量改名", self.show_rename_tool)
+        add_nav("pdf", "PDF 工具箱", self.show_pdf_tool)
+        layout.addStretch(1)
+
+        version = QLabel(f"版本 {APP_VERSION}")
+        version.setProperty("homeRole", "muted")
+        layout.addWidget(version)
+        settings_button = QPushButton("设置")
+        settings_button.setMinimumHeight(42)
+        settings_button.setProperty("variant", "homeNav")
+        settings_button.clicked.connect(self.show_settings)
+        layout.addWidget(settings_button)
+        return sidebar
+
     def create_home_page(self):
         page = QWidget()
         page.setObjectName("homePage")
         page.setAttribute(Qt.WA_StyledBackground, True)
-        root_layout = QHBoxLayout(page)
+        root_layout = QVBoxLayout(page)
         self.home_layout = root_layout
-        root_layout.setContentsMargins(0, 0, 0, 0)
-        root_layout.setSpacing(0)
+        root_layout.setContentsMargins(28, 26, 28, 26)
+        root_layout.setSpacing(16)
 
         def styled_widget(object_name=None, prop_name=None):
             widget = QWidget()
@@ -1225,93 +1372,38 @@ class ExcelMergerWindow(QMainWindow):
             label.setWordWrap(word_wrap)
             return label
 
-        def nav_button(text, handler=None, active=False):
-            button = QPushButton(text)
-            button.setMinimumHeight(42)
-            button.setProperty("variant", "homeNavActive" if active else "homeNav")
-            if handler:
-                button.clicked.connect(handler)
-            return button
-
-        sidebar = styled_widget("homeSidebar")
-        sidebar.setFixedWidth(220)
-        sidebar_layout = QVBoxLayout(sidebar)
-        sidebar_layout.setContentsMargins(24, 22, 16, 22)
-        sidebar_layout.setSpacing(10)
-
-        brand_layout = QHBoxLayout()
-        brand_layout.setSpacing(10)
-        self.home_logo_pixmap = QPixmap(str(resource_path("assets/app_icon.png")))
-        self.home_logo_label = QLabel()
-        self.home_logo_label.setFixedSize(58, 58)
-        self.home_logo_label.setScaledContents(True)
-        brand_layout.addWidget(self.home_logo_label)
-        brand_text_layout = QVBoxLayout()
-        brand_text_layout.setSpacing(2)
-        brand_text_layout.addWidget(home_label("Eggie", "cardTitle"))
-        brand_text_layout.addWidget(home_label("文档处理系统", "muted"))
-        brand_layout.addLayout(brand_text_layout, 1)
-        sidebar_layout.addLayout(brand_layout)
-        sidebar_layout.addSpacing(16)
-        sidebar_layout.addWidget(nav_button("工作台", active=True))
-        sidebar_layout.addWidget(nav_button("Excel 合并", self.show_excel_tool))
-        sidebar_layout.addWidget(nav_button("Excel 拆分", self.show_split_tool))
-        sidebar_layout.addWidget(nav_button("PDF 发票解析", self.show_invoice_tool))
-        sidebar_layout.addWidget(nav_button("文档智能处理", self.show_document_tool))
-        sidebar_layout.addWidget(nav_button("批量改名", self.show_rename_tool))
-        sidebar_layout.addWidget(nav_button("PDF 工具箱", self.show_pdf_tool))
-        sidebar_layout.addStretch(1)
-        sidebar_layout.addWidget(nav_button("软件设置", self.show_settings))
-        root_layout.addWidget(sidebar)
-
-        main = styled_widget("homeMain")
-        main_layout = QVBoxLayout(main)
-        main_layout.setContentsMargins(28, 28, 28, 28)
-        main_layout.setSpacing(16)
-        root_layout.addWidget(main, 1)
+        main_layout = root_layout
 
         header_layout = QHBoxLayout()
         header_layout.setSpacing(12)
         title_layout = QVBoxLayout()
         title_layout.setSpacing(3)
         self.home_title_label = home_label("工作台", "title")
-        self.home_subtitle_label = home_label(
-            "常用工具、最近结果和软件状态集中在一个页面", "muted"
-        )
+        self.home_subtitle_label = home_label("浅色、克制、清晰的科技感工作台", "muted")
         title_layout.addWidget(self.home_title_label)
         title_layout.addWidget(self.home_subtitle_label)
         header_layout.addLayout(title_layout, 1)
-        self.home_version_label = QLabel(f"版本 {APP_VERSION}")
-        self.home_version_label.setProperty("homeRole", "muted")
-        self.home_version_label.setAlignment(Qt.AlignCenter)
-        self.home_version_label.setMinimumHeight(34)
-        self.home_version_label.setMinimumWidth(96)
-        self.home_settings_button = QPushButton("设置")
-        self.home_settings_button.setMinimumHeight(34)
-        self.home_settings_button.setProperty("variant", "homeGhost")
-        self.home_settings_button.clicked.connect(self.show_settings)
-        header_layout.addWidget(self.home_version_label)
-        header_layout.addWidget(self.home_settings_button)
         main_layout.addLayout(header_layout)
 
-        banner = styled_widget(prop_name="homePanel")
+        status = styled_widget(prop_name="homeStatus")
+        status_layout = QHBoxLayout(status)
+        status_layout.setContentsMargins(18, 12, 18, 12)
+        status_layout.addWidget(home_label("✓ 软件已就绪，请从左侧菜单或下方卡片选择工具。", "body"))
+        main_layout.addWidget(status)
+
+        banner = styled_widget(prop_name="homeHero")
         banner_layout = QHBoxLayout(banner)
-        banner_layout.setContentsMargins(18, 12, 18, 12)
+        banner_layout.setContentsMargins(20, 16, 20, 16)
         banner_layout.setSpacing(12)
         banner_text_layout = QVBoxLayout()
         banner_text_layout.setSpacing(2)
         banner_text_layout.addWidget(
-            home_label("选择对应工具即可开始处理 Excel、PDF、发票和文件名", "body")
+            home_label("选择工具，添加文件，确认后处理", "cardTitle")
         )
         banner_text_layout.addWidget(
-            home_label("首页只保留真实可用入口，避免按钮过多和信息重叠。", "muted")
+            home_label("不展示虚假的处理数量或最近文件，只保留真实可用入口。", "muted")
         )
         banner_layout.addLayout(banner_text_layout, 1)
-        quick_button = QPushButton("打开 Excel 合并")
-        quick_button.setProperty("variant", "homePrimary")
-        quick_button.setMinimumHeight(38)
-        quick_button.clicked.connect(self.show_excel_tool)
-        banner_layout.addWidget(quick_button)
         main_layout.addWidget(banner)
 
         content_layout = QHBoxLayout()
@@ -1327,7 +1419,7 @@ class ExcelMergerWindow(QMainWindow):
 
         def tool_card(tag, accent, title, desc, badge, handler):
             card = styled_widget(prop_name="homeCard")
-            card.setMinimumHeight(124)
+            card.setMinimumHeight(116)
             card_layout = QVBoxLayout(card)
             card_layout.setContentsMargins(18, 16, 18, 16)
             card_layout.setSpacing(8)
@@ -1350,7 +1442,7 @@ class ExcelMergerWindow(QMainWindow):
             badge_label.setMinimumWidth(72)
             badge_label.setMinimumHeight(26)
             badge_label.setStyleSheet(
-                "background: #EEF7F1; color: #2F7D57; "
+                "background: #E8F3FF; color: #2389F0; "
                 "border-radius: 8px; font-size: 12px;"
             )
             title_row.addWidget(badge_label)
@@ -1373,64 +1465,17 @@ class ExcelMergerWindow(QMainWindow):
             return card
 
         tool_specs = [
-            ("XL", "#12857F", "Excel 合并工具", "多文件合并，合并前检查行数、列数、表头和合并单元格。", "预览检查", self.show_excel_tool),
-            ("XL", "#4D83BD", "Excel 拆分工具", "按表头和数据行数拆分，开始前显示预计生成几个文件。", "预计数量", self.show_split_tool),
-            ("PDF", "#C46C3B", "PDF 发票解析", "批量解析发票，自动生成单张结果和发票台账汇总。", "台账汇总", self.show_invoice_tool),
-            ("DOC", "#8A6FB1", "文档智能处理", "自动判断发票、合同、表格类 PDF，并输出对应结果。", "自动识别", self.show_document_tool),
-            ("REN", "#2E8B57", "批量改名工具", "先预览新文件名，确认无重名和异常后再执行。", "先预览", self.show_rename_tool),
-            ("PDF", "#A85D70", "PDF 工具箱", "页面整理、压缩、图片转 PDF、PDF 转图片。", "多功能", self.show_pdf_tool),
+            ("XL", "#3198F5", "Excel 合并", "按顺序合并多个表格，并保留主要格式。", "常用", self.show_excel_tool),
+            ("XL", "#3198F5", "Excel 拆分", "按表头和数据行数拆分成多个文件。", "清晰", self.show_split_tool),
+            ("PDF", "#3198F5", "发票解析", "批量解析发票，并生成台账汇总。", "台账", self.show_invoice_tool),
+            ("DOC", "#3198F5", "文档处理", "自动识别合同、表格和发票类 PDF。", "识别", self.show_document_tool),
+            ("REN", "#3198F5", "批量改名", "先预览新文件名，确认后再执行。", "安全", self.show_rename_tool),
+            ("PDF", "#3198F5", "PDF 工具箱", "页面整理、压缩和图片互转。", "多功能", self.show_pdf_tool),
         ]
         for index, spec in enumerate(tool_specs):
             self.home_grid.addWidget(tool_card(*spec), index // 2, index % 2)
         tools_layout.addLayout(self.home_grid)
-
-        note = styled_widget(prop_name="homePanel")
-        note_layout = QVBoxLayout(note)
-        note_layout.setContentsMargins(18, 12, 18, 12)
-        note_layout.setSpacing(4)
-        note_layout.addWidget(home_label("使用提示", "body"))
-        note_layout.addWidget(
-            home_label("先添加文件并查看预览，确认无误后再开始处理；完成后可打开结果或日志。", "muted", True)
-        )
-        tools_layout.addWidget(note)
         content_layout.addLayout(tools_layout, 1)
-
-        info_layout = QVBoxLayout()
-        info_layout.setSpacing(16)
-        info_header = home_label("信息面板", "section")
-        info_layout.addWidget(info_header)
-
-        def info_panel(title, lines):
-            panel = styled_widget(prop_name="homePanel")
-            panel.setMinimumWidth(268)
-            panel_layout = QVBoxLayout(panel)
-            panel_layout.setContentsMargins(16, 14, 16, 14)
-            panel_layout.setSpacing(8)
-            panel_layout.addWidget(home_label(title, "cardTitle"))
-            for line in lines:
-                panel_layout.addWidget(home_label(line, "body", True))
-            return panel
-
-        info_layout.addWidget(
-            info_panel(
-                "最近结果",
-                ["处理完成后可直接打开结果文件", "批量工具会保留操作日志", "发票解析会生成台账汇总"],
-            )
-        )
-        info_layout.addWidget(
-            info_panel(
-                "今日状态",
-                [f"当前版本：{APP_VERSION}", "首页和工具页风格已统一", "打包版 logo 已恢复"],
-            )
-        )
-        info_layout.addWidget(
-            info_panel(
-                "本版优化",
-                ["Excel 增加合并前预览", "拆分前显示预计文件数", "发票解析生成台账汇总"],
-            )
-        )
-        info_layout.addStretch(1)
-        content_layout.addLayout(info_layout)
         main_layout.addLayout(content_layout, 1)
         return page
 
@@ -1441,29 +1486,14 @@ class ExcelMergerWindow(QMainWindow):
         layout.setContentsMargins(22, 18, 22, 18)
         layout.setSpacing(14)
 
-        tool_header_layout = QHBoxLayout()
-        self.split_back_home_button = QPushButton("返回工具首页")
-        self.split_back_home_button.setMinimumHeight(30)
-        self.split_back_home_button.setProperty("variant", "ghost")
-        self.split_settings_button = QPushButton("软件设置")
-        self.split_settings_button.setMinimumHeight(30)
-        self.split_settings_button.setProperty("variant", "ghost")
-        tool_header_layout.addWidget(self.split_back_home_button)
-        self.split_version_label = QLabel(f"版本 {APP_VERSION}")
-        self.split_version_label.setProperty("role", "hint")
-        tool_header_layout.addWidget(self.split_version_label)
-        tool_header_layout.addStretch()
-        tool_header_layout.addWidget(self.split_settings_button)
-        layout.addLayout(tool_header_layout)
-
-        title = QLabel("Excel 拆分工具")
-        title.setAlignment(Qt.AlignCenter)
-        title.setFont(QFont("PingFang SC", 20, QFont.Bold))
+        title = QLabel("Excel 拆分")
+        title.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        title.setFont(QFont("PingFang SC", 24, QFont.Bold))
         title.setProperty("role", "title")
         layout.addWidget(title)
 
         subtitle = QLabel("选择一个 Excel 文件，按表头和数据行数拆分成多个文件")
-        subtitle.setAlignment(Qt.AlignCenter)
+        subtitle.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         subtitle.setProperty("role", "subtitle")
         layout.addWidget(subtitle)
 
@@ -1512,7 +1542,7 @@ class ExcelMergerWindow(QMainWindow):
         options_layout.setAlignment(Qt.AlignCenter)
 
         header_rows_label = QLabel("表头行数：")
-        self.split_header_rows_spinbox = QSpinBox()
+        self.split_header_rows_spinbox = ClearSpinBox()
         self.split_header_rows_spinbox.setRange(0, 999)
         self.split_header_rows_spinbox.setValue(1)
         self.split_header_rows_spinbox.setSuffix(" 行")
@@ -1522,7 +1552,7 @@ class ExcelMergerWindow(QMainWindow):
         )
 
         rows_per_file_label = QLabel("每个文件数据行数：")
-        self.split_rows_per_file_spinbox = QSpinBox()
+        self.split_rows_per_file_spinbox = ClearSpinBox()
         self.split_rows_per_file_spinbox.setRange(1, 1000000)
         self.split_rows_per_file_spinbox.setValue(1000)
         self.split_rows_per_file_spinbox.setSuffix(" 行")
@@ -1549,8 +1579,6 @@ class ExcelMergerWindow(QMainWindow):
         split_button_layout.addStretch()
         layout.addLayout(split_button_layout)
 
-        self.split_back_home_button.clicked.connect(self.show_home)
-        self.split_settings_button.clicked.connect(self.show_settings)
         self.choose_split_source_button.clicked.connect(self.choose_split_source_file)
         self.choose_split_output_button.clicked.connect(self.choose_split_output_folder)
         self.split_button.clicked.connect(self.split_workbook)
@@ -1565,29 +1593,14 @@ class ExcelMergerWindow(QMainWindow):
         layout.setContentsMargins(22, 18, 22, 18)
         layout.setSpacing(14)
 
-        tool_header_layout = QHBoxLayout()
-        self.invoice_back_home_button = QPushButton("返回工具首页")
-        self.invoice_back_home_button.setMinimumHeight(30)
-        self.invoice_back_home_button.setProperty("variant", "ghost")
-        self.invoice_settings_button = QPushButton("软件设置")
-        self.invoice_settings_button.setMinimumHeight(30)
-        self.invoice_settings_button.setProperty("variant", "ghost")
-        tool_header_layout.addWidget(self.invoice_back_home_button)
-        self.invoice_version_label = QLabel(f"版本 {APP_VERSION}")
-        self.invoice_version_label.setProperty("role", "hint")
-        tool_header_layout.addWidget(self.invoice_version_label)
-        tool_header_layout.addStretch()
-        tool_header_layout.addWidget(self.invoice_settings_button)
-        layout.addLayout(tool_header_layout)
-
-        title = QLabel("PDF发票解析工具")
-        title.setAlignment(Qt.AlignCenter)
-        title.setFont(QFont("PingFang SC", 20, QFont.Bold))
+        title = QLabel("发票解析")
+        title.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        title.setFont(QFont("PingFang SC", 24, QFont.Bold))
         title.setProperty("role", "title")
         layout.addWidget(title)
 
         subtitle = QLabel("统一提取发票头信息和明细，自动校验金额与税额")
-        subtitle.setAlignment(Qt.AlignCenter)
+        subtitle.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         subtitle.setProperty("role", "subtitle")
         layout.addWidget(subtitle)
 
@@ -1670,8 +1683,6 @@ class ExcelMergerWindow(QMainWindow):
         button_layout.addStretch()
         layout.addLayout(button_layout)
 
-        self.invoice_back_home_button.clicked.connect(self.show_home)
-        self.invoice_settings_button.clicked.connect(self.show_settings)
         self.choose_invoice_source_button.clicked.connect(self.add_invoice_files)
         self.delete_invoice_source_button.clicked.connect(self.delete_selected_invoice_files)
         self.clear_invoice_source_button.clicked.connect(self.clear_invoice_files)
@@ -1690,29 +1701,14 @@ class ExcelMergerWindow(QMainWindow):
         layout.setContentsMargins(22, 18, 22, 18)
         layout.setSpacing(14)
 
-        tool_header_layout = QHBoxLayout()
-        self.document_back_home_button = QPushButton("返回工具首页")
-        self.document_back_home_button.setMinimumHeight(30)
-        self.document_back_home_button.setProperty("variant", "ghost")
-        self.document_settings_button = QPushButton("软件设置")
-        self.document_settings_button.setMinimumHeight(30)
-        self.document_settings_button.setProperty("variant", "ghost")
-        tool_header_layout.addWidget(self.document_back_home_button)
-        self.document_version_label = QLabel(f"版本 {APP_VERSION}")
-        self.document_version_label.setProperty("role", "hint")
-        tool_header_layout.addWidget(self.document_version_label)
-        tool_header_layout.addStretch()
-        tool_header_layout.addWidget(self.document_settings_button)
-        layout.addLayout(tool_header_layout)
-
-        title = QLabel("文档智能处理")
-        title.setAlignment(Qt.AlignCenter)
-        title.setFont(QFont("PingFang SC", 20, QFont.Bold))
+        title = QLabel("文档处理")
+        title.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        title.setFont(QFont("PingFang SC", 24, QFont.Bold))
         title.setProperty("role", "title")
         layout.addWidget(title)
 
         subtitle = QLabel("自动识别发票、合同和表格类 PDF，并生成对应结果")
-        subtitle.setAlignment(Qt.AlignCenter)
+        subtitle.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         subtitle.setProperty("role", "subtitle")
         layout.addWidget(subtitle)
 
@@ -1784,8 +1780,6 @@ class ExcelMergerWindow(QMainWindow):
         button_layout.addStretch()
         layout.addLayout(button_layout)
 
-        self.document_back_home_button.clicked.connect(self.show_home)
-        self.document_settings_button.clicked.connect(self.show_settings)
         self.choose_document_source_button.clicked.connect(
             self.choose_document_source_file
         )
@@ -1806,29 +1800,14 @@ class ExcelMergerWindow(QMainWindow):
         layout.setContentsMargins(22, 18, 22, 18)
         layout.setSpacing(14)
 
-        tool_header_layout = QHBoxLayout()
-        self.rename_back_home_button = QPushButton("返回工具首页")
-        self.rename_back_home_button.setMinimumHeight(30)
-        self.rename_back_home_button.setProperty("variant", "ghost")
-        self.rename_settings_button = QPushButton("软件设置")
-        self.rename_settings_button.setMinimumHeight(30)
-        self.rename_settings_button.setProperty("variant", "ghost")
-        tool_header_layout.addWidget(self.rename_back_home_button)
-        self.rename_version_label = QLabel(f"版本 {APP_VERSION}")
-        self.rename_version_label.setProperty("role", "hint")
-        tool_header_layout.addWidget(self.rename_version_label)
-        tool_header_layout.addStretch()
-        tool_header_layout.addWidget(self.rename_settings_button)
-        layout.addLayout(tool_header_layout)
-
-        title = QLabel("批量改名工具")
-        title.setAlignment(Qt.AlignCenter)
-        title.setFont(QFont("PingFang SC", 20, QFont.Bold))
+        title = QLabel("批量改名")
+        title.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        title.setFont(QFont("PingFang SC", 24, QFont.Bold))
         title.setProperty("role", "title")
         layout.addWidget(title)
 
         subtitle = QLabel("先预览新文件名，确认无重名和异常后再执行")
-        subtitle.setAlignment(Qt.AlignCenter)
+        subtitle.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         subtitle.setProperty("role", "subtitle")
         layout.addWidget(subtitle)
 
@@ -1913,14 +1892,14 @@ class ExcelMergerWindow(QMainWindow):
         self.rename_rule_secondary_label = QLabel("替换为：")
         self.rename_rule_secondary_edit = QLineEdit()
         self.rename_rule_count_label = QLabel("删除数量：")
-        self.rename_rule_count_spinbox = QSpinBox()
+        self.rename_rule_count_spinbox = ClearSpinBox()
         self.rename_rule_count_spinbox.setRange(1, 999)
         self.rename_rule_count_spinbox.setValue(1)
         self.rename_numbering_checkbox = QCheckBox("添加编号")
-        self.rename_number_start_spinbox = QSpinBox()
+        self.rename_number_start_spinbox = ClearSpinBox()
         self.rename_number_start_spinbox.setRange(0, 999999)
         self.rename_number_start_spinbox.setValue(1)
-        self.rename_number_digits_spinbox = QSpinBox()
+        self.rename_number_digits_spinbox = ClearSpinBox()
         self.rename_number_digits_spinbox.setRange(1, 9)
         self.rename_number_digits_spinbox.setValue(3)
 
@@ -1974,8 +1953,6 @@ class ExcelMergerWindow(QMainWindow):
         content_layout.addLayout(right_layout, 1)
         layout.addLayout(content_layout, 1)
 
-        self.rename_back_home_button.clicked.connect(self.show_home)
-        self.rename_settings_button.clicked.connect(self.show_settings)
         self.rename_add_files_button.clicked.connect(self.add_rename_files)
         self.rename_add_folder_button.clicked.connect(self.add_rename_folder)
         self.rename_delete_button.clicked.connect(self.delete_selected_rename_files)
@@ -2023,29 +2000,14 @@ class ExcelMergerWindow(QMainWindow):
         layout.setContentsMargins(22, 18, 22, 18)
         layout.setSpacing(14)
 
-        tool_header_layout = QHBoxLayout()
-        self.pdf_back_home_button = QPushButton("返回工具首页")
-        self.pdf_back_home_button.setMinimumHeight(30)
-        self.pdf_back_home_button.setProperty("variant", "ghost")
-        self.pdf_settings_button = QPushButton("软件设置")
-        self.pdf_settings_button.setMinimumHeight(30)
-        self.pdf_settings_button.setProperty("variant", "ghost")
-        tool_header_layout.addWidget(self.pdf_back_home_button)
-        self.pdf_version_label = QLabel(f"版本 {APP_VERSION}")
-        self.pdf_version_label.setProperty("role", "hint")
-        tool_header_layout.addWidget(self.pdf_version_label)
-        tool_header_layout.addStretch()
-        tool_header_layout.addWidget(self.pdf_settings_button)
-        layout.addLayout(tool_header_layout)
-
         title = QLabel("PDF 工具箱")
-        title.setAlignment(Qt.AlignCenter)
-        title.setFont(QFont("PingFang SC", 20, QFont.Bold))
+        title.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        title.setFont(QFont("PingFang SC", 24, QFont.Bold))
         title.setProperty("role", "title")
         layout.addWidget(title)
 
         subtitle = QLabel("整理页面、压缩文件，并支持图片和 PDF 互转")
-        subtitle.setAlignment(Qt.AlignCenter)
+        subtitle.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         subtitle.setProperty("role", "subtitle")
         layout.addWidget(subtitle)
 
@@ -2055,8 +2017,6 @@ class ExcelMergerWindow(QMainWindow):
         self.pdf_tabs.addTab(self.create_pdf_convert_tab(), "图片 / PDF 互转")
         layout.addWidget(self.pdf_tabs, 1)
 
-        self.pdf_back_home_button.clicked.connect(self.show_home)
-        self.pdf_settings_button.clicked.connect(self.show_settings)
         self.update_pdf_button_states()
         return page
 
@@ -2331,32 +2291,48 @@ class ExcelMergerWindow(QMainWindow):
         super().resizeEvent(event)
         self.update_home_responsive_layout()
 
+    def set_active_navigation(self, active_key):
+        for key, button in self.nav_buttons.items():
+            button.setProperty(
+                "variant",
+                "homeNavActive" if key == active_key else "homeNav",
+            )
+            button.style().unpolish(button)
+            button.style().polish(button)
+
     def show_home(self):
         self.stack.setCurrentWidget(self.home_page)
+        self.set_active_navigation("home")
         self.setWindowTitle(self.app_name)
 
     def show_excel_tool(self):
         self.stack.setCurrentWidget(self.excel_page)
+        self.set_active_navigation("excel")
         self.setWindowTitle(f"{self.app_name} - Excel 合并工具")
 
     def show_split_tool(self):
         self.stack.setCurrentWidget(self.split_page)
+        self.set_active_navigation("split")
         self.setWindowTitle(f"{self.app_name} - Excel 拆分工具")
 
     def show_invoice_tool(self):
         self.stack.setCurrentWidget(self.invoice_page)
+        self.set_active_navigation("invoice")
         self.setWindowTitle(f"{self.app_name} - PDF发票解析工具")
 
     def show_document_tool(self):
         self.stack.setCurrentWidget(self.document_page)
+        self.set_active_navigation("document")
         self.setWindowTitle(f"{self.app_name} - 文档智能处理")
 
     def show_rename_tool(self):
         self.stack.setCurrentWidget(self.rename_page)
+        self.set_active_navigation("rename")
         self.setWindowTitle(f"{self.app_name} - 批量改名工具")
 
     def show_pdf_tool(self):
         self.stack.setCurrentWidget(self.pdf_page)
+        self.set_active_navigation("pdf")
         self.setWindowTitle(f"{self.app_name} - PDF 工具箱")
 
     def show_settings(self):

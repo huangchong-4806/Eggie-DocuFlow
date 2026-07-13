@@ -23,7 +23,8 @@ jobs:
       - name: 安装测试依赖
         run: |
           pip install openpyxl==3.1.5 pdfplumber==0.11.8 pypdf==6.10.0 \
-                      Pillow==12.2.0 pypdfium2==5.10.1
+                      Pillow==12.2.0 pypdfium2==5.10.1 \
+                      PySide6-Essentials==6.10.3
 
       - name: 运行所有测试
         run: python -m unittest discover -s tests -v
