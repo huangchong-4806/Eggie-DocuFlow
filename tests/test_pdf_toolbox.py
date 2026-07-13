@@ -90,6 +90,14 @@ class PdfToolboxTests(unittest.TestCase):
         low, high = estimate_compressed_size(1000, "standard")
         self.assertLess(low, high)
 
+    def test_compress_pdf_handles_existing_content_streams(self):
+        source = Path(__file__).resolve().parents[1] / "test_files" / "表格测试.pdf"
+
+        result = compress_pdf(source, self.root / "content-streams.pdf")
+
+        self.assertEqual(len(PdfReader(result.output_file).pages), 1)
+        self.assertGreater(result.output_size, 0)
+
     def test_images_to_pdf_and_pdf_to_images_open(self):
         image_files = []
         for index, color in enumerate(("red", "blue"), 1):

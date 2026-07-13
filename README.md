@@ -1,6 +1,6 @@
 # Eggie DocuFlow / Eggie文档处理系统
 
-![Version](https://img.shields.io/badge/version-1.3.4-blue)
+![Version](https://img.shields.io/badge/version-1.3.5-blue)
 ![Platform](https://img.shields.io/badge/macOS-Apple%20Silicon-black)
 ![Python](https://img.shields.io/badge/Python-3.10%2B-green)
 
@@ -57,7 +57,7 @@ The current release focuses on:
 
 1. 打开本项目右侧的 **Releases**
 2. 下载最新版安装包
-3. 解压后运行 `EggieDocuFlow_V1.3.4_mac.app`
+3. 解压后运行 `EggieDocuFlow_V1.3.5_mac.app`
 4. 本版本未做 Apple 公证；如果 macOS 阻止打开，请在 Finder 中右键 App，选择“打开”，再确认“打开”
 
 If you only want to use the application, you do not need to install Python or
@@ -65,7 +65,7 @@ run the source code.
 
 1. Open **Releases** on the right side of this repository
 2. Download the latest application package
-3. Extract the package and launch `EggieDocuFlow_V1.3.4_mac.app`
+3. Extract the package and launch `EggieDocuFlow_V1.3.5_mac.app`
 4. This release is not Apple-notarized. If macOS blocks it, right-click the App in Finder, choose **Open**, then confirm **Open**
 
 > 当前正式版主要支持 Apple 芯片 macOS，Windows 版本后续再考虑。
@@ -73,7 +73,7 @@ run the source code.
 
 ## 软件界面 / Screenshots
 
-![Eggie DocuFlow 工作台](docs/ui/home_runtime_check_20260709.png)
+![Eggie DocuFlow 工作台](docs/ui/home_runtime_check_20260713.png)
 
 ### 统一后的工具页面 / Unified Tool Pages
 
@@ -151,7 +151,7 @@ run the source code.
 
 ## 使用方法 / Usage
 
-1. 打开 `EggieDocuFlow_V1.3.4_mac.app`。 / Open `EggieDocuFlow_V1.3.4_mac.app`.
+1. 打开 `EggieDocuFlow_V1.3.5_mac.app`。 / Open `EggieDocuFlow_V1.3.5_mac.app`.
 2. 选择需要使用的工具。 / Choose the tool you need.
 
 合并 Excel：
@@ -251,8 +251,8 @@ PYTHON=.venv/bin/python scripts/build_macos.sh
 
 构建结果位于 `release/`，正式版文件名为：
 
-- `EggieDocuFlow_V1.3.4_mac.app`
-- `EggieDocuFlow_V1.3.4_mac.zip`
+- `EggieDocuFlow_V1.3.5_mac.app`
+- `EggieDocuFlow_V1.3.5_mac.zip`
 
 打包脚本保留所有 `qtbase` 系统语言翻译，并移除本工具不使用的 Qt 网络、TLS、
 SVG 和图片插件。
@@ -262,6 +262,17 @@ Build artifacts are written to `release/`. The packaging script keeps all
 and image plugins.
 
 ## 版本记录 / Changelog
+
+### V1.3.5
+
+- 主界面改为更朴素、清晰的浅色科技风 / Refined the home page with a simpler light technology style
+- 左侧菜单在全部功能页面持续显示 / Kept the sidebar visible across every tool page
+- 删除首页重复的“打开 Excel 合并”按钮和虚假信息面板 / Removed the duplicate Excel shortcut and placeholder information panels
+- 统一全部功能页的标题、按钮、卡片和输入区域 / Unified headings, buttons, cards, and input areas across all tools
+- 加粗并放大数字输入框的上下箭头 / Enlarged and sharpened numeric input arrows
+- 发票结果按发票号码命名，并补充销售方名称和税号日志 / Named invoice outputs by invoice number and added seller fields to logs
+- 修复真实 PDF 内容流压缩失败的问题 / Fixed PDF compression for files with existing content streams
+- 统一软件名称、版本号和 macOS 显示名称 / Unified product naming and version metadata
 
 ### V1.3.4
 

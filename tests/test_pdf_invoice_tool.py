@@ -18,8 +18,10 @@ from pdf_invoice_tool import (
     ScannedPdfUnsupportedError,
     TextBlock,
     _extract_party,
+    _parties_from_blocks,
     _pdf_text_blocks,
     _positioned_items,
+    convert_invoice_pdf,
     convert_invoice_pdfs,
     extract_invoice,
     parse_invoice_blocks,
@@ -248,6 +250,21 @@ class PdfInvoiceToolTests(unittest.TestCase):
         self.assertEqual(invoice.items[0].specification, "")
         self.assertEqual(invoice.items[1].amount, Decimal("-10"))
 
+    def test_positioned_party_parser_ignores_distant_download_counter(self):
+        blocks = [
+            TextBlock("名称：", 1, 321.5, 101.27, 348.5),
+            TextBlock("销方公司", 1, 346.5, 100.58, 410.5),
+            TextBlock("载", 1, 587.73, 99.4, 596.73),
+            TextBlock("统一社会信用代码/纳税人识别号：", 1, 321.5, 129.27, 447.65),
+            TextBlock("91441304MAC4RC1X94", 1, 443.5, 126.76, 573.1),
+            TextBlock("：", 1, 587.73, 127.6, 596.73),
+        ]
+
+        _, seller = _parties_from_blocks(blocks)
+
+        self.assertEqual(seller["名称"], "销方公司")
+        self.assertEqual(seller["税号"], "91441304MAC4RC1X94")
+
     def test_validation_marks_inconsistent_fields_as_abnormal(self):
         invoice = InvoiceData()
         invoice.header.update(
@@ -327,6 +344,7 @@ class PdfInvoiceToolTests(unittest.TestCase):
             invoice_date="2026年6月23日",
             buyer_name="购方公司",
             seller_name="销方公司",
+            seller_tax_id="91310000987654321X",
             amount=Decimal("100.00"),
             tax_amount=Decimal("13.00"),
             total_amount=Decimal("113.00"),
@@ -351,6 +369,8 @@ class PdfInvoiceToolTests(unittest.TestCase):
         log_text = Path(ledger.log_file).read_text(encoding="utf-8")
         self.assertIn("匹配结果", log_text)
         self.assertIn("invoice_number=12345678", log_text)
+        self.assertIn("seller_name=销方公司", log_text)
+        self.assertIn("seller_tax_id=91310000987654321X", log_text)
         self.assertIn("失败 source_file=", log_text)
         self.assertIn("文件生成状态", log_text)
 
@@ -366,6 +386,17 @@ class PdfInvoiceToolTests(unittest.TestCase):
         write_invoice_workbook(invoice, output, overwrite=True)
         with ZipFile(output) as archive:
             self.assertIsNone(archive.testzip())
+
+    def test_batch_output_uses_invoice_number_as_filename(self):
+        source = self.root / "原发票.pdf"
+        invoice = parse_invoice_blocks(invoice_blocks())
+
+        with patch("pdf_invoice_tool.extract_invoice", return_value=invoice):
+            first = convert_invoice_pdf(source, self.root)
+            second = convert_invoice_pdf(source, self.root)
+
+        self.assertEqual(Path(first.output_file).name, "12345678.xlsx")
+        self.assertEqual(Path(second.output_file).name, "12345678_1.xlsx")
 
     def test_missing_amount_does_not_generate_unstructured_output(self):
         with self.assertRaisesRegex(ValueError, "包含“金额”的发票明细"):

@@ -173,9 +173,8 @@ def write_structural_compressed_pdf(source, output_file):
     reader = PdfReader(str(source))
     writer = PdfWriter()
     for page in reader.pages:
-        page = copy.deepcopy(page)
-        page.compress_content_streams()
         writer.add_page(page)
+        writer.pages[-1].compress_content_streams()
     if reader.metadata:
         writer.add_metadata(reader.metadata)
 
