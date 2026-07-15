@@ -1,10 +1,26 @@
+import ctypes
+import errno
 import os
+import sys
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
 
 ILLEGAL_NAME_CHARS = {"/", "\0", ":"}
+MACOS_RENAME_EXCL = 0x00000004
+
+
+if sys.platform == "darwin":
+    _macos_renamex_np = ctypes.CDLL(None, use_errno=True).renamex_np
+    _macos_renamex_np.argtypes = [
+        ctypes.c_char_p,
+        ctypes.c_char_p,
+        ctypes.c_uint,
+    ]
+    _macos_renamex_np.restype = ctypes.c_int
+else:
+    _macos_renamex_np = None
 
 
 @dataclass(frozen=True)
@@ -132,6 +148,66 @@ def _same_file(left, right):
         return False
 
 
+def _same_entry(left, right):
+    try:
+        left_stat = os.lstat(left)
+        right_stat = os.lstat(right)
+    except OSError:
+        return False
+    return (left_stat.st_dev, left_stat.st_ino) == (
+        right_stat.st_dev,
+        right_stat.st_ino,
+    )
+
+
+def _rename_without_overwrite(source_path, target_path):
+    source = Path(source_path)
+    target = Path(target_path)
+    if _macos_renamex_np is not None:
+        result = _macos_renamex_np(
+            os.fsencode(source),
+            os.fsencode(target),
+            MACOS_RENAME_EXCL,
+        )
+        if result == 0:
+            return
+        error_number = ctypes.get_errno()
+        if error_number == errno.EEXIST:
+            raise FileExistsError(
+                error_number,
+                f"目标文件已存在：{target}",
+                str(target),
+            )
+        raise OSError(
+            error_number,
+            os.strerror(error_number),
+            str(target),
+        )
+
+    if _same_file(source, target):
+        source.rename(target)
+        return
+
+    try:
+        os.link(source, target, follow_symlinks=False)
+    except FileExistsError as error:
+        raise FileExistsError(f"目标文件已存在：{target}") from error
+
+    if not _same_entry(source, target):
+        target.unlink(missing_ok=True)
+        raise OSError("源文件在改名过程中发生变化，已停止处理。")
+
+    try:
+        source.unlink()
+    except OSError:
+        try:
+            if _same_entry(source, target):
+                target.unlink()
+        except OSError:
+            pass
+        raise
+
+
 def preview_renames(files, options):
     absolute_files = [os.path.abspath(filename) for filename in files]
     rows = []
@@ -220,7 +296,7 @@ def _write_action_log(handle, index, preview, status, error):
     handle.write("-" * 60 + "\n")
 
 
-def apply_renames(previews, log_folder=None):
+def apply_renames(previews, log_folder=None, progress_callback=None):
     if any(preview.blocked for preview in previews):
         raise ValueError("预览中还有不能改名的文件，请先处理后再执行。")
     if not previews:
@@ -237,11 +313,21 @@ def apply_renames(previews, log_folder=None):
         handle.write(f"文件数量：{len(previews)}\n")
         handle.write("=" * 60 + "\n")
         for index, preview in enumerate(previews, start=1):
+            if progress_callback:
+                progress_callback(
+                    index - 1,
+                    len(previews),
+                    f"正在处理第 {index} / {len(previews)} 个："
+                    f"{Path(preview.source_path).name}",
+                )
             status = "跳过"
             error = ""
             if preview.will_rename:
                 try:
-                    Path(preview.source_path).rename(preview.target_path)
+                    _rename_without_overwrite(
+                        preview.source_path,
+                        preview.target_path,
+                    )
                     status = "成功"
                 except OSError as rename_error:
                     status = "失败"
@@ -251,5 +337,11 @@ def apply_renames(previews, log_folder=None):
             actions.append(
                 RenameAction(preview.source_path, preview.target_path, status, error)
             )
+            if progress_callback:
+                progress_callback(
+                    index,
+                    len(previews),
+                    f"已处理 {index} / {len(previews)} 个文件",
+                )
 
     return RenameApplyResult(str(log_file), tuple(actions))

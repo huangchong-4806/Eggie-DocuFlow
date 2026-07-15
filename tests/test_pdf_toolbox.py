@@ -1,9 +1,12 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from PIL import Image
 from pypdf import PdfReader, PdfWriter
+
+import pdf_toolbox
 
 from pdf_toolbox import (
     COMPRESSION_PRESETS,
@@ -14,6 +17,7 @@ from pdf_toolbox import (
     is_supported_image_file,
     output_path,
     pdf_to_images,
+    pdfs_to_images,
     save_pages,
 )
 
@@ -111,9 +115,92 @@ class PdfToolboxTests(unittest.TestCase):
         image_result = pdf_to_images(pdf_result.output_file, self.root / "pages")
         self.assertEqual(len(image_result.image_files), 2)
         self.assertEqual(Path(image_result.image_files[0]).suffix, ".jpg")
+        self.assertEqual(Path(image_result.image_files[0]).name, "images_1.jpg")
+        self.assertEqual(Path(image_result.image_files[1]).name, "images_2.jpg")
+        self.assertEqual(Path(image_result.image_files[0]).parent.name, "images")
         with Image.open(image_result.image_files[0]) as image:
-            self.assertGreater(image.width, 0)
-            self.assertGreater(image.height, 0)
+            self.assertGreaterEqual(image.width, 160)
+            self.assertGreaterEqual(image.height, 200)
+
+    def test_single_page_pdf_outputs_directly_with_high_resolution(self):
+        pdf_file = self.make_pdf("单页文件.pdf", 1)
+
+        result = pdf_to_images(pdf_file, self.root / "single", "png", 300)
+
+        self.assertEqual(len(result.image_files), 1)
+        output_file = Path(result.image_files[0])
+        self.assertEqual(output_file.parent, (self.root / "single").resolve())
+        self.assertEqual(output_file.name, "单页文件_1.png")
+        with Image.open(output_file) as image:
+            self.assertGreaterEqual(image.width, 830)
+            self.assertGreaterEqual(image.height, 1240)
+
+    def test_batch_pdf_to_images_continues_after_one_failure(self):
+        single = self.make_pdf("单页.pdf", 1)
+        multiple = self.make_pdf("多页.pdf", 2)
+        broken = self.root / "损坏.pdf"
+        broken.write_text("not a pdf", encoding="utf-8")
+
+        result = pdfs_to_images(
+            [single, multiple, broken, single],
+            self.root / "batch",
+            "jpg",
+            300,
+        )
+
+        self.assertEqual(len(result.source_files), 2)
+        self.assertEqual(len(result.failures), 1)
+        self.assertEqual(len(result.image_files), 3)
+        self.assertTrue((self.root / "batch" / "单页_1.jpg").is_file())
+        self.assertTrue((self.root / "batch" / "多页" / "多页_1.jpg").is_file())
+        self.assertTrue((self.root / "batch" / "多页" / "多页_2.jpg").is_file())
+        log_text = Path(result.log_file).read_text(encoding="utf-8")
+        self.assertIn("图片清晰度：300 DPI", log_text)
+        self.assertIn("失败文件数：1", log_text)
+        self.assertIn("损坏.pdf", log_text)
+
+    def test_batch_pdf_to_images_reports_file_and_page_progress(self):
+        pdf_file = self.make_pdf("进度测试.pdf", 2)
+        updates = []
+
+        result = pdfs_to_images(
+            [pdf_file],
+            self.root / "progress",
+            "png",
+            150,
+            progress_callback=lambda value, total, message: updates.append(
+                (value, total, message)
+            ),
+        )
+
+        self.assertEqual(len(result.image_files), 2)
+        self.assertEqual(updates[0][:2], (0, 1))
+        self.assertEqual(updates[-1][:2], (1, 1))
+        self.assertTrue(any("第 2 / 2 页" in message for _, _, message in updates))
+
+    def test_batch_pdf_to_images_removes_partial_output_after_page_failure(self):
+        multiple = self.make_pdf("中途失败.pdf", 2)
+        original_save = Image.Image.save
+        save_calls = {"count": 0}
+
+        def fail_on_second_page(image, output_file, *args, **kwargs):
+            save_calls["count"] += 1
+            if save_calls["count"] == 2:
+                raise OSError("模拟第二页保存失败")
+            return original_save(image, output_file, *args, **kwargs)
+
+        with patch.object(Image.Image, "save", fail_on_second_page):
+            result = pdfs_to_images(
+                [multiple],
+                self.root / "partial",
+                "jpg",
+                150,
+            )
+
+        self.assertEqual(len(result.failures), 1)
+        self.assertEqual(result.image_files, ())
+        self.assertFalse((self.root / "partial" / "中途失败").exists())
+        self.assertEqual(list((self.root / "partial").glob("**/*.jpg")), [])
 
     def test_image_filter_rejects_non_images(self):
         real_image = self.root / "real.jpg"
@@ -126,6 +213,22 @@ class PdfToolboxTests(unittest.TestCase):
         self.assertTrue(is_supported_image_file(real_image))
         self.assertFalse(is_supported_image_file(fake_image))
         self.assertFalse(is_supported_image_file(note))
+
+    def test_prepare_image_thumbnail_creates_small_preview(self):
+        source = self.root / "large.png"
+        destination = self.root / "preview.jpg"
+        Image.new("RGB", (1600, 900), "blue").save(source)
+
+        preview = pdf_toolbox.prepare_image_thumbnail(
+            source,
+            destination,
+            (132, 180),
+        )
+
+        self.assertEqual(Path(preview), destination.resolve())
+        with Image.open(preview) as image:
+            self.assertLessEqual(image.width, 132)
+            self.assertLessEqual(image.height, 180)
 
 
 if __name__ == "__main__":

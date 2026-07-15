@@ -1,3 +1,3 @@
-APP_VERSION = "1.3.5"
+APP_VERSION = "1.3.6"
 BUILD_TYPE = "release"
 BUILD_DATE = "2026-07-09"

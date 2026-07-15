@@ -68,6 +68,7 @@ a = Analysis(
         (str(PROJECT_ROOT / "assets" / "software_logo.png"), "assets"),
         (str(PROJECT_ROOT / "assets" / "app_icon.png"), "assets"),
         (str(PROJECT_ROOT / "assets" / "app_icon.icns"), "assets"),
+        (str(PROJECT_ROOT / "docs" / "OCR使用说明.pdf"), "docs"),
         (
             str(PROJECT_ROOT / "assets" / "en.lproj" / "InfoPlist.strings"),
             "en.lproj",
@@ -135,7 +136,7 @@ app = BUNDLE(
         "CFBundleDisplayName": APP_BASENAME,
         "CFBundleName": APP_BASENAME,
         "CFBundleShortVersionString": APP_VERSION,
-        "CFBundleVersion": "9",
+        "CFBundleVersion": "10",
         "CFBundleAllowMixedLocalizations": True,
         "CFBundleDevelopmentRegion": "zh-Hans",
         "CFBundleLocalizations": ["en", "zh-Hans", "zh-Hant"],
