@@ -5,3 +5,4 @@ Pillow==12.2.0
 pypdfium2==5.10.1
 PySide6-Essentials==6.10.3
 pyinstaller==6.20.0
+alibabacloud_ocr_api20210707==3.1.3

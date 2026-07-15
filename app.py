@@ -3,14 +3,18 @@ import re
 import subprocess
 import sys
 import tempfile
+import uuid
 from pathlib import Path
 
 from PySide6.QtCore import (
     QLibraryInfo,
     QLocale,
     QMimeData,
+    QThread,
+    QTimer,
     QSize,
     QSettings,
+    Signal,
     Qt,
     QTranslator,
     QUrl,
@@ -37,7 +41,6 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QHeaderView,
     QHBoxLayout,
-    QInputDialog,
     QLabel,
     QLineEdit,
     QMainWindow,
@@ -71,6 +74,15 @@ from batch_rename_tool import (
     preview_renames,
 )
 from document_router import process_document
+from api_layer import (
+    PROVIDER_LABELS,
+    extract_document_to_files,
+    inspect_pdf,
+    is_provider_configured,
+    process_document_with_ocr,
+)
+from api_layer.config import select_provider, selected_provider
+from ocr_settings_dialog import SoftwareSettingsDialog
 from pdf_invoice_tool import (
     convert_invoice_pdfs,
     write_invoice_ledger,
@@ -83,10 +95,10 @@ from pdf_toolbox import (
     default_output_name,
     estimate_compressed_size,
     images_to_pdf,
-    is_supported_image_file,
     output_path,
     page_count,
-    pdf_to_images,
+    pdfs_to_images,
+    prepare_image_thumbnail,
     render_page_thumbnail,
     save_pages,
 )
@@ -109,6 +121,12 @@ PDF_PAGE_CARD_HEIGHT = 282
 PDF_PAGE_CARD_H_SPACING = 18
 PDF_PAGE_CARD_V_SPACING = 34
 PDF_PAGE_THUMBNAIL_SIZE = QSize(132, 180)
+PDF_IMAGE_WARNING_COUNT = 100
+PDF_IMAGE_MAX_COUNT = 300
+PDF_PAGE_WARNING_COUNT = 500
+PDF_PAGE_MAX_COUNT = 1000
+RENAME_WARNING_COUNT = 5000
+RENAME_MAX_COUNT = 20000
 
 
 def is_chinese_locale(locale):
@@ -124,11 +142,71 @@ def resource_path(relative_path):
     return base_path / relative_path
 
 
+class DocumentOCRThread(QThread):
+    progress = Signal(int, int, str)
+    completed = Signal(object)
+    failed = Signal(str)
+
+    def __init__(self, task_kind, source_file, output_folder, provider, parent=None):
+        super().__init__(parent)
+        self.task_kind = task_kind
+        self.source_file = source_file
+        self.output_folder = output_folder
+        self.provider = provider
+
+    def _progress(self, value, total, message):
+        self.progress.emit(value, total, message)
+
+    def run(self):
+        try:
+            if self.task_kind == "process":
+                result = process_document_with_ocr(
+                    self.source_file,
+                    self.output_folder,
+                    provider_name=self.provider,
+                    progress_callback=self._progress,
+                )
+            else:
+                result = extract_document_to_files(
+                    self.source_file,
+                    self.output_folder,
+                    self.provider,
+                    progress_callback=self._progress,
+                )
+        except Exception as error:
+            self.failed.emit(f"{type(error).__name__}: {error}")
+            return
+        self.completed.emit(result)
+
+
+class BackgroundTaskThread(QThread):
+    progress = Signal(int, int, str)
+    completed = Signal(object)
+    failed = Signal(str)
+
+    def __init__(self, worker, parent=None):
+        super().__init__(parent)
+        self.worker = worker
+
+    def _progress(self, value, total, message):
+        self.progress.emit(int(value), int(total), str(message))
+
+    def run(self):
+        try:
+            result = self.worker(self._progress)
+        except Exception as error:
+            self.failed.emit(f"{type(error).__name__}: {error}")
+            return
+        self.completed.emit(result)
+
+
 class PdfPageCard(QWidget):
     def __init__(self, owner, data):
         super().__init__()
         self.owner = owner
         self.data = data
+        self.thumbnail_cache = QPixmap()
+        self.display_rotation = None
         self.drag_start_position = None
         self.setAcceptDrops(True)
         self.setFixedSize(PDF_PAGE_CARD_WIDTH, PDF_PAGE_CARD_HEIGHT)
@@ -189,16 +267,28 @@ class PdfPageCard(QWidget):
 
     def update_display(self, index):
         rotation = self.data.get("rotation", 0) % 360
-        pixmap = QPixmap(self.data.get("thumbnail", ""))
-        if rotation and not pixmap.isNull():
-            pixmap = pixmap.transformed(QTransform().rotate(rotation), Qt.SmoothTransformation)
-        if not pixmap.isNull():
-            pixmap = pixmap.scaled(
-                PDF_PAGE_THUMBNAIL_SIZE,
-                Qt.KeepAspectRatio,
-                Qt.SmoothTransformation,
-            )
-            self.image_label.setPixmap(pixmap)
+        if self.thumbnail_cache.isNull():
+            pixmap = QPixmap(self.data.get("thumbnail", ""))
+            if not pixmap.isNull():
+                self.thumbnail_cache = pixmap.scaled(
+                    PDF_PAGE_THUMBNAIL_SIZE,
+                    Qt.KeepAspectRatio,
+                    Qt.SmoothTransformation,
+                )
+        if not self.thumbnail_cache.isNull() and self.display_rotation != rotation:
+            display = self.thumbnail_cache
+            if rotation:
+                display = display.transformed(
+                    QTransform().rotate(rotation),
+                    Qt.SmoothTransformation,
+                )
+                display = display.scaled(
+                    PDF_PAGE_THUMBNAIL_SIZE,
+                    Qt.KeepAspectRatio,
+                    Qt.SmoothTransformation,
+                )
+            self.image_label.setPixmap(display)
+            self.display_rotation = rotation
         self.page_label.setText(f"第 {index:03d} 页")
         name = Path(self.data["source_file"]).name
         self.file_label.setText(
@@ -295,10 +385,12 @@ class PdfPageBoard(QWidget):
 
 
 class PdfImageCard(QWidget):
-    def __init__(self, owner, image_file):
+    def __init__(self, owner, image_file, thumbnail_file=""):
         super().__init__()
         self.owner = owner
         self.image_file = image_file
+        self.thumbnail_file = thumbnail_file or image_file
+        self.thumbnail_cache = QPixmap()
         self.drag_start_position = None
         self.setAcceptDrops(True)
         self.setFixedSize(PDF_PAGE_CARD_WIDTH, PDF_PAGE_CARD_HEIGHT)
@@ -355,14 +447,16 @@ class PdfImageCard(QWidget):
         self.owner.refresh_pdf_image_cards()
 
     def update_display(self, index):
-        pixmap = QPixmap(self.image_file)
-        if not pixmap.isNull():
-            pixmap = pixmap.scaled(
-                PDF_PAGE_THUMBNAIL_SIZE,
-                Qt.KeepAspectRatio,
-                Qt.SmoothTransformation,
-            )
-            self.image_label.setPixmap(pixmap)
+        if self.thumbnail_cache.isNull():
+            pixmap = QPixmap(self.thumbnail_file)
+            if not pixmap.isNull():
+                self.thumbnail_cache = pixmap.scaled(
+                    PDF_PAGE_THUMBNAIL_SIZE,
+                    Qt.KeepAspectRatio,
+                    Qt.SmoothTransformation,
+                )
+        if not self.thumbnail_cache.isNull():
+            self.image_label.setPixmap(self.thumbnail_cache)
         else:
             self.image_label.setText("无法预览")
         name = Path(self.image_file).name
@@ -792,6 +886,9 @@ def build_theme_stylesheet(colors):
         color: {colors["disabled_text"]};
         border: 1px solid {colors["border_soft"]};
     }}
+    QPushButton[compactToolbar="true"] {{
+        padding: 7px 9px;
+    }}
     QPushButton[variant="primary"] {{
         background: {colors["primary"]};
         color: #FFFFFF;
@@ -1063,6 +1160,22 @@ class ClearSpinBox(QSpinBox):
             )
 
 
+class SelectionComboBox(QComboBox):
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        pen = QPen(self.palette().color(self.foregroundRole()))
+        pen.setWidthF(1.8)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        painter.setPen(pen)
+        center_x = self.width() - 16
+        center_y = self.height() // 2
+        painter.drawLine(center_x - 4, center_y - 2, center_x, center_y + 2)
+        painter.drawLine(center_x, center_y + 2, center_x + 4, center_y - 2)
+
+
 class ExcelMergerWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -1079,15 +1192,24 @@ class ExcelMergerWindow(QMainWindow):
         self.document_source_file = ""
         self.document_output_folder = ""
         self.document_result_file = ""
+        self.document_ocr_result_file = ""
+        self.document_ocr_thread = None
+        self.document_ocr_progress = None
+        self.document_ocr_task_kind = ""
+        self.background_task_thread = None
+        self.background_task_progress = None
+        self.background_task_status_label = None
+        self.background_task_title = ""
         self.rename_source_files = []
         self.rename_previews = []
+        self.rename_preview_valid = False
         self.rename_last_log_file = ""
         self.pdf_output_folder = ""
         self.pdf_page_cards = []
         self.pdf_compress_source_file = ""
         self.pdf_image_source_files = []
         self.pdf_image_cards = []
-        self.pdf_export_source_file = ""
+        self.pdf_export_source_files = []
         self.pdf_thumbnail_tempdir = tempfile.TemporaryDirectory(
             prefix="eggie-pdf-thumbs-"
         )
@@ -1417,7 +1539,7 @@ class ExcelMergerWindow(QMainWindow):
         self.home_tool_buttons = []
         self.home_tool_cards = []
 
-        def tool_card(tag, accent, title, desc, badge, handler):
+        def tool_card(tag, accent, title, desc, handler):
             card = styled_widget(prop_name="homeCard")
             card.setMinimumHeight(116)
             card_layout = QVBoxLayout(card)
@@ -1437,15 +1559,6 @@ class ExcelMergerWindow(QMainWindow):
 
             title_label = home_label(title, "cardTitle")
             title_row.addWidget(title_label, 1)
-            badge_label = QLabel(badge)
-            badge_label.setAlignment(Qt.AlignCenter)
-            badge_label.setMinimumWidth(72)
-            badge_label.setMinimumHeight(26)
-            badge_label.setStyleSheet(
-                "background: #E8F3FF; color: #2389F0; "
-                "border-radius: 8px; font-size: 12px;"
-            )
-            title_row.addWidget(badge_label)
             card_layout.addLayout(title_row)
 
             bottom_row = QHBoxLayout()
@@ -1456,7 +1569,7 @@ class ExcelMergerWindow(QMainWindow):
 
             open_button = QPushButton("打开")
             open_button.setProperty("variant", "homeOpen")
-            open_button.setMinimumHeight(34)
+            open_button.setMinimumSize(112, 44)
             open_button.clicked.connect(handler)
             bottom_row.addWidget(open_button, 0, Qt.AlignBottom)
             card_layout.addLayout(bottom_row)
@@ -1465,12 +1578,12 @@ class ExcelMergerWindow(QMainWindow):
             return card
 
         tool_specs = [
-            ("XL", "#3198F5", "Excel 合并", "按顺序合并多个表格，并保留主要格式。", "常用", self.show_excel_tool),
-            ("XL", "#3198F5", "Excel 拆分", "按表头和数据行数拆分成多个文件。", "清晰", self.show_split_tool),
-            ("PDF", "#3198F5", "发票解析", "批量解析发票，并生成台账汇总。", "台账", self.show_invoice_tool),
-            ("DOC", "#3198F5", "文档处理", "自动识别合同、表格和发票类 PDF。", "识别", self.show_document_tool),
-            ("REN", "#3198F5", "批量改名", "先预览新文件名，确认后再执行。", "安全", self.show_rename_tool),
-            ("PDF", "#3198F5", "PDF 工具箱", "页面整理、压缩和图片互转。", "多功能", self.show_pdf_tool),
+            ("XL", "#3198F5", "Excel 合并", "按顺序合并多个表格，并保留主要格式。", self.show_excel_tool),
+            ("XL", "#3198F5", "Excel 拆分", "按表头和数据行数拆分成多个文件。", self.show_split_tool),
+            ("PDF", "#3198F5", "发票解析", "批量解析发票，并生成台账汇总。", self.show_invoice_tool),
+            ("DOC", "#3198F5", "文档处理", "自动识别合同、表格和发票类 PDF。", self.show_document_tool),
+            ("REN", "#3198F5", "批量改名", "先预览新文件名，确认后再执行。", self.show_rename_tool),
+            ("PDF", "#3198F5", "PDF 工具箱", "页面整理、压缩和图片互转。", self.show_pdf_tool),
         ]
         for index, spec in enumerate(tool_specs):
             self.home_grid.addWidget(tool_card(*spec), index // 2, index % 2)
@@ -1743,6 +1856,46 @@ class ExcelMergerWindow(QMainWindow):
         )
         layout.addWidget(self.document_enhanced_layout_checkbox)
 
+        ocr_group = QGroupBox("扫描件文字识别（在当前文档处理中使用）")
+        ocr_layout = QVBoxLayout(ocr_group)
+        ocr_top_row = QHBoxLayout()
+        self.document_ocr_checkbox = QCheckBox("扫描页使用云 OCR")
+        self.document_ocr_provider_combo = QComboBox()
+        for provider_key, provider_label in PROVIDER_LABELS.items():
+            self.document_ocr_provider_combo.addItem(provider_label, provider_key)
+        configured_provider = selected_provider()
+        provider_index = self.document_ocr_provider_combo.findData(configured_provider)
+        self.document_ocr_provider_combo.setCurrentIndex(max(0, provider_index))
+        self.document_ocr_settings_button = QPushButton("前往设置")
+        self.document_ocr_manual_button = QPushButton("使用说明")
+        ocr_top_row.addWidget(self.document_ocr_checkbox)
+        ocr_top_row.addWidget(self.document_ocr_provider_combo, 1)
+        ocr_top_row.addWidget(self.document_ocr_settings_button)
+        ocr_top_row.addWidget(self.document_ocr_manual_button)
+        ocr_layout.addLayout(ocr_top_row)
+
+        self.document_ocr_privacy_label = QLabel(
+            "有文字的页面只在本机读取；仅扫描图片页会在您确认后发送给所选平台。"
+        )
+        self.document_ocr_privacy_label.setWordWrap(True)
+        self.document_ocr_privacy_label.setProperty("role", "hint")
+        ocr_layout.addWidget(self.document_ocr_privacy_label)
+
+        ocr_result_row = QHBoxLayout()
+        self.document_ocr_status_label = QLabel("")
+        self.document_ocr_status_label.setProperty("role", "status")
+        self.document_ocr_result_path_edit = QLineEdit()
+        self.document_ocr_result_path_edit.setReadOnly(True)
+        self.document_ocr_result_path_edit.setPlaceholderText("可选：仅提取文字后在这里显示结果")
+        self.document_ocr_extract_button = QPushButton("仅提取文字")
+        self.document_ocr_open_button = QPushButton("打开文字结果")
+        ocr_result_row.addWidget(self.document_ocr_status_label)
+        ocr_result_row.addWidget(self.document_ocr_result_path_edit, 1)
+        ocr_result_row.addWidget(self.document_ocr_extract_button)
+        ocr_result_row.addWidget(self.document_ocr_open_button)
+        ocr_layout.addLayout(ocr_result_row)
+        layout.addWidget(ocr_group)
+
         result_group = QGroupBox("处理结果")
         result_layout = QVBoxLayout(result_group)
         self.document_status_label = QLabel("等待选择 PDF 文件")
@@ -1756,8 +1909,9 @@ class ExcelMergerWindow(QMainWindow):
         layout.addWidget(result_group)
 
         hint = QLabel(
-            "处理顺序：PDF 分类 → 路由 → 输出。当前版本不含 OCR，"
-            "扫描图片型 PDF 将输出 UNKNOWN 文本说明。"
+            "处理顺序：PDF 分类 → 路由 → 输出。不勾选云 OCR 时，原有处理方式完全不变；"
+            "勾选后，扫描页识别文字会继续进入同一文档处理流程。"
+            "扫描页识别暂不与增强排版同时使用。"
         )
         hint.setAlignment(Qt.AlignCenter)
         hint.setProperty("role", "hint")
@@ -1790,6 +1944,25 @@ class ExcelMergerWindow(QMainWindow):
         self.open_document_result_button.clicked.connect(
             lambda: self.open_output_file(self.document_result_file)
         )
+        self.document_ocr_provider_combo.currentIndexChanged.connect(
+            self.document_ocr_provider_changed
+        )
+        self.document_ocr_checkbox.toggled.connect(
+            self.document_ocr_mode_changed
+        )
+        self.document_ocr_settings_button.clicked.connect(
+            self.show_ocr_settings
+        )
+        self.document_ocr_manual_button.clicked.connect(
+            self.open_ocr_manual
+        )
+        self.document_ocr_extract_button.clicked.connect(
+            self.extract_document_text_only
+        )
+        self.document_ocr_open_button.clicked.connect(
+            lambda: self.open_output_file(self.document_ocr_result_file)
+        )
+        self.refresh_document_ocr_status()
         self.update_document_button_states()
         return page
 
@@ -1838,6 +2011,13 @@ class ExcelMergerWindow(QMainWindow):
             source_button_layout.addWidget(button)
         source_button_layout.addStretch()
         left_layout.addLayout(source_button_layout)
+
+        self.rename_limit_label = QLabel(
+            "当前 0 / 20,000 个文件；处理数量越多，处理速度越慢，"
+            "请酌情拆分任务"
+        )
+        self.rename_limit_label.setProperty("role", "hint")
+        left_layout.addWidget(self.rename_limit_label)
 
         self.rename_file_table = QTreeWidget()
         self.rename_file_table.setColumnCount(5)
@@ -1968,26 +2148,33 @@ class ExcelMergerWindow(QMainWindow):
             self.update_rename_button_states
         )
 
+        self.rename_preview_timer = QTimer(self)
+        self.rename_preview_timer.setSingleShot(True)
+        self.rename_preview_timer.setInterval(250)
+        self.rename_preview_timer.timeout.connect(
+            lambda: self.refresh_rename_file_list()
+        )
+
         self.rename_rule_combo.currentIndexChanged.connect(
             self.handle_rename_rule_changed
         )
         self.rename_rule_primary_edit.textChanged.connect(
-            lambda _text: self.refresh_rename_file_list()
+            lambda _text: self.schedule_rename_preview()
         )
         self.rename_rule_secondary_edit.textChanged.connect(
-            lambda _text: self.refresh_rename_file_list()
+            lambda _text: self.schedule_rename_preview()
         )
         self.rename_rule_count_spinbox.valueChanged.connect(
-            lambda _value: self.refresh_rename_file_list()
+            lambda _value: self.schedule_rename_preview()
         )
         self.rename_numbering_checkbox.toggled.connect(
-            lambda _checked: self.refresh_rename_file_list()
+            lambda _checked: self.schedule_rename_preview()
         )
         self.rename_number_start_spinbox.valueChanged.connect(
-            lambda _value: self.refresh_rename_file_list()
+            lambda _value: self.schedule_rename_preview()
         )
         self.rename_number_digits_spinbox.valueChanged.connect(
-            lambda _value: self.refresh_rename_file_list()
+            lambda _value: self.schedule_rename_preview()
         )
         self.update_rename_rule_inputs()
         self.refresh_rename_file_list()
@@ -2026,7 +2213,8 @@ class ExcelMergerWindow(QMainWindow):
         layout.setContentsMargins(12, 14, 12, 12)
         layout.setSpacing(10)
 
-        button_layout = QHBoxLayout()
+        self.pdf_organizer_button_layout = QHBoxLayout()
+        self.pdf_organizer_button_layout.setSpacing(6)
         self.pdf_add_button = QPushButton("添加 PDF")
         self.pdf_clear_button = QPushButton("清空页面")
         self.pdf_check_all_button = QPushButton("全选")
@@ -2057,8 +2245,32 @@ class ExcelMergerWindow(QMainWindow):
             self.pdf_save_pages_button,
         ):
             button.setMinimumHeight(34)
-            button_layout.addWidget(button)
-        layout.addLayout(button_layout)
+        for button in (
+            self.pdf_add_button,
+            self.pdf_clear_button,
+            self.pdf_check_all_button,
+            self.pdf_uncheck_all_button,
+            self.pdf_move_previous_button,
+            self.pdf_move_next_button,
+            self.pdf_rotate_left_button,
+            self.pdf_rotate_right_button,
+            self.pdf_rotate_180_button,
+            self.pdf_delete_pages_button,
+            self.pdf_split_selected_button,
+        ):
+            button.setProperty("compactToolbar", "true")
+            button.setMinimumWidth(0)
+            button.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
+            self.pdf_organizer_button_layout.addWidget(button)
+        self.pdf_organizer_button_layout.addStretch(1)
+        layout.addLayout(self.pdf_organizer_button_layout)
+
+        self.pdf_page_limit_label = QLabel(
+            "当前 0 / 1,000 页；处理数量越多，处理速度越慢，"
+            "请酌情拆分任务"
+        )
+        self.pdf_page_limit_label.setProperty("role", "hint")
+        layout.addWidget(self.pdf_page_limit_label)
 
         self.pdf_page_scroll = QScrollArea()
         self.pdf_page_scroll.setWidgetResizable(True)
@@ -2067,19 +2279,24 @@ class ExcelMergerWindow(QMainWindow):
         layout.addWidget(self.pdf_page_scroll, 1)
 
         save_group = QGroupBox("输出设置")
-        save_layout = QHBoxLayout(save_group)
+        save_layout = QVBoxLayout(save_group)
         save_layout.setContentsMargins(12, 14, 12, 10)
+        save_fields_layout = QHBoxLayout()
         self.pdf_output_folder_edit = QLineEdit()
         self.pdf_output_folder_edit.setReadOnly(True)
         self.pdf_output_folder_edit.setPlaceholderText("请选择结果保存文件夹")
         self.pdf_choose_output_folder_button = QPushButton("选择文件夹")
         self.pdf_output_name_edit = QLineEdit()
         self.pdf_output_name_edit.setPlaceholderText(default_output_name("PDF合并结果"))
-        save_layout.addWidget(QLabel("文件夹："))
-        save_layout.addWidget(self.pdf_output_folder_edit, 2)
-        save_layout.addWidget(self.pdf_choose_output_folder_button)
-        save_layout.addWidget(QLabel("文件名："))
-        save_layout.addWidget(self.pdf_output_name_edit, 1)
+        self.pdf_save_pages_button.setText("保存结果")
+        self.pdf_save_pages_button.setMinimumHeight(44)
+        save_fields_layout.addWidget(QLabel("文件夹："))
+        save_fields_layout.addWidget(self.pdf_output_folder_edit, 2)
+        save_fields_layout.addWidget(self.pdf_choose_output_folder_button)
+        save_fields_layout.addWidget(QLabel("文件名："))
+        save_fields_layout.addWidget(self.pdf_output_name_edit, 1)
+        save_layout.addLayout(save_fields_layout)
+        save_layout.addWidget(self.pdf_save_pages_button)
         layout.addWidget(save_group)
 
         self.pdf_status_label = QLabel("尚未添加 PDF")
@@ -2203,6 +2420,12 @@ class ExcelMergerWindow(QMainWindow):
         image_button_layout.addWidget(self.pdf_clear_images_button)
         image_button_layout.addStretch()
         image_layout.addLayout(image_button_layout)
+        self.pdf_image_limit_label = QLabel(
+            "当前 0 / 300 张；处理数量越多，处理速度越慢，"
+            "请酌情拆分任务"
+        )
+        self.pdf_image_limit_label.setProperty("role", "hint")
+        image_layout.addWidget(self.pdf_image_limit_label)
         self.pdf_image_scroll = QScrollArea()
         self.pdf_image_scroll.setWidgetResizable(True)
         self.pdf_image_board = PdfImageBoard(self)
@@ -2230,31 +2453,62 @@ class ExcelMergerWindow(QMainWindow):
         export_group = QGroupBox("PDF 转图片")
         export_layout = QVBoxLayout(export_group)
         export_layout.setContentsMargins(12, 14, 12, 10)
-        self.pdf_export_source_edit = QLineEdit()
-        self.pdf_export_source_edit.setReadOnly(True)
-        self.pdf_export_source_edit.setPlaceholderText("请选择需要导出图片的 PDF")
-        self.pdf_choose_export_source_button = QPushButton("选择 PDF")
+        export_source_button_layout = QHBoxLayout()
+        self.pdf_choose_export_source_button = QPushButton("添加 PDF")
         self.pdf_choose_export_source_button.setProperty("variant", "accent")
+        self.pdf_add_export_folder_button = QPushButton("添加文件夹")
+        self.pdf_add_export_folder_button.setProperty("variant", "accent")
+        self.pdf_delete_export_source_button = QPushButton("删除选中")
+        self.pdf_delete_export_source_button.setProperty("variant", "danger")
+        self.pdf_clear_export_sources_button = QPushButton("清空全部")
+        export_source_button_layout.addWidget(self.pdf_choose_export_source_button)
+        export_source_button_layout.addWidget(self.pdf_add_export_folder_button)
+        export_source_button_layout.addWidget(self.pdf_delete_export_source_button)
+        export_source_button_layout.addWidget(self.pdf_clear_export_sources_button)
+        export_source_button_layout.addStretch(1)
+        self.pdf_export_source_tree = QTreeWidget()
+        self.pdf_export_source_tree.setHeaderLabels(["PDF 文件", "所在位置"])
+        self.pdf_export_source_tree.setRootIsDecorated(False)
+        self.pdf_export_source_tree.setAlternatingRowColors(True)
+        self.pdf_export_source_tree.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.pdf_export_source_tree.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.pdf_export_source_tree.setMinimumHeight(150)
+        self.pdf_export_source_tree.header().setSectionResizeMode(
+            0, QHeaderView.ResizeToContents
+        )
+        self.pdf_export_source_tree.header().setSectionResizeMode(1, QHeaderView.Stretch)
         self.pdf_export_output_folder_edit = QLineEdit()
         self.pdf_export_output_folder_edit.setReadOnly(True)
         self.pdf_choose_export_output_button = QPushButton("选择文件夹")
-        self.pdf_export_format_combo = QComboBox()
+        self.pdf_export_format_combo = SelectionComboBox()
         self.pdf_export_format_combo.addItems(["JPG", "PNG"])
-        self.pdf_export_button = QPushButton("导出图片")
+        self.pdf_export_quality_combo = SelectionComboBox()
+        self.pdf_export_quality_combo.addItem("普通（150 DPI）", 150)
+        self.pdf_export_quality_combo.addItem("高清（300 DPI，推荐）", 300)
+        self.pdf_export_quality_combo.addItem("超清（450 DPI，处理较慢）", 450)
+        self.pdf_export_quality_combo.setCurrentIndex(1)
+        self.pdf_export_button = QPushButton("开始转换")
         self.pdf_export_button.setMinimumHeight(44)
         self.pdf_export_button.setProperty("variant", "primary")
-        export_layout.addWidget(self.pdf_export_source_edit)
-        export_layout.addWidget(self.pdf_choose_export_source_button)
-        export_layout.addWidget(QLabel("保存文件夹："))
-        export_layout.addWidget(self.pdf_export_output_folder_edit)
-        export_layout.addWidget(self.pdf_choose_export_output_button)
-        export_layout.addWidget(QLabel("图片格式："))
-        export_layout.addWidget(self.pdf_export_format_combo)
+        export_layout.addLayout(export_source_button_layout)
+        export_layout.addWidget(self.pdf_export_source_tree, 1)
+        export_output_layout = QHBoxLayout()
+        export_output_layout.addWidget(QLabel("保存文件夹："))
+        export_output_layout.addWidget(self.pdf_export_output_folder_edit, 1)
+        export_output_layout.addWidget(self.pdf_choose_export_output_button)
+        export_layout.addLayout(export_output_layout)
+        export_option_layout = QHBoxLayout()
+        export_option_layout.addWidget(QLabel("图片格式："))
+        export_option_layout.addWidget(self.pdf_export_format_combo)
+        export_option_layout.addSpacing(18)
+        export_option_layout.addWidget(QLabel("图片清晰度："))
+        export_option_layout.addWidget(self.pdf_export_quality_combo)
+        export_option_layout.addStretch(1)
+        export_layout.addLayout(export_option_layout)
         export_layout.addWidget(self.pdf_export_button)
         self.pdf_export_status_label = QLabel("尚未选择 PDF")
         self.pdf_export_status_label.setProperty("role", "status")
         export_layout.addWidget(self.pdf_export_status_label)
-        export_layout.addStretch(1)
         self.pdf_convert_stack.addWidget(export_group)
 
         self.pdf_image_mode_button.clicked.connect(lambda: self.show_pdf_convert_mode(0))
@@ -2266,6 +2520,16 @@ class ExcelMergerWindow(QMainWindow):
         self.pdf_choose_image_output_button.clicked.connect(self.choose_pdf_image_output_folder)
         self.pdf_images_to_pdf_button.clicked.connect(self.convert_images_to_pdf)
         self.pdf_choose_export_source_button.clicked.connect(self.choose_pdf_export_source)
+        self.pdf_add_export_folder_button.clicked.connect(
+            self.choose_pdf_export_source_folder
+        )
+        self.pdf_delete_export_source_button.clicked.connect(
+            self.delete_selected_pdf_export_sources
+        )
+        self.pdf_clear_export_sources_button.clicked.connect(self.clear_pdf_export_sources)
+        self.pdf_export_source_tree.itemSelectionChanged.connect(
+            self.update_pdf_button_states
+        )
         self.pdf_choose_export_output_button.clicked.connect(self.choose_pdf_export_output_folder)
         self.pdf_export_button.clicked.connect(self.export_pdf_to_images)
         self.show_pdf_convert_mode(0)
@@ -2335,19 +2599,31 @@ class ExcelMergerWindow(QMainWindow):
         self.set_active_navigation("pdf")
         self.setWindowTitle(f"{self.app_name} - PDF 工具箱")
 
-    def show_settings(self):
-        accent_keys = list(ACCENT_PALETTES)
-        labels = [ACCENT_PALETTES[key]["label"] for key in accent_keys]
-        selected_label, accepted = QInputDialog.getItem(
+    def show_settings(self, initial_provider=None):
+        if initial_provider not in PROVIDER_LABELS:
+            initial_provider = selected_provider()
+        accent_options = [
+            (key, palette["label"])
+            for key, palette in ACCENT_PALETTES.items()
+        ]
+        dialog = SoftwareSettingsDialog(
+            initial_provider,
+            accent_options,
+            self.accent_name,
             self,
-            "软件设置",
-            "主题色调：",
-            labels,
-            accent_keys.index(self.accent_name),
-            False,
         )
-        if accepted:
-            self.save_accent_setting(accent_keys[labels.index(selected_label)])
+        dialog.setStyleSheet(self.styleSheet())
+        dialog.accent_changed.connect(self.save_accent_setting)
+        if dialog.exec() == QDialog.Accepted:
+            try:
+                select_provider(dialog.selected_provider)
+            except OSError as error:
+                QMessageBox.warning(self, "无法保存选择", str(error))
+        provider = selected_provider()
+        index = self.document_ocr_provider_combo.findData(provider)
+        if index >= 0:
+            self.document_ocr_provider_combo.setCurrentIndex(index)
+        self.refresh_document_ocr_status()
 
     def save_accent_setting(self, accent_name):
         if accent_name not in ACCENT_PALETTES:
@@ -2386,6 +2662,120 @@ class ExcelMergerWindow(QMainWindow):
     def apply_theme(self):
         colors = build_theme_colors(self.accent_name)
         self.setStyleSheet(build_theme_stylesheet(colors))
+
+    def task_is_running(self):
+        return bool(
+            (self.background_task_thread and self.background_task_thread.isRunning())
+            or (self.document_ocr_thread and self.document_ocr_thread.isRunning())
+        )
+
+    def set_global_task_active(self, active):
+        self.stack.setEnabled(not active)
+        self.sidebar.setEnabled(not active)
+
+    def start_background_task(
+        self,
+        title,
+        message,
+        worker,
+        on_success,
+        on_failure=None,
+        total=0,
+        status_label=None,
+    ):
+        if self.task_is_running():
+            QMessageBox.information(
+                self,
+                "任务正在进行",
+                "当前任务尚未完成，请等待完成后再开始新的任务。",
+            )
+            return False
+
+        progress = QProgressDialog(
+            f"任务正在执行，请勿关闭软件。\n\n{message}",
+            "",
+            0,
+            max(int(total), 0),
+            self,
+        )
+        progress.setWindowTitle(title)
+        progress.setCancelButton(None)
+        progress.setMinimumDuration(0)
+        progress.setWindowModality(Qt.WindowModal)
+        if total <= 0:
+            progress.setRange(0, 0)
+        progress.show()
+
+        thread = BackgroundTaskThread(worker, self)
+        self.background_task_thread = thread
+        self.background_task_progress = progress
+        self.background_task_status_label = status_label
+        self.background_task_title = title
+        thread.progress.connect(
+            lambda value, maximum, text, task=thread: self.background_task_progress_changed(
+                task, value, maximum, text
+            )
+        )
+        thread.completed.connect(
+            lambda result, task=thread: self.background_task_completed(
+                task, result, on_success
+            )
+        )
+        thread.failed.connect(
+            lambda error, task=thread: self.background_task_failed(
+                task, error, on_failure
+            )
+        )
+        thread.finished.connect(thread.deleteLater)
+        self.set_global_task_active(True)
+        thread.start()
+        return True
+
+    def background_task_progress_changed(self, thread, value, total, text):
+        if self.background_task_thread is not thread:
+            return
+        progress = self.background_task_progress
+        if progress is not None:
+            if total > 0:
+                progress.setRange(0, total)
+                progress.setValue(max(0, min(value, total)))
+            else:
+                progress.setRange(0, 0)
+            progress.setLabelText(
+                "任务正在执行，请勿关闭软件。\n\n" + text
+            )
+        if self.background_task_status_label is not None:
+            self.background_task_status_label.setText(text)
+
+    def clear_background_task(self, thread):
+        if self.background_task_thread is not thread:
+            return False
+        if self.background_task_progress is not None:
+            self.background_task_progress.close()
+        self.background_task_thread = None
+        self.background_task_progress = None
+        self.background_task_status_label = None
+        self.background_task_title = ""
+        self.set_global_task_active(False)
+        return True
+
+    def background_task_completed(self, thread, result, on_success):
+        if not self.clear_background_task(thread):
+            return
+        on_success(result)
+
+    def background_task_failed(self, thread, error_message, on_failure):
+        title = self.background_task_title
+        if not self.clear_background_task(thread):
+            return
+        if on_failure is not None:
+            on_failure(error_message)
+            return
+        QMessageBox.critical(
+            self,
+            f"{title or '任务'}失败",
+            error_message,
+        )
 
     def selected_pdf_page_items(self):
         return [card for card in self.pdf_page_cards if card.is_checked()]
@@ -2453,8 +2843,14 @@ class ExcelMergerWindow(QMainWindow):
             )
         if hasattr(self, "pdf_export_button"):
             self.pdf_export_button.setEnabled(
-                bool(self.pdf_export_source_file)
+                bool(self.pdf_export_source_files)
                 and bool(self.pdf_export_output_folder_edit.text())
+            )
+            self.pdf_delete_export_source_button.setEnabled(
+                bool(self.pdf_export_source_tree.selectedItems())
+            )
+            self.pdf_clear_export_sources_button.setEnabled(
+                bool(self.pdf_export_source_files)
             )
 
     def refresh_pdf_page_cards_layout(self):
@@ -2508,6 +2904,10 @@ class ExcelMergerWindow(QMainWindow):
         finally:
             self.updating_pdf_page_numbers = False
         total = len(self.pdf_page_cards)
+        self.pdf_page_limit_label.setText(
+            f"当前 {total:,} / {PDF_PAGE_MAX_COUNT:,} 页；"
+            "处理数量越多，处理速度越慢，请酌情拆分任务"
+        )
         checked = len(self.selected_pdf_page_items())
         if total:
             self.pdf_status_label.setText(
@@ -2594,44 +2994,96 @@ class ExcelMergerWindow(QMainWindow):
         dialog.exec()
 
     def add_pdf_paths(self, pdf_files):
-        pdf_files = [os.path.abspath(path) for path in pdf_files if path]
+        pdf_files = tuple(os.path.abspath(path) for path in pdf_files if path)
         if not pdf_files:
-            return
-        self.set_pdf_output_defaults(pdf_files)
-        progress = QProgressDialog("正在生成页面缩略图…", "", 0, len(pdf_files), self)
-        progress.setWindowTitle("PDF 工具箱")
-        progress.setCancelButton(None)
-        progress.setMinimumDuration(0)
-        progress.setWindowModality(Qt.WindowModal)
-        progress.show()
+            return False
 
-        QApplication.setOverrideCursor(Qt.WaitCursor)
-        try:
-            for file_index, pdf_file in enumerate(pdf_files, 1):
-                progress.setLabelText(f"正在读取：{Path(pdf_file).name}")
-                QApplication.processEvents()
-                for page_index in range(page_count(pdf_file)):
-                    thumbnail = Path(self.pdf_thumbnail_tempdir.name) / (
-                        f"thumb_{len(self.pdf_page_cards)}_{page_index}.png"
-                    )
-                    data = {
+        def count_pages(progress_callback):
+            counts = []
+            total = len(pdf_files)
+            for index, pdf_file in enumerate(pdf_files, 1):
+                progress_callback(
+                    index - 1,
+                    total,
+                    f"正在统计第 {index} / {total} 个 PDF：{Path(pdf_file).name}",
+                )
+                counts.append((pdf_file, page_count(pdf_file)))
+                progress_callback(index, total, f"已统计 {index} / {total} 个 PDF")
+            return tuple(counts)
+
+        return self.start_background_task(
+            "PDF 工具箱",
+            "正在统计 PDF 页数…",
+            count_pages,
+            lambda counts: self.pdf_page_count_checked(pdf_files, counts),
+            lambda error: QMessageBox.critical(self, "读取 PDF 失败", error),
+            total=len(pdf_files),
+            status_label=self.pdf_status_label,
+        )
+
+    def pdf_page_count_checked(self, pdf_files, counts):
+        added_pages = sum(count for _pdf_file, count in counts)
+        if not self.confirm_large_addition(
+            "PDF 页面",
+            len(self.pdf_page_cards),
+            added_pages,
+            PDF_PAGE_WARNING_COUNT,
+            PDF_PAGE_MAX_COUNT,
+        ):
+            return False
+        self.set_pdf_output_defaults(pdf_files)
+        return self.start_rendering_pdf_pages(counts)
+
+    def start_rendering_pdf_pages(self, counts):
+        start_index = len(self.pdf_page_cards)
+        jobs = [
+            (pdf_file, page_index)
+            for pdf_file, count in counts
+            for page_index in range(count)
+        ]
+
+        def load_pages(progress_callback):
+            total = len(jobs)
+            pages = []
+            for index, (pdf_file, page_index) in enumerate(jobs, 1):
+                progress_callback(
+                    index - 1,
+                    total,
+                    f"正在生成第 {index} / {total} 页缩略图：{Path(pdf_file).name}",
+                )
+                thumbnail = Path(self.pdf_thumbnail_tempdir.name) / (
+                    f"thumb_{start_index + index}_{uuid.uuid4().hex}.png"
+                )
+                pages.append(
+                    {
                         "source_file": pdf_file,
                         "page_index": page_index,
                         "rotation": 0,
-                        "thumbnail": render_page_thumbnail(pdf_file, page_index, thumbnail),
+                        "thumbnail": render_page_thumbnail(
+                            pdf_file, page_index, thumbnail
+                        ),
                     }
-                    card = PdfPageCard(self, data)
-                    card.update_display(len(self.pdf_page_cards) + 1)
-                    self.pdf_page_cards.append(card)
-                progress.setValue(file_index)
-        except Exception as error:
-            QMessageBox.critical(self, "读取 PDF 失败", str(error))
-        finally:
-            QApplication.restoreOverrideCursor()
-            progress.close()
+                )
+                progress_callback(index, total, f"已读取 {index} / {total} 页")
+            return pages
 
-        self.refresh_pdf_page_numbers()
-        self.refresh_pdf_page_cards_layout()
+        def pages_loaded(pages):
+            for data in pages:
+                card = PdfPageCard(self, data)
+                card.update_display(len(self.pdf_page_cards) + 1)
+                self.pdf_page_cards.append(card)
+            self.refresh_pdf_page_numbers()
+            self.refresh_pdf_page_cards_layout()
+
+        return self.start_background_task(
+            "PDF 工具箱",
+            "正在读取 PDF 并生成页面缩略图…",
+            load_pages,
+            pages_loaded,
+            lambda error: QMessageBox.critical(self, "读取 PDF 失败", error),
+            total=len(jobs),
+            status_label=self.pdf_status_label,
+        )
 
     def add_pdf_files(self):
         filenames, _ = QFileDialog.getOpenFileNames(
@@ -2689,8 +3141,8 @@ class ExcelMergerWindow(QMainWindow):
         self.refresh_pdf_page_cards_layout()
         self.refresh_pdf_page_numbers()
 
-    def save_pdf_result_message(self, title, result, extra_text=""):
-        open_target = result.output_file or (
+    def save_pdf_result_message(self, title, result, extra_text="", open_target=""):
+        open_target = open_target or result.output_file or (
             str(Path(result.image_files[0]).parent) if result.image_files else ""
         )
         message = QMessageBox(self)
@@ -2723,16 +3175,23 @@ class ExcelMergerWindow(QMainWindow):
                 self.pdf_output_name_edit.text(),
                 default_output_name("PDF合并结果"),
             )
-            result = save_pages(
-                self.pdf_page_refs_from_items(self.all_pdf_page_items()),
-                output_file,
-                "PDF 页面整理",
-            )
+            page_refs = self.pdf_page_refs_from_items(self.all_pdf_page_items())
         except Exception as error:
             QMessageBox.critical(self, "保存失败", str(error))
             return
-        self.pdf_status_label.setText(f"已保存：{Path(result.output_file).name}")
-        self.save_pdf_result_message("PDF 保存完成", result)
+
+        def saved(result):
+            self.pdf_status_label.setText(f"已保存：{Path(result.output_file).name}")
+            self.save_pdf_result_message("PDF 保存完成", result)
+
+        self.start_background_task(
+            "正在保存 PDF",
+            "正在按当前顺序生成 PDF…",
+            lambda _progress: save_pages(page_refs, output_file, "PDF 页面整理"),
+            saved,
+            lambda error: QMessageBox.critical(self, "保存失败", error),
+            status_label=self.pdf_status_label,
+        )
 
     def split_selected_pdf_pages(self):
         selected = self.selected_pdf_page_items()
@@ -2744,16 +3203,25 @@ class ExcelMergerWindow(QMainWindow):
                 default_output_name("PDF拆分结果"),
                 default_output_name("PDF拆分结果"),
             )
-            result = save_pages(
-                self.pdf_page_refs_from_items(selected),
-                output_file,
-                "PDF 拆分选中页面",
-            )
+            page_refs = self.pdf_page_refs_from_items(selected)
         except Exception as error:
             QMessageBox.critical(self, "拆分失败", str(error))
             return
-        self.pdf_status_label.setText(f"已拆分：{Path(result.output_file).name}")
-        self.save_pdf_result_message("PDF 拆分完成", result)
+
+        def split_saved(result):
+            self.pdf_status_label.setText(f"已拆分：{Path(result.output_file).name}")
+            self.save_pdf_result_message("PDF 拆分完成", result)
+
+        self.start_background_task(
+            "正在拆分 PDF",
+            "正在保存勾选的页面…",
+            lambda _progress: save_pages(
+                page_refs, output_file, "PDF 拆分选中页面"
+            ),
+            split_saved,
+            lambda error: QMessageBox.critical(self, "拆分失败", error),
+            status_label=self.pdf_status_label,
+        )
 
     def choose_pdf_compress_source(self):
         filename, _ = QFileDialog.getOpenFileName(
@@ -2825,24 +3293,31 @@ class ExcelMergerWindow(QMainWindow):
                 self.pdf_compress_output_name_edit.text(),
                 default_output_name("PDF压缩结果"),
             )
-            result = compress_pdf(
-                self.pdf_compress_source_file,
-                output_file,
-                self.current_pdf_compression_preset(),
-            )
         except Exception as error:
             QMessageBox.critical(self, "压缩失败", str(error))
             return
+        source_file = self.pdf_compress_source_file
+        preset = self.current_pdf_compression_preset()
 
-        if result.saved_percent > 0:
-            text = (
-                f"压缩完成：{format_file_size(result.source_size)} → "
-                f"{format_file_size(result.output_size)}，节省 {result.saved_percent}%"
-            )
-        else:
-            text = "压缩完成，但这个 PDF 压缩效果不明显。"
-        self.pdf_compress_status_label.setText(text)
-        self.save_pdf_result_message("PDF 压缩完成", result, text)
+        def compressed(result):
+            if result.saved_percent > 0:
+                text = (
+                    f"压缩完成：{format_file_size(result.source_size)} → "
+                    f"{format_file_size(result.output_size)}，节省 {result.saved_percent}%"
+                )
+            else:
+                text = "压缩完成，但这个 PDF 压缩效果不明显。"
+            self.pdf_compress_status_label.setText(text)
+            self.save_pdf_result_message("PDF 压缩完成", result, text)
+
+        self.start_background_task(
+            "正在压缩 PDF",
+            f"正在处理：{Path(source_file).name}",
+            lambda _progress: compress_pdf(source_file, output_file, preset),
+            compressed,
+            lambda error: QMessageBox.critical(self, "压缩失败", error),
+            status_label=self.pdf_compress_status_label,
+        )
 
     def show_pdf_convert_mode(self, index):
         self.pdf_convert_stack.setCurrentIndex(index)
@@ -2896,6 +3371,10 @@ class ExcelMergerWindow(QMainWindow):
         for index, card in enumerate(self.pdf_image_cards, 1):
             card.update_display(index)
         count = len(self.pdf_image_cards)
+        self.pdf_image_limit_label.setText(
+            f"当前 {count:,} / {PDF_IMAGE_MAX_COUNT:,} 张；"
+            "处理数量越多，处理速度越慢，请酌情拆分任务"
+        )
         checked = len(self.selected_pdf_image_cards())
         if count:
             self.pdf_image_status_label.setText(
@@ -2937,30 +3416,95 @@ class ExcelMergerWindow(QMainWindow):
         dialog.resize(960, 760)
         dialog.exec()
 
-    def add_pdf_image_paths(self, filenames):
+    def start_adding_pdf_images(self, filenames):
         if not filenames:
-            return 0, 0
+            return False
         existing = {card.image_file for card in self.pdf_image_cards}
-        added = 0
-        skipped = 0
+        candidates = []
+        seen = set(existing)
+        skipped_before_check = 0
         for filename in filenames:
             normalized = os.path.abspath(filename)
-            if not is_supported_image_file(normalized):
-                skipped += 1
+            if normalized in seen:
                 continue
-            if normalized not in existing:
-                self.pdf_image_cards.append(PdfImageCard(self, normalized))
-                existing.add(normalized)
-                added += 1
-        if self.pdf_image_cards and not self.pdf_image_output_folder_edit.text():
-            folder = str(Path(self.pdf_image_cards[0].image_file).parent / "output")
-            self.pdf_image_output_folder_edit.setText(folder)
-            self.pdf_image_output_folder_edit.setToolTip(folder)
-        if not self.pdf_image_output_name_edit.text():
-            self.pdf_image_output_name_edit.setText(default_output_name("图片合成PDF"))
-        self.refresh_pdf_image_cards_layout()
-        self.refresh_pdf_image_cards()
-        return added, skipped
+            seen.add(normalized)
+            path = Path(normalized)
+            if not path.is_file() or path.suffix.lower() not in IMAGE_SUFFIXES:
+                skipped_before_check += 1
+                continue
+            candidates.append(normalized)
+        if not candidates:
+            QMessageBox.information(self, "没有图片", "没有找到可用图片。")
+            return False
+        if not self.confirm_large_addition(
+            "图片",
+            len(self.pdf_image_cards),
+            len(candidates),
+            PDF_IMAGE_WARNING_COUNT,
+            PDF_IMAGE_MAX_COUNT,
+        ):
+            return False
+
+        def prepare_images(progress_callback):
+            prepared = []
+            skipped = skipped_before_check
+            total = len(candidates)
+            for index, filename in enumerate(candidates, 1):
+                progress_callback(
+                    index - 1,
+                    total,
+                    f"正在准备第 {index} / {total} 张图片：{Path(filename).name}",
+                )
+                thumbnail_file = Path(self.pdf_thumbnail_tempdir.name) / (
+                    f"image_{uuid.uuid4().hex}.jpg"
+                )
+                try:
+                    preview = prepare_image_thumbnail(
+                        filename,
+                        thumbnail_file,
+                        (PDF_PAGE_THUMBNAIL_SIZE.width(), PDF_PAGE_THUMBNAIL_SIZE.height()),
+                    )
+                except Exception:
+                    skipped += 1
+                else:
+                    prepared.append((filename, preview))
+                progress_callback(index, total, f"已准备 {index} / {total} 张图片")
+            return tuple(prepared), skipped
+
+        def images_prepared(result):
+            prepared, skipped = result
+            for filename, thumbnail_file in prepared:
+                self.pdf_image_cards.append(
+                    PdfImageCard(self, filename, thumbnail_file)
+                )
+            if self.pdf_image_cards and not self.pdf_image_output_folder_edit.text():
+                folder = str(Path(self.pdf_image_cards[0].image_file).parent / "output")
+                self.pdf_image_output_folder_edit.setText(folder)
+                self.pdf_image_output_folder_edit.setToolTip(folder)
+            if not self.pdf_image_output_name_edit.text():
+                self.pdf_image_output_name_edit.setText(default_output_name("图片合成PDF"))
+            self.refresh_pdf_image_cards_layout()
+            self.refresh_pdf_image_cards()
+            if not prepared:
+                QMessageBox.information(self, "没有图片", "没有找到可用图片。")
+            elif skipped:
+                self.pdf_image_status_label.setText(
+                    f"已添加 {len(self.pdf_image_cards)} 张图片，"
+                    f"跳过 {skipped} 个非图片或无法读取文件。"
+                )
+
+        return self.start_background_task(
+            "正在添加图片",
+            f"准备检查 {len(candidates)} 张图片…",
+            prepare_images,
+            images_prepared,
+            lambda error: QMessageBox.critical(self, "添加图片失败", error),
+            total=len(candidates),
+            status_label=self.pdf_image_status_label,
+        )
+
+    def add_pdf_image_paths(self, filenames):
+        return self.start_adding_pdf_images(filenames)
 
     def add_pdf_images(self):
         suffixes = " ".join(f"*{suffix}" for suffix in sorted(IMAGE_SUFFIXES))
@@ -2972,11 +3516,7 @@ class ExcelMergerWindow(QMainWindow):
         )
         if filenames:
             self.remember_dialog_folder("open", filenames[0])
-        added, skipped = self.add_pdf_image_paths(filenames)
-        if skipped:
-            self.pdf_image_status_label.setText(
-                f"已添加 {len(self.pdf_image_cards)} 张图片，跳过 {skipped} 个非图片或无法读取文件。"
-            )
+        self.start_adding_pdf_images(filenames)
 
     def add_pdf_image_folder(self):
         folder = QFileDialog.getExistingDirectory(
@@ -2993,14 +3533,7 @@ class ExcelMergerWindow(QMainWindow):
             for path in sorted(Path(folder).iterdir(), key=lambda item: item.name.lower())
             if path.is_file()
         ]
-        added, skipped = self.add_pdf_image_paths(image_files)
-        if not added:
-            QMessageBox.information(self, "没有图片", "这个文件夹里没有可用图片。")
-            return
-        if skipped:
-            self.pdf_image_status_label.setText(
-                f"已添加 {len(self.pdf_image_cards)} 张图片，跳过 {skipped} 个非图片或无法读取文件。"
-            )
+        self.start_adding_pdf_images(image_files)
 
     def clear_pdf_images(self):
         for card in self.pdf_image_cards:
@@ -3043,31 +3576,141 @@ class ExcelMergerWindow(QMainWindow):
                 default_output_name("图片合成PDF"),
             )
             self.sync_pdf_image_source_files()
-            result = images_to_pdf(self.pdf_image_source_files, output_file)
+            image_files = tuple(self.pdf_image_source_files)
         except Exception as error:
             QMessageBox.critical(self, "合成失败", str(error))
             return
-        self.pdf_image_status_label.setText(f"已生成：{Path(result.output_file).name}")
-        self.save_pdf_result_message("图片合成 PDF 完成", result)
+
+        def converted(result):
+            self.pdf_image_status_label.setText(
+                f"已生成：{Path(result.output_file).name}"
+            )
+            self.save_pdf_result_message("图片合成 PDF 完成", result)
+
+        self.start_background_task(
+            "正在合成 PDF",
+            f"正在处理 {len(image_files)} 张图片…",
+            lambda _progress: images_to_pdf(image_files, output_file),
+            converted,
+            lambda error: QMessageBox.critical(self, "合成失败", error),
+            status_label=self.pdf_image_status_label,
+        )
 
     def choose_pdf_export_source(self):
-        filename, _ = QFileDialog.getOpenFileName(
+        filenames, _ = QFileDialog.getOpenFileNames(
             self,
-            "选择需要导出图片的 PDF",
+            "选择一个或多个需要导出图片的 PDF",
             self.dialog_folder("open"),
             "PDF 文件 (*.pdf)",
         )
-        if not filename:
+        if not filenames:
             return
-        self.remember_dialog_folder("open", filename)
-        self.pdf_export_source_file = os.path.abspath(filename)
-        self.pdf_export_source_edit.setText(self.pdf_export_source_file)
-        self.pdf_export_source_edit.setToolTip(self.pdf_export_source_file)
-        folder = str(Path(self.pdf_export_source_file).parent / f"{Path(filename).stem}_图片")
+        self.remember_dialog_folder("open", filenames[0])
+        added, repeated = self.add_pdf_export_sources(filenames)
+        self.ensure_pdf_export_output_folder()
+        status = f"已添加 {len(self.pdf_export_source_files)} 个 PDF"
+        if repeated:
+            status += f"，忽略 {repeated} 个重复文件"
+        elif not added:
+            status += "，没有新增文件"
+        self.pdf_export_status_label.setText(status)
+
+    def choose_pdf_export_source_folder(self):
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            "选择包含 PDF 的文件夹",
+            self.dialog_folder("open"),
+            QFileDialog.ShowDirsOnly,
+        )
+        if not folder:
+            return
+        self.remember_dialog_folder("open", folder)
+        found, added, repeated = self.add_pdf_export_source_folder(folder)
+        if not found:
+            QMessageBox.information(
+                self,
+                "没有 PDF",
+                "这个文件夹当前层级中没有 PDF 文件。",
+            )
+            return
+        self.ensure_pdf_export_output_folder()
+        status = f"文件夹中找到 {found} 个 PDF，新增 {added} 个"
+        if repeated:
+            status += f"，忽略 {repeated} 个重复文件"
+        self.pdf_export_status_label.setText(status)
+
+    def add_pdf_export_source_folder(self, folder):
+        folder = Path(folder).expanduser().resolve()
+        pdf_files = [
+            str(path)
+            for path in sorted(folder.iterdir(), key=lambda item: item.name.lower())
+            if path.is_file() and path.suffix.lower() == ".pdf"
+        ]
+        added, repeated = self.add_pdf_export_sources(pdf_files)
+        return len(pdf_files), added, repeated
+
+    def ensure_pdf_export_output_folder(self):
+        if self.pdf_export_output_folder_edit.text() or not self.pdf_export_source_files:
+            return
+        folder = str(Path(self.pdf_export_source_files[0]).parent / "PDF转图片结果")
         self.pdf_export_output_folder_edit.setText(folder)
         self.pdf_export_output_folder_edit.setToolTip(folder)
-        self.pdf_export_status_label.setText("已选择 PDF，可导出图片")
+
+    def add_pdf_export_sources(self, filenames):
+        known = set(self.pdf_export_source_files)
+        added = 0
+        repeated = 0
+        for filename in filenames:
+            source = str(Path(filename).expanduser().resolve())
+            if Path(source).suffix.lower() != ".pdf" or not Path(source).is_file():
+                continue
+            if source in known:
+                repeated += 1
+                continue
+            self.pdf_export_source_files.append(source)
+            known.add(source)
+            added += 1
+        self.refresh_pdf_export_source_tree()
+        return added, repeated
+
+    def refresh_pdf_export_source_tree(self):
+        self.pdf_export_source_tree.clear()
+        for source_file in self.pdf_export_source_files:
+            source = Path(source_file)
+            item = QTreeWidgetItem([source.name, str(source.parent)])
+            item.setData(0, Qt.UserRole, source_file)
+            item.setToolTip(0, source_file)
+            item.setToolTip(1, source_file)
+            self.pdf_export_source_tree.addTopLevelItem(item)
+        if self.pdf_export_source_files:
+            self.pdf_export_status_label.setText(
+                f"已添加 {len(self.pdf_export_source_files)} 个 PDF，可开始导出图片"
+            )
+        else:
+            self.pdf_export_status_label.setText("尚未选择 PDF")
         self.update_pdf_button_states()
+
+    def delete_selected_pdf_export_sources(self):
+        selected = {
+            item.data(0, Qt.UserRole)
+            for item in self.pdf_export_source_tree.selectedItems()
+        }
+        if not selected:
+            return
+        self.pdf_export_source_files = [
+            source for source in self.pdf_export_source_files if source not in selected
+        ]
+        self.refresh_pdf_export_source_tree()
+
+    def clear_pdf_export_sources(self):
+        if not self.pdf_export_source_files:
+            return
+        if not self.confirm_list_change(
+            f"是否清空已添加的 {len(self.pdf_export_source_files)} 个 PDF"
+        ):
+            return
+        self.pdf_export_source_files = []
+        self.refresh_pdf_export_source_tree()
 
     def choose_pdf_export_output_folder(self):
         folder = QFileDialog.getExistingDirectory(
@@ -3082,17 +3725,62 @@ class ExcelMergerWindow(QMainWindow):
             self.update_pdf_button_states()
 
     def export_pdf_to_images(self):
-        try:
-            result = pdf_to_images(
-                self.pdf_export_source_file,
-                self.pdf_export_output_folder_edit.text(),
-                self.pdf_export_format_combo.currentText().lower(),
+        source_files = tuple(self.pdf_export_source_files)
+        output_folder = self.pdf_export_output_folder_edit.text()
+        image_format = self.pdf_export_format_combo.currentText().lower()
+        dpi = self.pdf_export_quality_combo.currentData()
+
+        def export_completed(result):
+            success_count = len(result.source_files)
+            failure_count = len(result.failures)
+            image_count = len(result.image_files)
+            if success_count == 0 and failure_count:
+                self.pdf_export_status_label.setText(
+                    f"转换失败：0 个成功，{failure_count} 个失败"
+                )
+                QMessageBox.critical(
+                    self,
+                    "PDF 转换失败",
+                    f"所有 PDF 都转换失败，未生成图片。\n\n"
+                    f"详细原因已记录在日志中：\n{result.log_file}",
+                )
+                return
+            self.pdf_export_status_label.setText(
+                f"处理完成：成功 {success_count} 个，失败 {failure_count} 个，"
+                f"共生成 {image_count} 张图片"
             )
-        except Exception as error:
-            QMessageBox.critical(self, "导出失败", str(error))
-            return
-        self.pdf_export_status_label.setText(f"已导出 {len(result.image_files)} 张图片")
-        self.save_pdf_result_message("PDF 导出图片完成", result)
+            detail = (
+                f"成功 PDF：{success_count} 个\n"
+                f"失败 PDF：{failure_count} 个\n"
+                f"生成图片：{image_count} 张"
+            )
+            if result.failures:
+                failure_names = "、".join(
+                    Path(source).name for source, _ in result.failures
+                )
+                detail += f"\n失败文件：{failure_names}\n详细原因已记录在日志中。"
+            self.save_pdf_result_message(
+                "PDF 导出图片完成",
+                result,
+                detail,
+                output_folder,
+            )
+
+        self.start_background_task(
+            "正在转换 PDF",
+            f"准备转换 {len(source_files)} 个 PDF…",
+            lambda progress: pdfs_to_images(
+                source_files,
+                output_folder,
+                image_format,
+                dpi,
+                progress_callback=progress,
+            ),
+            export_completed,
+            lambda error: QMessageBox.critical(self, "导出失败", error),
+            total=len(source_files),
+            status_label=self.pdf_export_status_label,
+        )
 
     def refresh_file_list(self, selected_row=None):
         self.refreshing_list = True
@@ -3203,43 +3891,63 @@ class ExcelMergerWindow(QMainWindow):
                 new_paths.append(normalized_path)
 
         if new_paths:
-            progress = QProgressDialog(
-                "正在读取文件信息...",
-                "",
-                0,
-                len(new_paths),
-                self,
-            )
-            progress.setWindowTitle("读取 Excel 文件")
-            progress.setCancelButton(None)
-            progress.setMinimumDuration(0)
-            progress.setWindowModality(Qt.WindowModal)
-            progress.show()
+            def read_file_info(progress_callback):
+                info_by_file = {}
+                failures = []
+                total = len(new_paths)
+                for index, filename in enumerate(new_paths, start=1):
+                    progress_callback(
+                        index - 1,
+                        total,
+                        f"正在读取第 {index} / {total} 个：{os.path.basename(filename)}",
+                    )
+                    try:
+                        info_by_file[filename] = get_file_info(filename)
+                    except Exception as error:
+                        try:
+                            size = format_file_size(os.path.getsize(filename))
+                        except OSError:
+                            size = "无法读取"
+                        info_by_file[filename] = {
+                            "size": size,
+                            "rows": "无法读取",
+                            "columns": "无法读取",
+                            "merged_cells": "无法读取",
+                        }
+                        failures.append((filename, str(error)))
+                    progress_callback(index, total, f"已读取 {index} / {total} 个文件")
+                return info_by_file, failures
 
-            for index, filename in enumerate(new_paths, start=1):
-                progress.setLabelText(f"正在读取：{os.path.basename(filename)}")
-                QApplication.processEvents()
-                try:
-                    self.file_info[filename] = get_file_info(filename)
-                except Exception as error:
-                    self.file_info[filename] = {
-                        "size": format_file_size(os.path.getsize(filename)),
-                        "rows": "无法读取",
-                        "columns": "无法读取",
-                        "merged_cells": "无法读取",
-                    }
+            def file_info_loaded(result):
+                info_by_file, failures = result
+                self.file_info.update(info_by_file)
+                self.refresh_file_list(
+                    selected_row=len(self.files) - 1 if self.files else None
+                )
+                if failures:
+                    detail = "\n".join(
+                        f"{Path(filename).name}：{error}"
+                        for filename, error in failures[:10]
+                    )
                     QMessageBox.warning(
                         self,
-                        "文件信息读取失败",
-                        f"{os.path.basename(filename)}\n{error}",
+                        "部分文件信息读取失败",
+                        f"有 {len(failures)} 个文件暂时无法读取：\n\n{detail}",
                     )
-                progress.setValue(index)
 
-            progress.close()
+            self.start_background_task(
+                "读取 Excel 文件",
+                f"准备读取 {len(new_paths)} 个文件…",
+                read_file_info,
+                file_info_loaded,
+                lambda error: QMessageBox.critical(
+                    self, "文件信息读取失败", error
+                ),
+                total=len(new_paths),
+                status_label=self.status_label,
+            )
 
-        self.refresh_file_list(
-            selected_row=len(self.files) - 1 if self.files else None
-        )
+        self.refresh_file_list(selected_row=len(self.files) - 1 if self.files else None)
         return len(new_paths)
 
     def add_files(self):
@@ -3325,6 +4033,26 @@ class ExcelMergerWindow(QMainWindow):
             QMessageBox.No,
         ) == QMessageBox.Yes
 
+    def confirm_large_addition(self, label, current, added, warning, maximum):
+        total = current + added
+        if total > maximum:
+            QMessageBox.warning(
+                self,
+                "超过数量限制",
+                f"{label}数量最多为 {maximum:,}，本次没有添加。",
+            )
+            return False
+        if current <= warning < total:
+            return QMessageBox.question(
+                self,
+                "数量较多",
+                f"添加后共有 {total:,} 个{label}，处理可能较慢。\n\n"
+                "是否继续？",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            ) == QMessageBox.Yes
+        return True
+
     def delete_selected(self):
         checked_paths = self.checked_file_paths()
         if not checked_paths:
@@ -3381,7 +4109,7 @@ class ExcelMergerWindow(QMainWindow):
         self.rename_rule_secondary_edit.clear()
         self.rename_rule_count_spinbox.setValue(1)
         self.update_rename_rule_inputs()
-        self.refresh_rename_file_list()
+        self.schedule_rename_preview()
 
     def update_rename_rule_inputs(self):
         rule = self.current_rename_rule()
@@ -3432,59 +4160,107 @@ class ExcelMergerWindow(QMainWindow):
             number_digits=self.rename_number_digits_spinbox.value(),
         )
 
-    def refresh_rename_file_list(self):
-        self.rename_file_table.clear()
-        self.rename_previews = list(
-            preview_renames(self.rename_source_files, self.rename_options())
-        )
-        if not self.rename_source_files:
-            empty_item = QTreeWidgetItem(
-                ["", "暂无文件，请添加需要改名的文件", "", "", ""]
-            )
-            empty_item.setFlags(Qt.NoItemFlags)
-            self.rename_file_table.addTopLevelItem(empty_item)
-            self.rename_status_label.setText("尚未添加文件")
-        else:
-            for index, preview in enumerate(self.rename_previews, start=1):
-                blank_preview = (
-                    preview.blocked and "新文件名不能为空" in preview.message
-                )
-                target_name = (
-                    preview.message
-                    if blank_preview
-                    else Path(preview.target_path).name
-                )
-                item = QTreeWidgetItem(
-                    [
-                        f"{index:03d}",
-                        Path(preview.source_path).name,
-                        target_name,
-                        preview.status,
-                        preview.source_path,
-                    ]
-                )
-                item.setData(0, Qt.UserRole, preview.source_path)
-                item.setTextAlignment(0, Qt.AlignCenter)
-                item.setTextAlignment(3, Qt.AlignCenter)
-                item.setToolTip(1, preview.source_path)
-                item.setToolTip(2, preview.message or preview.target_path)
-                item.setToolTip(4, preview.source_path)
-                self.rename_file_table.addTopLevelItem(item)
+    def schedule_rename_preview(self):
+        self.rename_preview_valid = False
+        self.rename_preview_timer.start()
+        self.update_rename_button_states()
 
-            blocked_count = sum(1 for preview in self.rename_previews if preview.blocked)
-            rename_count = sum(
-                1 for preview in self.rename_previews if preview.will_rename
+    def refresh_rename_file_list(self, on_complete=None, force_sync=False):
+        self.rename_preview_valid = False
+        self.update_rename_button_states()
+        files = tuple(self.rename_source_files)
+        options = self.rename_options()
+        if len(files) > RENAME_WARNING_COUNT and not force_sync:
+            self.rename_status_label.setText(
+                f"正在生成 {len(files):,} 个文件的改名预览…"
             )
-            if blocked_count:
-                self.rename_status_label.setText(
-                    f"共 {len(self.rename_previews)} 个文件，{blocked_count} 个需要处理"
+            self.rename_execute_button.setEnabled(False)
+
+            def preview_ready(previews):
+                self.display_rename_previews(previews)
+                if on_complete is not None:
+                    on_complete()
+
+            return self.start_background_task(
+                "正在生成改名预览",
+                f"正在检查 {len(files):,} 个文件…",
+                lambda _progress: preview_renames(files, options),
+                preview_ready,
+                lambda error: QMessageBox.critical(self, "预览失败", error),
+                status_label=self.rename_status_label,
+            )
+
+        previews = preview_renames(files, options)
+        self.display_rename_previews(previews)
+        if on_complete is not None:
+            on_complete()
+        return True
+
+    def display_rename_previews(self, previews):
+        self.rename_file_table.setUpdatesEnabled(False)
+        self.rename_file_table.clear()
+        self.rename_previews = list(previews)
+        count = len(self.rename_source_files)
+        self.rename_limit_label.setText(
+            f"当前 {count:,} / {RENAME_MAX_COUNT:,} 个文件；"
+            "处理数量越多，处理速度越慢，请酌情拆分任务"
+        )
+        try:
+            if not self.rename_source_files:
+                empty_item = QTreeWidgetItem(
+                    ["", "暂无文件，请添加需要改名的文件", "", "", ""]
                 )
-            elif rename_count:
-                self.rename_status_label.setText(
-                    f"共 {len(self.rename_previews)} 个文件，{rename_count} 个将被改名"
-                )
+                empty_item.setFlags(Qt.NoItemFlags)
+                self.rename_file_table.addTopLevelItem(empty_item)
+                self.rename_status_label.setText("尚未添加文件")
             else:
-                self.rename_status_label.setText("当前规则不会改变文件名")
+                items = []
+                for index, preview in enumerate(self.rename_previews, start=1):
+                    blank_preview = (
+                        preview.blocked and "新文件名不能为空" in preview.message
+                    )
+                    target_name = (
+                        preview.message
+                        if blank_preview
+                        else Path(preview.target_path).name
+                    )
+                    item = QTreeWidgetItem(
+                        [
+                            f"{index:03d}",
+                            Path(preview.source_path).name,
+                            target_name,
+                            preview.status,
+                            preview.source_path,
+                        ]
+                    )
+                    item.setData(0, Qt.UserRole, preview.source_path)
+                    item.setTextAlignment(0, Qt.AlignCenter)
+                    item.setTextAlignment(3, Qt.AlignCenter)
+                    item.setToolTip(1, preview.source_path)
+                    item.setToolTip(2, preview.message or preview.target_path)
+                    item.setToolTip(4, preview.source_path)
+                    items.append(item)
+                self.rename_file_table.addTopLevelItems(items)
+
+                blocked_count = sum(
+                    1 for preview in self.rename_previews if preview.blocked
+                )
+                rename_count = sum(
+                    1 for preview in self.rename_previews if preview.will_rename
+                )
+                if blocked_count:
+                    self.rename_status_label.setText(
+                        f"共 {len(self.rename_previews)} 个文件，{blocked_count} 个需要处理"
+                    )
+                elif rename_count:
+                    self.rename_status_label.setText(
+                        f"共 {len(self.rename_previews)} 个文件，{rename_count} 个将被改名"
+                    )
+                else:
+                    self.rename_status_label.setText("当前规则不会改变文件名")
+        finally:
+            self.rename_file_table.setUpdatesEnabled(True)
+        self.rename_preview_valid = True
         self.update_rename_button_states()
 
     def blank_rename_previews(self):
@@ -3515,8 +4291,8 @@ class ExcelMergerWindow(QMainWindow):
         return True
 
     def refresh_rename_preview_with_warning(self):
-        self.refresh_rename_file_list()
-        self.warn_blank_rename_preview()
+        self.rename_preview_timer.stop()
+        self.refresh_rename_file_list(on_complete=self.warn_blank_rename_preview)
 
     def update_rename_button_states(self):
         has_files = bool(self.rename_source_files)
@@ -3526,6 +4302,7 @@ class ExcelMergerWindow(QMainWindow):
         )
         can_rename = (
             has_files
+            and self.rename_preview_valid
             and not any(preview.blocked for preview in self.rename_previews)
             and any(preview.will_rename for preview in self.rename_previews)
         )
@@ -3539,12 +4316,25 @@ class ExcelMergerWindow(QMainWindow):
 
     def add_rename_paths(self, paths):
         existing = set(self.rename_source_files)
+        candidates = []
         for path in paths:
             normalized = os.path.abspath(path)
             if normalized not in existing and Path(normalized).is_file():
-                self.rename_source_files.append(normalized)
+                candidates.append(normalized)
                 existing.add(normalized)
+        if not candidates:
+            return False
+        if not self.confirm_large_addition(
+            "文件",
+            len(self.rename_source_files),
+            len(candidates),
+            RENAME_WARNING_COUNT,
+            RENAME_MAX_COUNT,
+        ):
+            return False
+        self.rename_source_files.extend(candidates)
         self.refresh_rename_file_list()
+        return True
 
     def add_rename_files(self):
         filenames, _ = QFileDialog.getOpenFileNames(
@@ -3627,10 +4417,17 @@ class ExcelMergerWindow(QMainWindow):
             self.open_output_file(result.log_file)
 
     def rename_files(self):
-        self.refresh_rename_file_list()
         if not self.rename_source_files:
             QMessageBox.warning(self, "尚未添加文件", "请先添加需要改名的文件。")
             return
+        if self.rename_preview_timer.isActive() or not self.rename_preview_valid:
+            QMessageBox.information(
+                self,
+                "预览正在更新",
+                "改名预览正在更新，请稍后再开始改名。",
+            )
+            return
+        self.rename_preview_timer.stop()
         if self.warn_blank_rename_preview():
             return
         blocked = [preview for preview in self.rename_previews if preview.blocked]
@@ -3648,24 +4445,30 @@ class ExcelMergerWindow(QMainWindow):
         if not self.confirm_list_change(f"即将改名 {rename_count} 个文件，是否继续"):
             return
 
-        QApplication.setOverrideCursor(Qt.WaitCursor)
-        try:
-            result = apply_renames(self.rename_previews)
-        except Exception as error:
-            QMessageBox.critical(self, "改名失败", str(error))
-            return
-        finally:
-            QApplication.restoreOverrideCursor()
+        previews = tuple(self.rename_previews)
 
-        self.rename_last_log_file = result.log_file
-        self.rename_log_path_edit.setText(result.log_file)
-        self.rename_log_path_edit.setToolTip(result.log_file)
-        self.rename_source_files = [
-            action.target_path if action.status == "成功" else action.source_path
-            for action in result.actions
-        ]
-        self.refresh_rename_file_list()
-        self.show_rename_complete_message(result)
+        def rename_completed(result):
+            self.rename_last_log_file = result.log_file
+            self.rename_log_path_edit.setText(result.log_file)
+            self.rename_log_path_edit.setToolTip(result.log_file)
+            self.rename_source_files = [
+                action.target_path if action.status == "成功" else action.source_path
+                for action in result.actions
+            ]
+            self.show_rename_complete_message(result)
+            self.refresh_rename_file_list()
+
+        self.start_background_task(
+            "正在批量改名",
+            f"准备处理 {rename_count} 个文件…",
+            lambda progress: apply_renames(
+                previews, progress_callback=progress
+            ),
+            rename_completed,
+            lambda error: QMessageBox.critical(self, "改名失败", error),
+            total=len(previews),
+            status_label=self.rename_status_label,
+        )
 
     def refresh_invoice_file_list(self):
         self.invoice_file_table.clear()
@@ -3793,63 +4596,265 @@ class ExcelMergerWindow(QMainWindow):
         if not self.invoice_source_files or not self.invoice_output_folder:
             QMessageBox.warning(self, "尚未完成设置", "请先选择 PDF 发票和 Excel 保存文件夹。")
             return
+        source_files = tuple(self.invoice_source_files)
+        output_folder = self.invoice_output_folder
 
-        progress = QProgressDialog("正在解析 PDF 发票…", "", 0, len(self.invoice_source_files), self)
-        progress.setWindowTitle("正在批量解析发票")
-        progress.setCancelButton(None)
-        progress.setMinimumDuration(0)
-        progress.setWindowModality(Qt.WindowModal)
-        progress.show()
-
-        def update_progress(value, total, text):
-            progress.setMaximum(total)
-            progress.setValue(value)
-            progress.setLabelText(text)
-            QApplication.processEvents()
-
-        results = []
-        failures = []
-        ledger_result = None
-        QApplication.setOverrideCursor(Qt.WaitCursor)
-        try:
+        def process_invoices(progress_callback):
             results, failures = convert_invoice_pdfs(
-                self.invoice_source_files,
-                self.invoice_output_folder,
-                progress_callback=update_progress,
+                source_files,
+                output_folder,
+                progress_callback=progress_callback,
             )
-        except Exception as error:
-            QMessageBox.critical(
-                self,
-                "发票识别失败",
-                f"{error}\n\n未生成未结构化文本或不完整 Excel。",
-            )
-        finally:
-            QApplication.restoreOverrideCursor()
-            progress.close()
-
-        if results:
-            try:
-                ledger_result = write_invoice_ledger(
-                    results,
-                    failures,
-                    self.invoice_output_folder,
+            ledger_result = None
+            ledger_error = ""
+            if results:
+                progress_callback(
+                    len(source_files),
+                    len(source_files),
+                    "正在生成发票台账和处理日志…",
                 )
-            except Exception as error:
+                try:
+                    ledger_result = write_invoice_ledger(
+                        results,
+                        failures,
+                        output_folder,
+                    )
+                except Exception as error:
+                    ledger_error = str(error)
+            return results, failures, ledger_result, ledger_error
+
+        def invoices_completed(result):
+            results, failures, ledger_result, ledger_error = result
+            if ledger_error:
                 QMessageBox.warning(
                     self,
                     "台账生成失败",
-                    f"单张发票 Excel 已生成，但台账汇总失败：\n{error}",
+                    f"单张发票 Excel 已生成，但台账汇总失败：\n{ledger_error}",
                 )
+            if results or failures:
+                self.show_invoice_complete_message(results, failures, ledger_result)
 
-        if results or failures:
-            self.show_invoice_complete_message(results, failures, ledger_result)
+        self.start_background_task(
+            "正在批量解析发票",
+            f"准备解析 {len(source_files)} 个 PDF 发票…",
+            process_invoices,
+            invoices_completed,
+            lambda error: QMessageBox.critical(
+                self,
+                "发票识别失败",
+                f"{error}\n\n未生成未结构化文本或不完整 Excel。",
+            ),
+            total=len(source_files),
+            status_label=self.invoice_file_status_label,
+        )
+
+    def current_document_ocr_provider(self):
+        return self.document_ocr_provider_combo.currentData()
+
+    def refresh_document_ocr_status(self):
+        provider = self.current_document_ocr_provider()
+        if is_provider_configured(provider):
+            self.document_ocr_status_label.setText("密钥已配置")
+        else:
+            self.document_ocr_status_label.setText("未配置（文本页仍可本机提取）")
+
+    def document_ocr_provider_changed(self):
+        provider = self.current_document_ocr_provider()
+        try:
+            select_provider(provider)
+        except OSError as error:
+            QMessageBox.warning(self, "无法保存选择", str(error))
+        self.refresh_document_ocr_status()
+
+    def document_ocr_mode_changed(self, _enabled):
+        self.document_enhanced_layout_checkbox.setChecked(False)
+        self.document_enhanced_layout_checkbox.setEnabled(not _enabled)
+        self.refresh_document_ocr_status()
+
+    def show_ocr_settings(self):
+        self.show_settings(self.current_document_ocr_provider())
+
+    def open_ocr_manual(self):
+        manual_file = resource_path("docs/OCR使用说明.pdf")
+        if not manual_file.is_file():
+            QMessageBox.warning(self, "说明书缺失", "未找到 OCR 使用说明。")
+            return
+        self.open_output_file(str(manual_file))
+
+    def start_document_inspection(self, action):
+        if not self.document_source_file or not self.document_output_folder:
+            QMessageBox.warning(self, "尚未完成设置", "请先选择 PDF 文件。")
+            return
+        source_file = self.document_source_file
+        self.start_background_task(
+            "正在检查 PDF",
+            f"正在检查页面内容：{Path(source_file).name}",
+            lambda _progress: inspect_pdf(source_file),
+            lambda inspection: self.document_inspection_completed(
+                action, inspection
+            ),
+            lambda error: QMessageBox.critical(self, "无法读取 PDF", error),
+            status_label=self.document_ocr_status_label,
+        )
+
+    def document_inspection_completed(self, action, inspection):
+        if not inspection.scanned_pages:
+            if action == "extract":
+                self.start_document_ocr_task("extract", inspection)
+            else:
+                self.start_document_local_processing()
+            return
+
+        provider = self.current_document_ocr_provider()
+        if not is_provider_configured(provider):
+            answer = QMessageBox.question(
+                self,
+                "需要先配置密钥",
+                f"检测到 {len(inspection.scanned_pages)} 个扫描页，但 {PROVIDER_LABELS[provider]} "
+                "尚未配置密钥。\n\n是否现在打开软件设置？",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes,
+            )
+            if answer == QMessageBox.Yes:
+                self.show_ocr_settings()
+            return
+
+        pages = "、".join(str(page) for page in inspection.scanned_pages[:20])
+        if len(inspection.scanned_pages) > 20:
+            pages += "等"
+        answer = QMessageBox.question(
+            self,
+            "发送扫描页前确认",
+            f"文件共 {inspection.page_count} 页，检测到 {len(inspection.scanned_pages)} 个扫描页"
+            f"（第 {pages} 页）。\n\n"
+            f"继续后，软件会将这些页面的图片发送给 {PROVIDER_LABELS[provider]} "
+            "识别文字；有文字的页面不会发送。请确认您有权处理文档内容，"
+            "并已了解该平台的服务条款、隐私规则、额度和费用。\n\n"
+            "Eggie DocuFlow 不代理或转售 OCR 服务，也不接收您的密钥或文档。\n\n"
+            "是否继续并发送这些扫描页？",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if answer != QMessageBox.Yes:
+            self.document_ocr_status_label.setText("已取消发送扫描页")
+            return
+        if action == "process":
+            self.document_result_file = ""
+            self.document_result_path_edit.clear()
+            self.document_status_label.setText("正在识别扫描页并处理文档…")
+        self.start_document_ocr_task(action, inspection)
+
+    def start_document_ocr_task(self, task_kind, inspection):
+        if self.document_ocr_thread is not None or self.task_is_running():
+            return
+        self.document_ocr_task_kind = task_kind
+        if task_kind == "extract":
+            self.document_ocr_result_file = ""
+            self.document_ocr_result_path_edit.clear()
+        title = "文档处理中" if task_kind == "process" else "正在提取 PDF 文字"
+        progress = QProgressDialog(title + "…", "", 0, inspection.page_count, self)
+        progress.setWindowTitle(title)
+        progress.setCancelButton(None)
+        progress.setMinimumDuration(0)
+        progress.setWindowModality(Qt.WindowModal)
+        progress.setLabelText(
+            f"任务正在执行，请勿关闭软件。\n\n{title}…"
+        )
+        progress.show()
+        self.document_ocr_progress = progress
+        self.document_ocr_thread = DocumentOCRThread(
+            task_kind,
+            self.document_source_file,
+            self.document_output_folder,
+            self.current_document_ocr_provider(),
+            self,
+        )
+        self.document_ocr_thread.progress.connect(self.document_ocr_progress_changed)
+        self.document_ocr_thread.completed.connect(self.document_ocr_completed)
+        self.document_ocr_thread.failed.connect(self.document_ocr_failed)
+        self.document_ocr_thread.finished.connect(self.document_ocr_thread_finished)
+        self.update_document_button_states()
+        self.set_global_task_active(True)
+        self.document_ocr_thread.start()
+
+    def document_ocr_progress_changed(self, value, total, text):
+        if self.document_ocr_progress is not None:
+            self.document_ocr_progress.setMaximum(max(total, 1))
+            self.document_ocr_progress.setValue(value)
+            self.document_ocr_progress.setLabelText(
+                "任务正在执行，请勿关闭软件。\n\n" + text
+            )
+        self.document_ocr_status_label.setText(text)
+
+    def document_ocr_completed(self, result):
+        if self.document_ocr_progress is not None:
+            self.document_ocr_progress.close()
+        if self.document_ocr_task_kind == "process":
+            self.finish_document_processing(result)
+            return
+        self.document_ocr_result_file = result.text_file
+        self.document_ocr_result_path_edit.setText(result.text_file)
+        self.document_ocr_result_path_edit.setToolTip(result.text_file)
+        self.document_ocr_status_label.setText(
+            f"文字提取完成：本机 {result.local_page_count} 页，云 OCR {result.cloud_page_count} 页"
+        )
+        message = QMessageBox(self)
+        message.setWindowTitle("文字提取完成")
+        message.setIcon(QMessageBox.Information)
+        message.setText(
+            f"已处理 {result.page_count} 页，其中云 OCR {result.cloud_page_count} 页"
+        )
+        message.setInformativeText(
+            f"文字结果：\n{result.text_file}\n\n"
+            f"保留位置的结果：\n{result.json_file}\n\n"
+            f"处理日志：\n{result.log_file}"
+        )
+        open_button = message.addButton("打开文字结果", QMessageBox.ActionRole)
+        ok_button = message.addButton("确 定", QMessageBox.AcceptRole)
+        message.setDefaultButton(ok_button)
+        message.exec()
+        if message.clickedButton() == open_button:
+            self.open_output_file(result.text_file)
+
+    def document_ocr_failed(self, error_message):
+        if self.document_ocr_progress is not None:
+            self.document_ocr_progress.close()
+        self.document_ocr_status_label.setText("处理失败，未修改原 PDF")
+        QMessageBox.critical(
+            self,
+            "OCR 处理失败",
+            "未生成结果，原 PDF 不会被修改。\n"
+            f"本次未保留不完整结果。\n\n{error_message}",
+        )
+
+    def document_ocr_thread_finished(self):
+        if self.document_ocr_thread is not None:
+            self.document_ocr_thread.deleteLater()
+        self.document_ocr_thread = None
+        self.document_ocr_progress = None
+        self.document_ocr_task_kind = ""
+        self.set_global_task_active(False)
+        self.update_document_button_states()
+
+    def extract_document_text_only(self):
+        self.start_document_inspection("extract")
 
     def update_document_button_states(self):
+        idle = self.document_ocr_thread is None
         self.document_process_button.setEnabled(
-            bool(self.document_source_file and self.document_output_folder)
+            bool(idle and self.document_source_file and self.document_output_folder)
         )
         self.open_document_result_button.setEnabled(
             bool(self.document_result_file and Path(self.document_result_file).exists())
+        )
+        self.document_ocr_extract_button.setEnabled(
+            bool(idle and self.document_source_file and self.document_output_folder)
+        )
+        self.document_ocr_open_button.setEnabled(
+            bool(
+                self.document_ocr_result_file
+                and Path(self.document_ocr_result_file).exists()
+            )
         )
 
     def dropped_pdf_path(self, event):
@@ -3879,11 +4884,13 @@ class ExcelMergerWindow(QMainWindow):
         self.document_source_file = os.path.abspath(filename)
         self.document_output_folder = str(Path(self.document_source_file).parent / "output")
         self.document_result_file = ""
+        self.document_ocr_result_file = ""
         self.document_source_path_edit.setText(self.document_source_file)
         self.document_source_path_edit.setToolTip(self.document_source_file)
         self.document_output_path_edit.setText(self.document_output_folder)
         self.document_output_path_edit.setToolTip(self.document_output_folder)
         self.document_result_path_edit.clear()
+        self.document_ocr_result_path_edit.clear()
         self.document_status_label.setText("已选择 PDF，可开始一键处理")
         self.update_document_button_states()
         return True
@@ -3914,9 +4921,11 @@ class ExcelMergerWindow(QMainWindow):
         self.document_output_folder = os.path.abspath(folder)
         self.remember_dialog_folder("save", self.document_output_folder)
         self.document_result_file = ""
+        self.document_ocr_result_file = ""
         self.document_output_path_edit.setText(self.document_output_folder)
         self.document_output_path_edit.setToolTip(self.document_output_folder)
         self.document_result_path_edit.clear()
+        self.document_ocr_result_path_edit.clear()
         self.document_status_label.setText("保存位置已更新，可开始处理")
         self.update_document_button_states()
 
@@ -3925,51 +4934,69 @@ class ExcelMergerWindow(QMainWindow):
             QMessageBox.warning(self, "尚未完成设置", "请先选择 PDF 文件。")
             return
 
-        progress = QProgressDialog("正在读取 PDF…", "", 0, 0, self)
-        progress.setWindowTitle("文档智能处理")
-        progress.setCancelButton(None)
-        progress.setMinimumDuration(0)
-        progress.setWindowModality(Qt.WindowModal)
-        progress.show()
+        if self.document_ocr_checkbox.isChecked():
+            self.start_document_inspection("process")
+            return
+        self.start_document_local_processing()
 
-        def update_progress(value, total, text):
-            progress.setMaximum(max(total, 1))
-            progress.setValue(value)
-            progress.setLabelText(text)
-            self.document_status_label.setText(text)
-            QApplication.processEvents()
-
+    def start_document_local_processing(self):
+        source_file = self.document_source_file
+        output_folder = self.document_output_folder
+        enhanced_layout = self.document_enhanced_layout_checkbox.isChecked()
         self.document_result_file = ""
         self.document_result_path_edit.clear()
         self.document_status_label.setText("正在识别文档类型…")
         self.update_document_button_states()
-        QApplication.setOverrideCursor(Qt.WaitCursor)
-        error_detail = ""
-        try:
-            if self.document_enhanced_layout_checkbox.isChecked():
-                result = process_layout_document(
-                    self.document_source_file,
-                    self.document_output_folder,
-                    progress_callback=update_progress,
+
+        def process_local(progress_callback):
+            if enhanced_layout:
+                return process_layout_document(
+                    source_file,
+                    output_folder,
+                    progress_callback=progress_callback,
                     style_template="formal_contract",
                 )
-            else:
-                result = process_document(
-                    self.document_source_file,
-                    self.document_output_folder,
-                    progress_callback=update_progress,
-                )
-        except Exception as error:
-            result = {
-                "doc_type": "UNKNOWN",
-                "confidence": 0.0,
-                "output_file": "",
-                "status": "failed",
-            }
-            error_detail = f"\n\n错误信息：{error}"
-        finally:
-            QApplication.restoreOverrideCursor()
-            progress.close()
+            return process_document(
+                source_file,
+                output_folder,
+                progress_callback=progress_callback,
+            )
+
+        def process_failed(error):
+            self.finish_document_processing(
+                {
+                    "doc_type": "UNKNOWN",
+                    "confidence": 0.0,
+                    "output_file": "",
+                    "status": "failed",
+                },
+                f"\n\n错误信息：{error}",
+            )
+
+        self.start_background_task(
+            "文档智能处理",
+            f"正在读取并识别：{Path(source_file).name}",
+            process_local,
+            self.finish_document_processing,
+            process_failed,
+            status_label=self.document_status_label,
+        )
+
+    def closeEvent(self, event):
+        running_threads = [
+            thread for thread in self.findChildren(QThread) if thread.isRunning()
+        ]
+        if running_threads:
+            QMessageBox.warning(
+                self,
+                "任务正在进行",
+                "文件处理或连接检查尚未完成，请等待完成后再关闭软件。",
+            )
+            event.ignore()
+            return
+        super().closeEvent(event)
+
+    def finish_document_processing(self, result, error_detail=""):
 
         if result["status"] != "success" or not result["output_file"]:
             if not error_detail and result.get("error_message"):
@@ -4041,19 +5068,29 @@ class ExcelMergerWindow(QMainWindow):
         self.split_result_folder = ""
         self.split_source_path_edit.setText(self.split_source_file)
         self.split_source_path_edit.setToolTip(self.split_source_file)
+        source_file = self.split_source_file
 
-        try:
-            info = get_file_info(self.split_source_file)
+        def info_loaded(info):
             self.split_source_info = info
             self.update_split_estimate()
-        except Exception as error:
+
+        def info_failed(error):
             self.split_source_info = {}
             self.split_source_status_label.setText("已选择文件，但暂时无法读取行数")
             QMessageBox.warning(
                 self,
                 "文件信息读取失败",
-                f"{os.path.basename(self.split_source_file)}\n{error}",
+                f"{os.path.basename(source_file)}\n{error}",
             )
+
+        self.start_background_task(
+            "读取 Excel 文件",
+            f"正在读取：{Path(source_file).name}",
+            lambda _progress: get_file_info(source_file),
+            info_loaded,
+            info_failed,
+            status_label=self.split_source_status_label,
+        )
 
     def update_split_estimate(self):
         if not self.split_source_file:
@@ -4154,52 +5191,43 @@ class ExcelMergerWindow(QMainWindow):
 
         header_rows = self.split_header_rows_spinbox.value()
         rows_per_file = self.split_rows_per_file_spinbox.value()
+        source_file = self.split_source_file
+        output_folder = self.split_output_folder
 
-        progress = QProgressDialog(
-            "正在准备拆分...",
-            "",
-            0,
-            0,
-            self,
-        )
-        progress.setWindowTitle("正在拆分")
-        progress.setCancelButton(None)
-        progress.setMinimumDuration(0)
-        progress.setWindowModality(Qt.WindowModal)
-        progress.show()
-
-        def update_progress(value, total, filename):
-            progress.setMaximum(total)
-            progress.setValue(value)
-            progress.setLabelText(
-                f"正在拆分：第 {value} / {total} 个文件\n正在生成：{filename}"
-            )
-            QApplication.processEvents()
-
-        QApplication.setOverrideCursor(Qt.WaitCursor)
-        try:
-            split_result = split_workbook_by_rows(
-                self.split_source_file,
-                self.split_output_folder,
+        def split_task(progress_callback):
+            return split_workbook_by_rows(
+                source_file,
+                output_folder,
                 rows_per_file=rows_per_file,
                 header_rows=header_rows,
-                progress_callback=update_progress,
+                progress_callback=lambda value, total, filename: progress_callback(
+                    value,
+                    total,
+                    f"正在拆分第 {value} / {total} 个文件：{filename}",
+                ),
             )
-        except Exception as error:
-            QMessageBox.critical(
+
+        def split_completed(split_result):
+            self.split_result_folder = split_result.output_folder
+            self.split_source_status_label.setText(
+                f"拆分完成，共生成 {split_result.file_count} 个文件"
+            )
+            self.show_split_complete_message(split_result)
+
+        self.start_background_task(
+            "正在拆分 Excel",
+            f"正在准备拆分：{Path(source_file).name}",
+            split_task,
+            split_completed,
+            lambda error: QMessageBox.critical(
                 self,
                 "拆分失败",
                 "出现错误：\n"
                 f"{error}\n\n"
                 "建议检查文件是否正在被 Excel 打开、损坏、加密或包含特殊格式。",
-            )
-            return
-        finally:
-            QApplication.restoreOverrideCursor()
-            progress.close()
-
-        self.split_result_folder = split_result.output_folder
-        self.show_split_complete_message(split_result)
+            ),
+            status_label=self.split_source_status_label,
+        )
 
     def open_output_file(self, output_file=None):
         output_file = output_file or self.output_file
@@ -4247,44 +5275,41 @@ class ExcelMergerWindow(QMainWindow):
             )
             return
 
-        progress = QProgressDialog(
-            "正在准备合并...",
-            "",
-            0,
-            len(self.files),
-            self,
-        )
-        progress.setWindowTitle("正在合并")
-        progress.setCancelButton(None)
-        progress.setMinimumDuration(0)
-        progress.setWindowModality(Qt.WindowModal)
-        progress.show()
+        files = tuple(self.files)
+        output_file = self.output_file
+        skip_rows = self.skip_rows_spinbox.value()
+        keep_merged_cells = self.merged_cells_checkbox.isChecked()
 
-        def update_progress(value, filename):
-            progress.setValue(value)
-            progress.setLabelText(f"正在处理：{filename}")
-            QApplication.processEvents()
-
-        QApplication.setOverrideCursor(Qt.WaitCursor)
-        try:
+        def merge_task(progress_callback):
             build_merged_workbook(
-                self.files,
-                self.output_file,
-                skip_rows=self.skip_rows_spinbox.value(),
-                keep_merged_cells=self.merged_cells_checkbox.isChecked(),
-                progress_callback=update_progress,
+                files,
+                output_file,
+                skip_rows=skip_rows,
+                keep_merged_cells=keep_merged_cells,
+                progress_callback=lambda value, filename: progress_callback(
+                    value,
+                    len(files),
+                    f"正在合并第 {value} / {len(files)} 个：{filename}",
+                ),
             )
-        except Exception as error:
-            QMessageBox.critical(
+            return output_file
+
+        def merge_completed(_result):
+            self.status_label.setText(f"合并完成，共处理 {len(files)} 个文件")
+            self.show_merge_complete_message()
+
+        self.start_background_task(
+            "正在合并 Excel",
+            f"准备合并 {len(files)} 个文件…",
+            merge_task,
+            merge_completed,
+            lambda error: QMessageBox.critical(
                 self,
                 "合并失败",
                 "出现错误：\n"
                 f"{error}\n\n"
                 "建议检查文件是否正在被 Excel 打开、损坏、加密或包含特殊格式。",
-            )
-            return
-        finally:
-            QApplication.restoreOverrideCursor()
-            progress.close()
-
-        self.show_merge_complete_message()
+            ),
+            total=len(files),
+            status_label=self.status_label,
+        )

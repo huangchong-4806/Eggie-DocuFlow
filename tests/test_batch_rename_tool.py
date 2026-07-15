@@ -1,6 +1,9 @@
+import errno
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from batch_rename_tool import (
     RenameOptions,
@@ -101,6 +104,42 @@ class BatchRenameToolTests(unittest.TestCase):
         self.assertIn("原文件名：old.txt", log_text)
         self.assertIn("新文件名：new.txt", log_text)
         self.assertIn("处理结果：成功", log_text)
+
+    def test_apply_never_overwrites_target_created_after_preview(self):
+        source = self.write_file("old.txt")
+        previews = preview_renames(
+            [source],
+            RenameOptions(find_text="old", replace_text="new"),
+        )
+        target = self.root / "new.txt"
+        target.write_text("后来创建的内容", encoding="utf-8")
+
+        result = apply_renames(previews, log_folder=self.root)
+
+        self.assertTrue(source.is_file())
+        self.assertEqual(target.read_text(encoding="utf-8"), "后来创建的内容")
+        self.assertEqual(result.success_count, 0)
+        self.assertEqual(result.failed_count, 1)
+        self.assertIn("已存在", result.actions[0].error)
+
+    @unittest.skipUnless(sys.platform == "darwin", "仅验证 macOS 安全改名")
+    def test_apply_does_not_require_hard_link_support_on_macos(self):
+        source = self.write_file("old.txt")
+        previews = preview_renames(
+            [source],
+            RenameOptions(find_text="old", replace_text="new"),
+        )
+
+        with patch(
+            "batch_rename_tool.os.link",
+            side_effect=OSError(errno.ENOTSUP, "不支持硬链接"),
+        ):
+            result = apply_renames(previews, log_folder=self.root)
+
+        self.assertFalse(source.exists())
+        self.assertEqual((self.root / "new.txt").read_text(encoding="utf-8"), "old.txt")
+        self.assertEqual(result.success_count, 1)
+        self.assertEqual(result.failed_count, 0)
 
     def test_discover_rename_files_ignores_hidden_items(self):
         nested = self.root / "nested"
