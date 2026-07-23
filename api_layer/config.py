@@ -20,13 +20,26 @@ ALLOWED_ENV_KEYS = {"EGGIE_OCR_PROVIDER"} | {
 }
 
 
+def _default_config_dir(platform_name, home_directory, app_data=""):
+    home_directory = Path(home_directory)
+    if platform_name == "nt":
+        if app_data:
+            return Path(app_data) / "Eggie DocuFlow"
+        return home_directory / "AppData" / "Roaming" / "Eggie DocuFlow"
+    if platform_name == "posix" and (home_directory / "Library").is_dir():
+        return home_directory / "Library" / "Application Support" / "Eggie DocuFlow"
+    return home_directory / ".config" / "eggie-docuflow"
+
+
 def get_config_dir():
     override = os.environ.get("EGGIE_OCR_CONFIG_DIR", "").strip()
     if override:
         return Path(override).expanduser().resolve()
-    if os.name == "posix" and (Path.home() / "Library").is_dir():
-        return Path.home() / "Library" / "Application Support" / "Eggie DocuFlow"
-    return Path.home() / ".config" / "eggie-docuflow"
+    return _default_config_dir(
+        os.name,
+        Path.home(),
+        os.environ.get("APPDATA", "").strip(),
+    )
 
 
 def get_config_file():

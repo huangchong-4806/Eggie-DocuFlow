@@ -1,3 +1,4 @@
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -74,6 +75,26 @@ class ExcelMergeToolTests(unittest.TestCase):
                 target.writestr(item, data)
         return replacement
 
+    def remove_dimension(self, filename):
+        replacement = filename.with_suffix(".no-dimension.xlsx")
+        with ZipFile(filename) as source, ZipFile(
+            replacement,
+            "w",
+            ZIP_DEFLATED,
+        ) as target:
+            for item in source.infolist():
+                data = source.read(item.filename)
+                if item.filename == "xl/worksheets/sheet1.xml":
+                    data, replacements = re.subn(
+                        rb"<(?:[A-Za-z_][A-Za-z0-9_.-]*:)?dimension\b[^>]*/>",
+                        b"",
+                        data,
+                        count=1,
+                    )
+                    self.assertEqual(replacements, 1)
+                target.writestr(item, data)
+        return replacement
+
     def test_metadata_reads_rows_from_broken_dimension(self):
         source = self.create_workbook("metadata.xlsx")
         broken = self.corrupt_dimension(source)
@@ -124,6 +145,22 @@ class ExcelMergeToolTests(unittest.TestCase):
             self.assertEqual(worksheet["B3"].number_format, "#,##0.00")
             self.assertEqual(worksheet.column_dimensions["A"].width, 22.0)
             self.assertEqual(len(worksheet.merged_cells.ranges), 0)
+        finally:
+            workbook.close()
+
+    def test_streaming_merge_accepts_valid_file_without_dimension(self):
+        first = self.remove_dimension(self.create_workbook("001.xlsx"))
+        second = self.remove_dimension(self.create_workbook("002.xlsx"))
+        output = self.root / "dimensionless-result.xlsx"
+
+        build_merged_workbook([first, second], output, skip_rows=1)
+
+        workbook = load_workbook(output, data_only=False)
+        worksheet = workbook.active
+        try:
+            self.assertEqual(worksheet.max_row, 3)
+            self.assertEqual(worksheet["A2"].value, "001.xlsx")
+            self.assertEqual(worksheet["A3"].value, "002.xlsx")
         finally:
             workbook.close()
 
