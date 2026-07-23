@@ -1,3 +1,4 @@
+import errno
 import tempfile
 import unittest
 from datetime import date
@@ -25,6 +26,7 @@ from pdf_invoice_tool import (
     convert_invoice_pdfs,
     extract_invoice,
     parse_invoice_blocks,
+    run_invoice_batch_task,
     validate_invoice,
     write_invoice_ledger,
     write_invoice_workbook,
@@ -72,6 +74,7 @@ class PdfInvoiceToolTests(unittest.TestCase):
 
         self.assertEqual(invoice.header["发票号码"], "12345678")
         self.assertEqual(invoice.header["购买方名称"], "购方公司")
+        self.assertEqual(invoice.header["销售方名称"], "销方公司")
         self.assertEqual(invoice.header["销售方税号"], "91310000987654321X")
         self.assertEqual(invoice.header["价税合计（小写）"], Decimal("113.00"))
         self.assertEqual(invoice.header["价税合计（大写）"], "壹佰壹拾叁元整")
@@ -79,6 +82,20 @@ class PdfInvoiceToolTests(unittest.TestCase):
         self.assertEqual(invoice.items[0].project_name, "服务费")
         self.assertEqual(invoice.items[0].tax_rate, Decimal("0.13"))
         self.assertTrue(all(not record.abnormal for record in invoice.validations))
+
+    def test_windows_uses_positioned_reader_without_flattening_invoice_columns(self):
+        source = self.root / "windows-invoice.pdf"
+        source.touch()
+
+        with patch(
+            "pdf_invoice_tool._pdf_text_blocks",
+            return_value=(invoice_blocks(), []),
+        ) as positioned_reader:
+            invoice = extract_invoice(source, prefer_fast=True)
+
+        self.assertEqual(invoice.header["发票号码"], "12345678")
+        self.assertEqual(len(invoice.items), 1)
+        positioned_reader.assert_called_once()
 
     @patch("pdf_invoice_tool.convert_invoice_pdf")
     def test_batch_conversion_keeps_processing_after_one_invoice_fails(self, convert):
@@ -96,6 +113,25 @@ class PdfInvoiceToolTests(unittest.TestCase):
         self.assertEqual(len(results), 2)
         self.assertEqual(Path(failures[0][0]).name, "损坏.pdf")
         self.assertEqual(convert.call_count, 3)
+
+    @patch("pdf_invoice_tool.convert_invoice_pdf")
+    def test_batch_conversion_reports_page_progress(self, convert):
+        def convert_one(_source, _output_folder, progress_callback=None):
+            progress_callback(1, 5, "正在读取第 1 页")
+            progress_callback(5, 5, "正在读取第 5 页")
+            return SimpleNamespace(output_file="invoice.xlsx", item_count=1, abnormal_count=0)
+
+        convert.side_effect = convert_one
+        updates = []
+
+        convert_invoice_pdfs(
+            [self.root / "多页发票.pdf"],
+            self.root,
+            progress_callback=lambda value, total, text: updates.append((value, total, text)),
+        )
+
+        self.assertTrue(any(total == 100 and 0 < value < 100 for value, total, _ in updates))
+        self.assertEqual(updates[-1][:2], (100, 100))
 
     def test_parser_keeps_inconsistent_values_for_validation(self):
         invoice = parse_invoice_blocks(
@@ -334,6 +370,19 @@ class PdfInvoiceToolTests(unittest.TestCase):
                 any(name.startswith("xl/tables/") for name in archive.namelist())
             )
 
+    def test_workbook_can_save_when_a_windows_share_rejects_hard_links(self):
+        invoice = parse_invoice_blocks(invoice_blocks())
+        output = self.root / "shared-folder.xlsx"
+
+        with patch(
+            "utils.file_helper.os.link",
+            side_effect=OSError(errno.EINVAL, "共享文件夹不支持硬链接"),
+        ):
+            write_invoice_workbook(invoice, output)
+
+        with ZipFile(output) as archive:
+            self.assertIsNone(archive.testzip())
+
     def test_invoice_ledger_workbook_opens_and_logs_key_fields(self):
         result = PdfInvoiceResult(
             output_file=str(self.root / "invoice.xlsx"),
@@ -374,6 +423,25 @@ class PdfInvoiceToolTests(unittest.TestCase):
         self.assertIn("失败 source_file=", log_text)
         self.assertIn("文件生成状态", log_text)
 
+    def test_ledger_is_kept_when_only_its_log_cannot_be_written(self):
+        result = PdfInvoiceResult(
+            output_file=str(self.root / "invoice.xlsx"),
+            item_count=1,
+            abnormal_count=0,
+            source_file=str(self.root / "发票.pdf"),
+            invoice_number="12345678",
+        )
+
+        with patch(
+            "pdf_invoice_tool._write_invoice_ledger_log",
+            side_effect=OSError("日志文件无法写入"),
+        ):
+            ledger = write_invoice_ledger([result], [], self.root)
+
+        self.assertTrue(Path(ledger.output_file).is_file())
+        self.assertEqual(ledger.log_file, "")
+        self.assertIn("日志文件无法写入", ledger.log_error)
+
     def test_existing_output_is_preserved_without_confirmation(self):
         invoice = parse_invoice_blocks(invoice_blocks())
         output = self.root / "existing.xlsx"
@@ -397,6 +465,21 @@ class PdfInvoiceToolTests(unittest.TestCase):
 
         self.assertEqual(Path(first.output_file).name, "12345678.xlsx")
         self.assertEqual(Path(second.output_file).name, "12345678_1.xlsx")
+
+    def test_invoice_process_entry_reports_a_completed_batch(self):
+        events = []
+
+        class ResultQueue:
+            def put(self, event):
+                events.append(event)
+
+        with patch(
+            "pdf_invoice_tool.convert_invoice_pdfs",
+            return_value=([], [("sample.pdf", "无法解析")]),
+        ):
+            run_invoice_batch_task(("sample.pdf",), self.root, ResultQueue())
+
+        self.assertEqual(events[-1], ("completed", ([], [("sample.pdf", "无法解析")], None, "")))
 
     def test_missing_amount_does_not_generate_unstructured_output(self):
         with self.assertRaisesRegex(ValueError, "包含“金额”的发票明细"):

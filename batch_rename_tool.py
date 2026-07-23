@@ -7,7 +7,16 @@ from datetime import datetime
 from pathlib import Path
 
 
-ILLEGAL_NAME_CHARS = {"/", "\0", ":"}
+MACOS_ILLEGAL_NAME_CHARS = {"/", "\0", ":"}
+WINDOWS_ILLEGAL_NAME_CHARS = {"/", "\\", "\0", ":", "*", "?", '"', "<", ">", "|"}
+WINDOWS_RESERVED_STEMS = {
+    "CON",
+    "PRN",
+    "AUX",
+    "NUL",
+    *(f"COM{number}" for number in range(1, 10)),
+    *(f"LPT{number}" for number in range(1, 10)),
+}
 MACOS_RENAME_EXCL = 0x00000004
 
 
@@ -94,22 +103,40 @@ def discover_rename_files(folder):
     return files
 
 
-def _normalized_extension(extension, original_suffix):
+def _illegal_name_chars(platform_name=None):
+    platform_name = platform_name or sys.platform
+    return (
+        WINDOWS_ILLEGAL_NAME_CHARS
+        if platform_name == "win32"
+        else MACOS_ILLEGAL_NAME_CHARS
+    )
+
+
+def _normalized_extension(extension, original_suffix, platform_name=None):
     extension = extension.strip()
     if not extension:
         return original_suffix
     if extension == ".":
         raise ValueError("新后缀不能只填写一个点。")
-    if any(character in extension for character in ILLEGAL_NAME_CHARS):
+    if any(character in extension for character in _illegal_name_chars(platform_name)):
         raise ValueError("新后缀包含不允许使用的字符。")
     return extension if extension.startswith(".") else f".{extension}"
 
 
-def _validate_name(filename):
+def _validate_name(filename, platform_name=None):
     if not filename.strip():
         raise ValueError("新文件名不能为空。")
-    if any(character in filename for character in ILLEGAL_NAME_CHARS):
+    if any(character in filename for character in _illegal_name_chars(platform_name)):
         raise ValueError("新文件名包含不允许使用的字符。")
+    if platform_name == "win32":
+        original_stem = filename.split(".", 1)[0]
+        stem = original_stem.rstrip(" .")
+        if not stem:
+            raise ValueError("新文件名不能为空。")
+        if original_stem != stem or filename.endswith((".", " ")):
+            raise ValueError("Windows 文件名不能以空格或点结尾。")
+        if stem.upper() in WINDOWS_RESERVED_STEMS:
+            raise ValueError("新文件名是 Windows 系统保留名称。")
 
 
 def _target_for(source_path, options, sequence_number):
@@ -192,6 +219,17 @@ def _rename_without_overwrite(source_path, target_path):
         os.link(source, target, follow_symlinks=False)
     except FileExistsError as error:
         raise FileExistsError(f"目标文件已存在：{target}") from error
+    except OSError as error:
+        link_restriction_errors = {
+            errno.EINVAL,
+            errno.EPERM,
+            errno.EXDEV,
+            getattr(errno, "EOPNOTSUPP", errno.EINVAL),
+        }
+        if error.errno not in link_restriction_errors:
+            raise
+        source.rename(target)
+        return
 
     if not _same_entry(source, target):
         target.unlink(missing_ok=True)

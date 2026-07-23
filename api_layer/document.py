@@ -15,6 +15,7 @@ from api_layer.models import (
     TextBlock,
 )
 from api_layer.providers import OCRProviderError, create_provider
+from utils.file_helper import publish_new_file
 from utils.pdf_helper import MAX_PAGES, is_scanned_page, validate_pdf
 
 
@@ -253,7 +254,7 @@ def _atomic_write(path, content):
             handle.flush()
             os.fsync(handle.fileno())
         os.chmod(temporary_name, 0o644)
-        os.link(temporary_name, path)
+        publish_new_file(temporary_name, path)
     finally:
         Path(temporary_name).unlink(missing_ok=True)
     return str(path)
@@ -329,7 +330,7 @@ def _write_extraction_bundle(extraction, text_path, json_path, log_path):
         )
         try:
             for temporary_path, final_path in zip(temporary_paths, final_paths):
-                os.link(temporary_path, final_path)
+                publish_new_file(temporary_path, final_path)
                 published.append(final_path)
         except Exception:
             for final_path in published:

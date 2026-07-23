@@ -9,24 +9,18 @@ from pathlib import Path
 from PySide6.QtCore import (
     QLibraryInfo,
     QLocale,
-    QMimeData,
     QThread,
     QTimer,
     QSize,
     QSettings,
-    Signal,
     Qt,
     QTranslator,
     QUrl,
 )
 from PySide6.QtGui import (
-    QColor,
     QDesktopServices,
-    QDrag,
     QFont,
     QIcon,
-    QPainter,
-    QPen,
     QPixmap,
     QTransform,
 )
@@ -49,10 +43,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSizePolicy,
-    QSpinBox,
     QStackedWidget,
-    QStyle,
-    QStyleOptionSpinBox,
     QTabWidget,
     QTreeWidget,
     QTreeWidgetItem,
@@ -76,17 +67,12 @@ from batch_rename_tool import (
 from document_router import process_document
 from api_layer import (
     PROVIDER_LABELS,
-    extract_document_to_files,
     inspect_pdf,
     is_provider_configured,
-    process_document_with_ocr,
 )
 from api_layer.config import select_provider, selected_provider
 from ocr_settings_dialog import SoftwareSettingsDialog
-from pdf_invoice_tool import (
-    convert_invoice_pdfs,
-    write_invoice_ledger,
-)
+from pdf_invoice_tool import convert_invoice_pdfs, write_invoice_ledger
 from pdf_toolbox import (
     COMPRESSION_PRESETS,
     IMAGE_SUFFIXES,
@@ -102,6 +88,20 @@ from pdf_toolbox import (
     render_page_thumbnail,
     save_pages,
 )
+from ui.common_widgets import ClearSpinBox, SelectionComboBox
+from ui.pdf_widgets import (
+    PDF_PAGE_CARD_HEIGHT,
+    PDF_PAGE_CARD_H_SPACING,
+    PDF_PAGE_CARD_V_SPACING,
+    PDF_PAGE_CARD_WIDTH,
+    PDF_PAGE_THUMBNAIL_SIZE,
+    PdfImageBoard,
+    PdfImageCard,
+    PdfPageBoard,
+    PdfPageCard,
+)
+from ui.theme import ACCENT_PALETTES, build_theme_colors, build_theme_stylesheet
+from ui.tasks import BackgroundTaskThread, DocumentOCRThread, InvoiceBatchProcessThread
 from v2.layout_engine import process_layout_document
 from version import APP_VERSION
 
@@ -114,13 +114,6 @@ DOCUMENT_TYPE_LABELS = {
     "TABLE": "表格",
     "UNKNOWN": "未知文档",
 }
-PDF_PAGE_DRAG_MIME = "application/x-eggie-pdf-page-card"
-PDF_IMAGE_DRAG_MIME = "application/x-eggie-pdf-image-card"
-PDF_PAGE_CARD_WIDTH = 176
-PDF_PAGE_CARD_HEIGHT = 282
-PDF_PAGE_CARD_H_SPACING = 18
-PDF_PAGE_CARD_V_SPACING = 34
-PDF_PAGE_THUMBNAIL_SIZE = QSize(132, 180)
 PDF_IMAGE_WARNING_COUNT = 100
 PDF_IMAGE_MAX_COUNT = 300
 PDF_PAGE_WARNING_COUNT = 500
@@ -142,933 +135,9 @@ def resource_path(relative_path):
     return base_path / relative_path
 
 
-class DocumentOCRThread(QThread):
-    progress = Signal(int, int, str)
-    completed = Signal(object)
-    failed = Signal(str)
-
-    def __init__(self, task_kind, source_file, output_folder, provider, parent=None):
-        super().__init__(parent)
-        self.task_kind = task_kind
-        self.source_file = source_file
-        self.output_folder = output_folder
-        self.provider = provider
-
-    def _progress(self, value, total, message):
-        self.progress.emit(value, total, message)
-
-    def run(self):
-        try:
-            if self.task_kind == "process":
-                result = process_document_with_ocr(
-                    self.source_file,
-                    self.output_folder,
-                    provider_name=self.provider,
-                    progress_callback=self._progress,
-                )
-            else:
-                result = extract_document_to_files(
-                    self.source_file,
-                    self.output_folder,
-                    self.provider,
-                    progress_callback=self._progress,
-                )
-        except Exception as error:
-            self.failed.emit(f"{type(error).__name__}: {error}")
-            return
-        self.completed.emit(result)
-
-
-class BackgroundTaskThread(QThread):
-    progress = Signal(int, int, str)
-    completed = Signal(object)
-    failed = Signal(str)
-
-    def __init__(self, worker, parent=None):
-        super().__init__(parent)
-        self.worker = worker
-
-    def _progress(self, value, total, message):
-        self.progress.emit(int(value), int(total), str(message))
-
-    def run(self):
-        try:
-            result = self.worker(self._progress)
-        except Exception as error:
-            self.failed.emit(f"{type(error).__name__}: {error}")
-            return
-        self.completed.emit(result)
-
-
-class PdfPageCard(QWidget):
-    def __init__(self, owner, data):
-        super().__init__()
-        self.owner = owner
-        self.data = data
-        self.thumbnail_cache = QPixmap()
-        self.display_rotation = None
-        self.drag_start_position = None
-        self.setAcceptDrops(True)
-        self.setFixedSize(PDF_PAGE_CARD_WIDTH, PDF_PAGE_CARD_HEIGHT)
-        self.setProperty("pdfCard", "true")
-        self.setProperty("checked", "false")
-        self.setProperty("dragging", "false")
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(6)
-
-        self.thumbnail_box = QWidget()
-        self.thumbnail_box.setObjectName("pdfThumbnailBox")
-        self.thumbnail_box.setFixedSize(148, 192)
-        thumbnail_layout = QGridLayout(self.thumbnail_box)
-        thumbnail_layout.setContentsMargins(6, 6, 6, 6)
-        self.image_label = QLabel()
-        self.image_label.setAlignment(Qt.AlignCenter)
-        self.checkbox = QCheckBox()
-        self.checkbox.setFixedSize(24, 24)
-        thumbnail_layout.addWidget(self.image_label, 0, 0, Qt.AlignCenter)
-        thumbnail_layout.addWidget(self.checkbox, 0, 0, Qt.AlignLeft | Qt.AlignTop)
-        layout.addWidget(self.thumbnail_box, 0, Qt.AlignHCenter)
-
-        self.page_label = QLabel()
-        self.page_label.setAlignment(Qt.AlignCenter)
-        self.page_label.setFixedHeight(24)
-        self.page_label.setProperty("pdfCardTitle", "true")
-        self.file_label = QLabel()
-        self.file_label.setAlignment(Qt.AlignCenter)
-        self.file_label.setFixedHeight(22)
-        self.file_label.setWordWrap(False)
-        self.file_label.setProperty("pdfCardName", "true")
-        layout.addWidget(self.page_label)
-        layout.addWidget(self.file_label)
-        layout.addStretch(1)
-
-        self.checkbox.stateChanged.connect(self.handle_checked_changed)
-
-    def polish(self):
-        self.style().unpolish(self)
-        self.style().polish(self)
-
-    def is_checked(self):
-        return self.checkbox.isChecked()
-
-    def set_checked(self, checked):
-        self.checkbox.setChecked(checked)
-
-    def set_dragging(self, dragging):
-        self.setProperty("dragging", "true" if dragging else "false")
-        self.polish()
-
-    def handle_checked_changed(self):
-        self.setProperty("checked", "true" if self.is_checked() else "false")
-        self.polish()
-        self.owner.refresh_pdf_page_numbers()
-
-    def update_display(self, index):
-        rotation = self.data.get("rotation", 0) % 360
-        if self.thumbnail_cache.isNull():
-            pixmap = QPixmap(self.data.get("thumbnail", ""))
-            if not pixmap.isNull():
-                self.thumbnail_cache = pixmap.scaled(
-                    PDF_PAGE_THUMBNAIL_SIZE,
-                    Qt.KeepAspectRatio,
-                    Qt.SmoothTransformation,
-                )
-        if not self.thumbnail_cache.isNull() and self.display_rotation != rotation:
-            display = self.thumbnail_cache
-            if rotation:
-                display = display.transformed(
-                    QTransform().rotate(rotation),
-                    Qt.SmoothTransformation,
-                )
-                display = display.scaled(
-                    PDF_PAGE_THUMBNAIL_SIZE,
-                    Qt.KeepAspectRatio,
-                    Qt.SmoothTransformation,
-                )
-            self.image_label.setPixmap(display)
-            self.display_rotation = rotation
-        self.page_label.setText(f"第 {index:03d} 页")
-        name = Path(self.data["source_file"]).name
-        self.file_label.setText(
-            self.file_label.fontMetrics().elidedText(name, Qt.ElideMiddle, PDF_PAGE_CARD_WIDTH - 18)
-        )
-        self.file_label.setToolTip(name)
-        self.setToolTip(
-            f"{Path(self.data['source_file']).name}\n"
-            f"当前序号：{index}\n"
-            f"原页码：{self.data['page_index'] + 1}\n"
-            "双击可放大预览，拖拽可调整顺序"
-        )
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            self.drag_start_position = event.position().toPoint()
-        super().mousePressEvent(event)
-
-    def mouseMoveEvent(self, event):
-        if not (event.buttons() & Qt.LeftButton) or self.drag_start_position is None:
-            super().mouseMoveEvent(event)
-            return
-        distance = (event.position().toPoint() - self.drag_start_position).manhattanLength()
-        if distance < QApplication.startDragDistance():
-            super().mouseMoveEvent(event)
-            return
-
-        source_index = self.owner.pdf_page_cards.index(self)
-        mime_data = QMimeData()
-        mime_data.setData(PDF_PAGE_DRAG_MIME, str(source_index).encode("utf-8"))
-        drag = QDrag(self)
-        drag.setMimeData(mime_data)
-        pixmap = self.image_label.pixmap()
-        if pixmap:
-            drag.setPixmap(pixmap)
-        self.set_dragging(True)
-        try:
-            drag.exec(Qt.MoveAction)
-        finally:
-            self.set_dragging(False)
-
-    def mouseDoubleClickEvent(self, event):
-        self.owner.preview_pdf_page(self)
-        event.accept()
-
-    def dragEnterEvent(self, event):
-        if event.mimeData().hasFormat(PDF_PAGE_DRAG_MIME):
-            event.acceptProposedAction()
-
-    def dragMoveEvent(self, event):
-        if event.mimeData().hasFormat(PDF_PAGE_DRAG_MIME):
-            event.acceptProposedAction()
-
-    def dropEvent(self, event):
-        if not event.mimeData().hasFormat(PDF_PAGE_DRAG_MIME):
-            return
-        source_index = int(bytes(event.mimeData().data(PDF_PAGE_DRAG_MIME)).decode("utf-8"))
-        target_index = self.owner.pdf_page_cards.index(self)
-        if event.position().x() > self.width() / 2:
-            target_index += 1
-        self.owner.reorder_pdf_page(source_index, target_index)
-        event.acceptProposedAction()
-
-
-class PdfPageBoard(QWidget):
-    def __init__(self, owner):
-        super().__init__()
-        self.owner = owner
-        self.setAcceptDrops(True)
-        self.grid = QGridLayout(self)
-        self.grid.setContentsMargins(8, 8, 8, 8)
-        self.grid.setHorizontalSpacing(PDF_PAGE_CARD_H_SPACING)
-        self.grid.setVerticalSpacing(PDF_PAGE_CARD_V_SPACING)
-        self.grid.setAlignment(Qt.AlignLeft | Qt.AlignTop)
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self.owner.refresh_pdf_page_cards_layout()
-
-    def dragEnterEvent(self, event):
-        if event.mimeData().hasFormat(PDF_PAGE_DRAG_MIME):
-            event.acceptProposedAction()
-
-    def dragMoveEvent(self, event):
-        if event.mimeData().hasFormat(PDF_PAGE_DRAG_MIME):
-            event.acceptProposedAction()
-
-    def dropEvent(self, event):
-        if not event.mimeData().hasFormat(PDF_PAGE_DRAG_MIME):
-            return
-        source_index = int(bytes(event.mimeData().data(PDF_PAGE_DRAG_MIME)).decode("utf-8"))
-        self.owner.reorder_pdf_page(source_index, len(self.owner.pdf_page_cards))
-        event.acceptProposedAction()
-
-
-class PdfImageCard(QWidget):
-    def __init__(self, owner, image_file, thumbnail_file=""):
-        super().__init__()
-        self.owner = owner
-        self.image_file = image_file
-        self.thumbnail_file = thumbnail_file or image_file
-        self.thumbnail_cache = QPixmap()
-        self.drag_start_position = None
-        self.setAcceptDrops(True)
-        self.setFixedSize(PDF_PAGE_CARD_WIDTH, PDF_PAGE_CARD_HEIGHT)
-        self.setProperty("pdfCard", "true")
-        self.setProperty("checked", "false")
-        self.setProperty("dragging", "false")
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(6)
-
-        self.thumbnail_box = QWidget()
-        self.thumbnail_box.setObjectName("pdfThumbnailBox")
-        self.thumbnail_box.setFixedSize(148, 192)
-        thumbnail_layout = QGridLayout(self.thumbnail_box)
-        thumbnail_layout.setContentsMargins(6, 6, 6, 6)
-        self.image_label = QLabel()
-        self.image_label.setAlignment(Qt.AlignCenter)
-        self.checkbox = QCheckBox()
-        self.checkbox.setFixedSize(24, 24)
-        thumbnail_layout.addWidget(self.image_label, 0, 0, Qt.AlignCenter)
-        thumbnail_layout.addWidget(self.checkbox, 0, 0, Qt.AlignLeft | Qt.AlignTop)
-        layout.addWidget(self.thumbnail_box, 0, Qt.AlignHCenter)
-
-        self.page_label = QLabel()
-        self.page_label.setAlignment(Qt.AlignCenter)
-        self.page_label.setFixedHeight(24)
-        self.page_label.setProperty("pdfCardTitle", "true")
-        self.file_label = QLabel()
-        self.file_label.setAlignment(Qt.AlignCenter)
-        self.file_label.setFixedHeight(22)
-        self.file_label.setWordWrap(False)
-        self.file_label.setProperty("pdfCardName", "true")
-        layout.addWidget(self.page_label)
-        layout.addWidget(self.file_label)
-        layout.addStretch(1)
-
-        self.checkbox.stateChanged.connect(self.handle_checked_changed)
-
-    def polish(self):
-        self.style().unpolish(self)
-        self.style().polish(self)
-
-    def is_checked(self):
-        return self.checkbox.isChecked()
-
-    def set_dragging(self, dragging):
-        self.setProperty("dragging", "true" if dragging else "false")
-        self.polish()
-
-    def handle_checked_changed(self):
-        self.setProperty("checked", "true" if self.is_checked() else "false")
-        self.polish()
-        self.owner.refresh_pdf_image_cards()
-
-    def update_display(self, index):
-        if self.thumbnail_cache.isNull():
-            pixmap = QPixmap(self.thumbnail_file)
-            if not pixmap.isNull():
-                self.thumbnail_cache = pixmap.scaled(
-                    PDF_PAGE_THUMBNAIL_SIZE,
-                    Qt.KeepAspectRatio,
-                    Qt.SmoothTransformation,
-                )
-        if not self.thumbnail_cache.isNull():
-            self.image_label.setPixmap(self.thumbnail_cache)
-        else:
-            self.image_label.setText("无法预览")
-        name = Path(self.image_file).name
-        self.page_label.setText(f"第 {index:03d} 张")
-        self.file_label.setText(
-            self.file_label.fontMetrics().elidedText(name, Qt.ElideMiddle, PDF_PAGE_CARD_WIDTH - 18)
-        )
-        self.file_label.setToolTip(self.image_file)
-        self.setToolTip(f"{name}\n双击可放大预览，拖拽可调整顺序")
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            self.drag_start_position = event.position().toPoint()
-        super().mousePressEvent(event)
-
-    def mouseMoveEvent(self, event):
-        if not (event.buttons() & Qt.LeftButton) or self.drag_start_position is None:
-            super().mouseMoveEvent(event)
-            return
-        distance = (event.position().toPoint() - self.drag_start_position).manhattanLength()
-        if distance < QApplication.startDragDistance():
-            super().mouseMoveEvent(event)
-            return
-        source_index = self.owner.pdf_image_cards.index(self)
-        mime_data = QMimeData()
-        mime_data.setData(PDF_IMAGE_DRAG_MIME, str(source_index).encode("utf-8"))
-        drag = QDrag(self)
-        drag.setMimeData(mime_data)
-        pixmap = self.image_label.pixmap()
-        if pixmap:
-            drag.setPixmap(pixmap)
-        self.set_dragging(True)
-        try:
-            drag.exec(Qt.MoveAction)
-        finally:
-            self.set_dragging(False)
-
-    def mouseDoubleClickEvent(self, event):
-        self.owner.preview_pdf_image(self)
-        event.accept()
-
-    def dragEnterEvent(self, event):
-        if event.mimeData().hasFormat(PDF_IMAGE_DRAG_MIME):
-            event.acceptProposedAction()
-
-    def dragMoveEvent(self, event):
-        if event.mimeData().hasFormat(PDF_IMAGE_DRAG_MIME):
-            event.acceptProposedAction()
-
-    def dropEvent(self, event):
-        if not event.mimeData().hasFormat(PDF_IMAGE_DRAG_MIME):
-            return
-        source_index = int(bytes(event.mimeData().data(PDF_IMAGE_DRAG_MIME)).decode("utf-8"))
-        target_index = self.owner.pdf_image_cards.index(self)
-        if event.position().x() > self.width() / 2:
-            target_index += 1
-        self.owner.reorder_pdf_image(source_index, target_index)
-        event.acceptProposedAction()
-
-
-class PdfImageBoard(QWidget):
-    def __init__(self, owner):
-        super().__init__()
-        self.owner = owner
-        self.setAcceptDrops(True)
-        self.grid = QGridLayout(self)
-        self.grid.setContentsMargins(8, 8, 8, 8)
-        self.grid.setHorizontalSpacing(PDF_PAGE_CARD_H_SPACING)
-        self.grid.setVerticalSpacing(PDF_PAGE_CARD_V_SPACING)
-        self.grid.setAlignment(Qt.AlignLeft | Qt.AlignTop)
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self.owner.refresh_pdf_image_cards_layout()
-
-    def dragEnterEvent(self, event):
-        if event.mimeData().hasFormat(PDF_IMAGE_DRAG_MIME):
-            event.acceptProposedAction()
-
-    def dragMoveEvent(self, event):
-        if event.mimeData().hasFormat(PDF_IMAGE_DRAG_MIME):
-            event.acceptProposedAction()
-
-    def dropEvent(self, event):
-        if not event.mimeData().hasFormat(PDF_IMAGE_DRAG_MIME):
-            return
-        source_index = int(bytes(event.mimeData().data(PDF_IMAGE_DRAG_MIME)).decode("utf-8"))
-        self.owner.reorder_pdf_image(source_index, len(self.owner.pdf_image_cards))
-        event.acceptProposedAction()
-
-
-ACCENT_PALETTES = {
-    "cyan": {
-        "label": "科技蓝",
-        "accent": "#3B9DFF",
-        "accent_hover": "#2389F0",
-        "accent_pressed": "#1675D1",
-        "accent_soft_dark": "#0E2B36",
-        "accent_border_dark": "#164E63",
-        "primary": "#3198F5",
-        "primary_hover": "#2389F0",
-        "primary_pressed": "#1675D1",
-    },
-    "green": {
-        "label": "翡翠绿",
-        "accent": "#34D399",
-        "accent_hover": "#10B981",
-        "accent_pressed": "#059669",
-        "accent_soft_dark": "#0F2F26",
-        "accent_border_dark": "#166534",
-        "primary": "#10B981",
-        "primary_hover": "#059669",
-        "primary_pressed": "#047857",
-    },
-    "blue": {
-        "label": "深蓝",
-        "accent": "#60A5FA",
-        "accent_hover": "#3B82F6",
-        "accent_pressed": "#2563EB",
-        "accent_soft_dark": "#172B4E",
-        "accent_border_dark": "#1D4ED8",
-        "primary": "#3B82F6",
-        "primary_hover": "#2563EB",
-        "primary_pressed": "#1D4ED8",
-    },
-    "purple": {
-        "label": "紫色",
-        "accent": "#A78BFA",
-        "accent_hover": "#8B5CF6",
-        "accent_pressed": "#7C3AED",
-        "accent_soft_dark": "#2E2453",
-        "accent_border_dark": "#6D28D9",
-        "primary": "#8B5CF6",
-        "primary_hover": "#7C3AED",
-        "primary_pressed": "#6D28D9",
-    },
-}
-
-ACCENT_SOFT_COLORS = {
-    "cyan": "#E8F3FF",
-    "green": "#EEF7F1",
-    "blue": "#EFF6FF",
-    "purple": "#F3E8FF",
-}
-
-THEME_BASES = {
-    "dark": {
-        "window_bg": "#FFFFFF",
-        "panel": "#FFFFFF",
-        "panel_alt": "#F5F5F6",
-        "panel_hover": "#ECEFF2",
-        "text": "#50555C",
-        "title": "#202327",
-        "muted": "#8A8F96",
-        "placeholder": "#A1A6AD",
-        "border": "#DFE2E6",
-        "border_soft": "#EAECF0",
-        "table_header": "#F3F4F6",
-        "table_row": "#FFFFFF",
-        "table_row_alt": "#FAFBFC",
-        "input": "#FFFFFF",
-        "disabled_bg": "#EEF2F5",
-        "disabled_text": "#A0AAB6",
-        "danger_bg": "#FFF1F2",
-        "danger_text": "#BE123C",
-        "danger_border": "#FDA4AF",
-        "shadow": "rgba(15, 23, 42, 24)",
-    },
-}
-
-
-def build_theme_colors(accent_name):
-    base = THEME_BASES["dark"].copy()
-    accent = ACCENT_PALETTES.get(accent_name, ACCENT_PALETTES["cyan"])
-    base.update(
-        {
-            "accent": accent["accent"],
-            "accent_hover": accent["accent_hover"],
-            "accent_pressed": accent["accent_pressed"],
-            "accent_soft": ACCENT_SOFT_COLORS.get(accent_name, "#E8F4F4"),
-            "accent_border": accent["primary"],
-            "primary": accent["primary"],
-            "primary_hover": accent["primary_hover"],
-            "primary_pressed": accent["primary_pressed"],
-        }
-    )
-    return base
-
-
-def build_theme_stylesheet(colors):
-    return f"""
-    QMainWindow {{
-        background: {colors["window_bg"]};
-        color: {colors["text"]};
-    }}
-    QWidget#appShell {{
-        background: {colors["window_bg"]};
-    }}
-    QWidget#homePage,
-    QWidget#excelPage,
-    QWidget#splitPage,
-    QWidget#invoicePage,
-    QWidget#documentPage,
-    QWidget#pdfPage,
-    QWidget#renamePage {{
-        background: {colors["window_bg"]};
-        color: {colors["text"]};
-    }}
-    QLabel {{
-        color: {colors["text"]};
-    }}
-    QLabel[role="title"] {{
-        color: {colors["title"]};
-        font-size: 26px;
-        font-weight: 700;
-    }}
-    QLabel[role="subtitle"],
-    QLabel[role="hint"] {{
-        color: {colors["muted"]};
-        font-size: 13px;
-    }}
-    QLabel[role="status"] {{
-        color: {colors["accent"]};
-        font-size: 12px;
-    }}
-    QScrollArea {{
-        background: transparent;
-        border: none;
-    }}
-    QScrollArea > QWidget > QWidget {{
-        background: transparent;
-    }}
-    QGroupBox {{
-        background: {colors["panel"]};
-        border: 1px solid {colors["border"]};
-        border-radius: 12px;
-        margin-top: 12px;
-        padding-top: 12px;
-        color: {colors["text"]};
-    }}
-    QGroupBox::title {{
-        subcontrol-origin: margin;
-        left: 12px;
-        padding: 0 8px;
-        color: {colors["title"]};
-        font-weight: 600;
-        background: {colors["panel"]};
-    }}
-    QTreeWidget {{
-        background: {colors["table_row"]};
-        alternate-background-color: {colors["table_row_alt"]};
-        color: {colors["text"]};
-        border: 1px solid {colors["border"]};
-        border-radius: 10px;
-        font-size: 13px;
-        selection-background-color: {colors["accent"]};
-        selection-color: #FFFFFF;
-    }}
-    QTreeWidget::item {{
-        height: 34px;
-        border-bottom: 1px solid {colors["border_soft"]};
-    }}
-    QTreeWidget::item:selected {{
-        background: {colors["accent"]};
-        color: #FFFFFF;
-    }}
-    QTreeWidget::indicator {{
-        width: 18px;
-        height: 18px;
-        border-radius: 5px;
-        border: 1px solid {colors["border"]};
-        background: {colors["input"]};
-    }}
-    QTreeWidget::indicator:checked {{
-        background: {colors["accent"]};
-        border: 1px solid {colors["accent"]};
-    }}
-    QTreeWidget::indicator:unchecked:selected {{
-        background: {colors["input"]};
-        border: 1px solid #FFFFFF;
-    }}
-    QTreeWidget::indicator:checked:selected {{
-        background: #FFFFFF;
-        border: 1px solid #FFFFFF;
-    }}
-    QWidget[pdfCard="true"] {{
-        background: {colors["table_row"]};
-        border: 1px solid {colors["border_soft"]};
-        border-radius: 8px;
-    }}
-    QWidget[pdfCard="true"][checked="true"] {{
-        background: {colors["accent_soft"]};
-        border: 1px solid {colors["accent"]};
-    }}
-    QWidget[pdfCard="true"][dragging="true"] {{
-        border: 2px solid {colors["accent"]};
-    }}
-    QWidget#pdfThumbnailBox {{
-        background: #FFFFFF;
-        border: 1px solid {colors["border_soft"]};
-        border-radius: 6px;
-    }}
-    QLabel[pdfCardTitle="true"] {{
-        color: {colors["title"]};
-        font-size: 13px;
-        font-weight: 600;
-    }}
-    QLabel[pdfCardName="true"] {{
-        color: {colors["text"]};
-        font-size: 12px;
-    }}
-    QTabWidget::pane {{
-        border: 1px solid {colors["border"]};
-        border-radius: 10px;
-        background: {colors["panel"]};
-    }}
-    QTabBar::tab {{
-        background: {colors["panel_alt"]};
-        color: {colors["text"]};
-        padding: 8px 14px;
-        border: 1px solid {colors["border"]};
-        border-bottom: none;
-    }}
-    QTabBar::tab:selected {{
-        background: {colors["accent_soft"]};
-        color: {colors["title"]};
-    }}
-    QHeaderView::section {{
-        background: {colors["table_header"]};
-        color: {colors["text"]};
-        border: none;
-        border-right: 1px solid {colors["border"]};
-        border-bottom: 1px solid {colors["border"]};
-        padding: 8px;
-        font-weight: 600;
-    }}
-    QLineEdit,
-    QComboBox,
-    QSpinBox {{
-        background: {colors["input"]};
-        color: {colors["text"]};
-        border: 1px solid {colors["border"]};
-        border-radius: 8px;
-        padding: 6px 10px;
-        min-height: 24px;
-    }}
-    QSpinBox {{
-        padding-right: 34px;
-    }}
-    QSpinBox::up-button,
-    QSpinBox::down-button {{
-        subcontrol-origin: border;
-        width: 30px;
-        background: {colors["panel_alt"]};
-        border-left: 1px solid {colors["border"]};
-    }}
-    QSpinBox::up-button {{
-        subcontrol-position: top right;
-        border-bottom: 1px solid {colors["border"]};
-        border-top-right-radius: 8px;
-    }}
-    QSpinBox::down-button {{
-        subcontrol-position: bottom right;
-        border-bottom-right-radius: 8px;
-    }}
-    QSpinBox::up-button:hover,
-    QSpinBox::down-button:hover {{
-        background: {colors["accent_soft"]};
-    }}
-    QSpinBox::up-arrow,
-    QSpinBox::down-arrow {{
-        image: none;
-        width: 0;
-        height: 0;
-    }}
-    QLineEdit:focus,
-    QComboBox:focus,
-    QSpinBox:focus {{
-        border: 1px solid {colors["accent"]};
-    }}
-    QComboBox::drop-down {{
-        border: none;
-        width: 30px;
-    }}
-    QComboBox QAbstractItemView {{
-        background: {colors["panel"]};
-        color: {colors["text"]};
-        border: 1px solid {colors["border"]};
-        selection-background-color: {colors["accent"]};
-        selection-color: white;
-    }}
-    QLineEdit:read-only {{
-        color: {colors["muted"]};
-    }}
-    QCheckBox {{
-        color: {colors["text"]};
-        spacing: 8px;
-    }}
-    QCheckBox::indicator {{
-        width: 18px;
-        height: 18px;
-        border-radius: 5px;
-        border: 1px solid {colors["border"]};
-        background: {colors["input"]};
-    }}
-    QCheckBox::indicator:checked {{
-        background: {colors["accent"]};
-        border: 1px solid {colors["accent"]};
-    }}
-    QPushButton {{
-        background: {colors["panel"]};
-        color: {colors["text"]};
-        border: 1px solid {colors["border"]};
-        border-radius: 9px;
-        padding: 7px 14px;
-        font-weight: 500;
-    }}
-    QPushButton:hover {{
-        background: {colors["panel_hover"]};
-        border-color: {colors["accent_border"]};
-    }}
-    QPushButton:pressed {{
-        background: {colors["accent_soft"]};
-    }}
-    QPushButton:disabled {{
-        background: {colors["disabled_bg"]};
-        color: {colors["disabled_text"]};
-        border: 1px solid {colors["border_soft"]};
-    }}
-    QPushButton[compactToolbar="true"] {{
-        padding: 7px 9px;
-    }}
-    QPushButton[variant="primary"] {{
-        background: {colors["primary"]};
-        color: #FFFFFF;
-        border: 1px solid {colors["primary"]};
-        border-radius: 12px;
-        font-weight: 700;
-        padding: 9px 30px;
-    }}
-    QPushButton[variant="primary"]:hover {{
-        background: {colors["primary_hover"]};
-        border-color: {colors["primary_hover"]};
-    }}
-    QPushButton[variant="primary"]:pressed {{
-        background: {colors["primary_pressed"]};
-        border-color: {colors["primary_pressed"]};
-    }}
-    QPushButton[variant="accent"] {{
-        background: {colors["accent_soft"]};
-        color: {colors["accent"]};
-        border: 1px solid {colors["accent_border"]};
-        font-weight: 600;
-    }}
-    QPushButton[variant="danger"] {{
-        background: {colors["danger_bg"]};
-        color: {colors["danger_text"]};
-        border: 1px solid {colors["danger_border"]};
-    }}
-    QPushButton[variant="ghost"] {{
-        background: transparent;
-        color: {colors["text"]};
-        border: 1px solid {colors["border"]};
-    }}
-    QPushButton[variant="toolCardPrimary"] {{
-        background: {colors["primary"]};
-        color: #FFFFFF;
-        border: 1px solid {colors["primary"]};
-        border-radius: 14px;
-        font-weight: 700;
-    }}
-    QPushButton[variant="toolCardPrimary"]:hover {{
-        background: {colors["primary_hover"]};
-        border-color: {colors["primary_hover"]};
-    }}
-    QPushButton[variant="toolCardEmpty"] {{
-        background: {colors["panel_alt"]};
-        color: {colors["muted"]};
-        border: 1px dashed {colors["border"]};
-        border-radius: 14px;
-    }}
-    QPushButton[variant="primary"]:disabled,
-    QPushButton[variant="accent"]:disabled,
-    QPushButton[variant="danger"]:disabled,
-    QPushButton[variant="ghost"]:disabled {{
-        background: {colors["disabled_bg"]};
-        color: {colors["disabled_text"]};
-        border: 1px solid {colors["border_soft"]};
-    }}
-    QPushButton[variant="toolCardEmpty"]:disabled {{
-        background: {colors["panel_alt"]};
-        color: {colors["muted"]};
-        border: 1px dashed {colors["border"]};
-    }}
-    QWidget#homePage {{
-        background: {colors["window_bg"]};
-        color: {colors["title"]};
-    }}
-    QWidget#homeSidebar {{
-        background: {colors["panel_alt"]};
-        border-right: 1px solid {colors["border"]};
-    }}
-    QWidget#homeMain {{
-        background: {colors["window_bg"]};
-    }}
-    QWidget[homePanel="true"],
-    QWidget[homeCard="true"] {{
-        background: {colors["panel_alt"]};
-        border: 1px solid {colors["border"]};
-        border-radius: 12px;
-    }}
-    QWidget[homeStatus="true"] {{
-        background: {colors["accent_soft"]};
-        border-left: 4px solid {colors["primary"]};
-    }}
-    QWidget[homeHero="true"] {{
-        background: {colors["accent_soft"]};
-        border-left: 4px solid {colors["primary"]};
-    }}
-    QWidget[homeCard="true"]:hover {{
-        border: 1px solid {colors["primary"]};
-    }}
-    QLabel[homeRole="title"] {{
-        color: {colors["title"]};
-        font-size: 32px;
-        font-weight: 700;
-    }}
-    QLabel[homeRole="section"] {{
-        color: {colors["title"]};
-        font-size: 22px;
-        font-weight: 700;
-    }}
-    QLabel[homeRole="cardTitle"] {{
-        color: {colors["title"]};
-        font-size: 18px;
-        font-weight: 700;
-    }}
-    QLabel[homeRole="brand"] {{
-        color: {colors["title"]};
-        font-size: 15px;
-        font-weight: 700;
-    }}
-    QLabel[homeRole="body"] {{
-        color: {colors["text"]};
-        font-size: 14px;
-    }}
-    QLabel[homeRole="muted"] {{
-        color: {colors["muted"]};
-        font-size: 13px;
-    }}
-    QPushButton[variant="homeNav"] {{
-        background: transparent;
-        color: {colors["text"]};
-        border: none;
-        border-radius: 10px;
-        padding: 10px 14px;
-        text-align: left;
-        font-size: 15px;
-        font-weight: 500;
-    }}
-    QPushButton[variant="homeNav"]:hover {{
-        background: {colors["panel_hover"]};
-        color: {colors["primary"]};
-    }}
-    QPushButton[variant="homeNavActive"] {{
-        background: {colors["primary"]};
-        color: #FFFFFF;
-        border: none;
-        border-radius: 10px;
-        padding: 10px 14px;
-        text-align: left;
-        font-size: 15px;
-        font-weight: 700;
-    }}
-    QPushButton[variant="homeOpen"] {{
-        background: {colors["panel_alt"]};
-        color: {colors["title"]};
-        border: 1px solid {colors["border"]};
-        border-radius: 9px;
-        padding: 7px 16px;
-        font-weight: 600;
-    }}
-    QPushButton[variant="homeOpen"]:hover {{
-        background: {colors["accent_soft"]};
-        border-color: {colors["primary"]};
-        color: {colors["primary"]};
-    }}
-    QPushButton[variant="homePrimary"] {{
-        background: {colors["primary"]};
-        color: #FFFFFF;
-        border: 1px solid {colors["primary"]};
-        border-radius: 9px;
-        padding: 8px 18px;
-        font-weight: 700;
-    }}
-    QPushButton[variant="homeGhost"] {{
-        background: {colors["panel"]};
-        color: {colors["title"]};
-        border: 1px solid {colors["border"]};
-        border-radius: 9px;
-        padding: 8px 18px;
-        font-weight: 600;
-    }}
-    QProgressDialog {{
-        background: {colors["panel"]};
-        color: {colors["text"]};
-    }}
-    QMessageBox {{
-        background: {colors["panel"]};
-        color: {colors["text"]};
-    }}
-    """
+def application_icon_path():
+    icon_name = "app_icon.ico" if sys.platform == "win32" else "app_icon.icns"
+    return resource_path(f"assets/{icon_name}")
 
 
 def preferred_system_locale():
@@ -1117,63 +186,6 @@ def format_elapsed_seconds(seconds):
     minutes = int(seconds // 60)
     remaining_seconds = seconds - minutes * 60
     return f"{minutes} 分 {remaining_seconds:.2f} 秒"
-
-
-class ClearSpinBox(QSpinBox):
-    def paintEvent(self, event):
-        super().paintEvent(event)
-        option = QStyleOptionSpinBox()
-        self.initStyleOption(option)
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        pen = QPen(QColor("#46515D" if self.isEnabled() else "#AAB2BB"))
-        pen.setWidthF(2.2)
-        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-        painter.setPen(pen)
-
-        for control, direction in (
-            (QStyle.SubControl.SC_SpinBoxUp, -1),
-            (QStyle.SubControl.SC_SpinBoxDown, 1),
-        ):
-            rect = self.style().subControlRect(
-                QStyle.ComplexControl.CC_SpinBox,
-                option,
-                control,
-                self,
-            )
-            center_x = rect.center().x()
-            center_y = rect.center().y()
-            half_width = max(4, min(6, rect.width() // 4))
-            half_height = 3
-            painter.drawLine(
-                center_x - half_width,
-                center_y - direction * half_height,
-                center_x,
-                center_y + direction * half_height,
-            )
-            painter.drawLine(
-                center_x,
-                center_y + direction * half_height,
-                center_x + half_width,
-                center_y - direction * half_height,
-            )
-
-
-class SelectionComboBox(QComboBox):
-    def paintEvent(self, event):
-        super().paintEvent(event)
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        pen = QPen(self.palette().color(self.foregroundRole()))
-        pen.setWidthF(1.8)
-        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-        painter.setPen(pen)
-        center_x = self.width() - 16
-        center_y = self.height() // 2
-        painter.drawLine(center_x - 4, center_y - 2, center_x, center_y + 2)
-        painter.drawLine(center_x, center_y + 2, center_x + 4, center_y - 2)
 
 
 class ExcelMergerWindow(QMainWindow):
@@ -1229,7 +241,7 @@ class ExcelMergerWindow(QMainWindow):
             preferred_system_locale(),
         )
         self.app_name = localized_app_name(self.system_locale)
-        self.app_icon = QIcon(str(resource_path("assets/app_icon.icns")))
+        self.app_icon = QIcon(str(application_icon_path()))
         if not self.app_icon.isNull():
             self.setWindowIcon(self.app_icon)
 
@@ -2682,6 +1694,9 @@ class ExcelMergerWindow(QMainWindow):
         on_failure=None,
         total=0,
         status_label=None,
+        task_thread=None,
+        allow_force_stop=False,
+        on_cancel=None,
     ):
         if self.task_is_running():
             QMessageBox.information(
@@ -2699,14 +1714,17 @@ class ExcelMergerWindow(QMainWindow):
             self,
         )
         progress.setWindowTitle(title)
-        progress.setCancelButton(None)
+        if allow_force_stop:
+            progress.setCancelButtonText("强制结束当前任务")
+        else:
+            progress.setCancelButton(None)
         progress.setMinimumDuration(0)
         progress.setWindowModality(Qt.WindowModal)
         if total <= 0:
             progress.setRange(0, 0)
         progress.show()
 
-        thread = BackgroundTaskThread(worker, self)
+        thread = task_thread or BackgroundTaskThread(worker, self)
         self.background_task_thread = thread
         self.background_task_progress = progress
         self.background_task_status_label = status_label
@@ -2726,10 +1744,41 @@ class ExcelMergerWindow(QMainWindow):
                 task, error, on_failure
             )
         )
+        if allow_force_stop and hasattr(thread, "force_stop"):
+            progress.canceled.connect(
+                lambda task=thread: self.request_force_stop_background_task(
+                    task,
+                    on_cancel,
+                )
+            )
+        if hasattr(thread, "cancelled"):
+            thread.cancelled.connect(
+                lambda task=thread: self.background_task_cancelled(task, on_cancel)
+            )
         thread.finished.connect(thread.deleteLater)
         self.set_global_task_active(True)
         thread.start()
         return True
+
+    def request_force_stop_background_task(self, thread, on_cancel):
+        if self.background_task_thread is not thread:
+            return
+        answer = QMessageBox.question(
+            self,
+            "强制结束当前任务",
+            "即将停止当前正在处理的发票。未完成的发票不会生成不完整 Excel；"
+            "已经完成的结果会保留。\n\n是否继续？",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if answer != QMessageBox.Yes:
+            return
+        if self.background_task_progress is not None:
+            self.background_task_progress.setCancelButton(None)
+            self.background_task_progress.setLabelText("正在停止当前任务，请稍候…")
+        if self.background_task_status_label is not None:
+            self.background_task_status_label.setText("正在停止当前任务，请稍候…")
+        thread.force_stop()
 
     def background_task_progress_changed(self, thread, value, total, text):
         if self.background_task_thread is not thread:
@@ -2750,13 +1799,14 @@ class ExcelMergerWindow(QMainWindow):
     def clear_background_task(self, thread):
         if self.background_task_thread is not thread:
             return False
-        if self.background_task_progress is not None:
-            self.background_task_progress.close()
+        progress = self.background_task_progress
         self.background_task_thread = None
         self.background_task_progress = None
         self.background_task_status_label = None
         self.background_task_title = ""
         self.set_global_task_active(False)
+        if progress is not None:
+            progress.close()
         return True
 
     def background_task_completed(self, thread, result, on_success):
@@ -2776,6 +1826,14 @@ class ExcelMergerWindow(QMainWindow):
             f"{title or '任务'}失败",
             error_message,
         )
+
+    def background_task_cancelled(self, thread, on_cancel):
+        if not self.clear_background_task(thread):
+            return
+        if on_cancel is not None:
+            on_cancel()
+            return
+        QMessageBox.information(self, "任务已结束", "当前任务已强制结束。")
 
     def selected_pdf_page_items(self):
         return [card for card in self.pdf_page_cards if card.is_checked()]
@@ -4576,8 +3634,11 @@ class ExcelMergerWindow(QMainWindow):
         if ledger_result:
             detail += (
                 f"\n\n台账文件：\n{ledger_result.output_file}"
-                f"\n\n日志文件：\n{ledger_result.log_file}"
             )
+            if ledger_result.log_file:
+                detail += f"\n\n日志文件：\n{ledger_result.log_file}"
+            elif ledger_result.log_error:
+                detail += f"\n\n处理日志未生成：\n{ledger_result.log_error}"
         message.setInformativeText(detail)
         if failures:
             message.setDetailedText(
@@ -4599,6 +3660,53 @@ class ExcelMergerWindow(QMainWindow):
         source_files = tuple(self.invoice_source_files)
         output_folder = self.invoice_output_folder
 
+        def invoices_completed(result):
+            results, failures, ledger_result, ledger_error = result
+            if ledger_error:
+                QMessageBox.warning(
+                    self,
+                    "台账生成失败",
+                    f"单张发票 Excel 已生成，但台账汇总失败：\n{ledger_error}",
+                )
+            elif ledger_result and ledger_result.log_error:
+                QMessageBox.warning(
+                    self,
+                    "处理日志未生成",
+                    "单张发票 Excel 和台账 Excel 均已生成，"
+                    f"但处理日志未生成：\n{ledger_result.log_error}",
+                )
+            if results or failures:
+                self.show_invoice_complete_message(results, failures, ledger_result)
+
+        failure_message = lambda error: QMessageBox.critical(
+            self,
+            "发票识别失败",
+            f"{error}\n\n未完成的发票不会生成不完整 Excel。",
+        )
+        if os.name == "nt":
+            self.start_background_task(
+                "正在批量解析发票",
+                f"准备解析 {len(source_files)} 个 PDF 发票…",
+                None,
+                invoices_completed,
+                failure_message,
+                total=len(source_files),
+                status_label=self.invoice_file_status_label,
+                task_thread=InvoiceBatchProcessThread(
+                    source_files,
+                    output_folder,
+                    parent=self,
+                ),
+                allow_force_stop=True,
+                on_cancel=lambda: QMessageBox.information(
+                    self,
+                    "任务已结束",
+                    "已强制结束当前发票任务。未完成的发票没有生成不完整 Excel；"
+                    "已经完成的结果会保留。",
+                ),
+            )
+            return
+
         def process_invoices(progress_callback):
             results, failures = convert_invoice_pdfs(
                 source_files,
@@ -4609,8 +3717,8 @@ class ExcelMergerWindow(QMainWindow):
             ledger_error = ""
             if results:
                 progress_callback(
-                    len(source_files),
-                    len(source_files),
+                    len(source_files) * 100,
+                    max(len(source_files) * 100, 1),
                     "正在生成发票台账和处理日志…",
                 )
                 try:
@@ -4623,27 +3731,12 @@ class ExcelMergerWindow(QMainWindow):
                     ledger_error = str(error)
             return results, failures, ledger_result, ledger_error
 
-        def invoices_completed(result):
-            results, failures, ledger_result, ledger_error = result
-            if ledger_error:
-                QMessageBox.warning(
-                    self,
-                    "台账生成失败",
-                    f"单张发票 Excel 已生成，但台账汇总失败：\n{ledger_error}",
-                )
-            if results or failures:
-                self.show_invoice_complete_message(results, failures, ledger_result)
-
         self.start_background_task(
             "正在批量解析发票",
             f"准备解析 {len(source_files)} 个 PDF 发票…",
             process_invoices,
             invoices_completed,
-            lambda error: QMessageBox.critical(
-                self,
-                "发票识别失败",
-                f"{error}\n\n未生成未结构化文本或不完整 Excel。",
-            ),
+            failure_message,
             total=len(source_files),
             status_label=self.invoice_file_status_label,
         )

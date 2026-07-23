@@ -1,3 +1,4 @@
+import multiprocessing
 import os
 import sys
 from pathlib import Path
@@ -8,6 +9,7 @@ from PySide6.QtWidgets import QApplication
 
 from app import (
     ExcelMergerWindow,
+    application_icon_path,
     install_qt_translations,
     localized_app_name,
     preferred_system_locale,
@@ -18,6 +20,7 @@ from version import APP_VERSION
 
 
 def main():
+    multiprocessing.freeze_support()
     if "--version" in sys.argv[1:]:
         print(APP_VERSION)
         return
@@ -28,7 +31,7 @@ def main():
     app_name = localized_app_name(application.preferred_locale)
     application.setApplicationName(app_name)
     application.setApplicationDisplayName(app_name)
-    application.setWindowIcon(QIcon(str(resource_path("assets/app_icon.icns"))))
+    application.setWindowIcon(QIcon(str(application_icon_path())))
     QLocale.setDefault(application.preferred_locale)
     install_qt_translations(application, application.preferred_locale)
 

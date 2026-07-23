@@ -11,7 +11,7 @@ from typing import Optional
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 
-from utils.file_helper import available_output_path
+from utils.file_helper import available_output_path, publish_output
 
 
 HEADER_FIELDS = (
@@ -114,6 +114,7 @@ class PdfInvoiceResult:
 class InvoiceLedgerResult:
     output_file: str
     log_file: str
+    log_error: str = ""
 
 
 def _clean_text(value):
@@ -489,7 +490,11 @@ def _extract_header(lines):
     )
 
     buyer = _extract_party(lines, "购买方", ("项目名称", "销售方"))
-    seller = _extract_party(lines, "销售方", ("收款人", "复核", "开票人"))
+    seller = _extract_party(
+        lines,
+        "销售方",
+        ("项目名称", "收款人", "复核", "开票人"),
+    )
     for prefix, party in (("购买方", buyer), ("销售方", seller)):
         header[f"{prefix}名称"] = party.get("名称", "")
         header[f"{prefix}税号"] = party.get("税号", "")
@@ -673,6 +678,9 @@ def _pdf_text_blocks(pdf_file, progress_callback=None):
     except ImportError as error:
         raise RuntimeError("缺少 PDF 文本解析组件 pdfplumber。") from error
 
+    if progress_callback:
+        progress_callback(0, 0, "正在读取 PDF 文件结构…")
+
     blocks = []
     scanned_pages = []
     with pdfplumber.open(pdf_file) as document:
@@ -681,6 +689,8 @@ def _pdf_text_blocks(pdf_file, progress_callback=None):
             raise ValueError("PDF 中没有可处理页面。")
         if total > 100:
             raise ValueError("PDF 超过 100 页，请拆分后再处理。")
+        if progress_callback:
+            progress_callback(0, total, f"已读取 PDF，共 {total} 页")
         for page_number, page in enumerate(document.pages, 1):
             words = page.extract_words(use_text_flow=True, keep_blank_chars=False) or []
             visible_text = "".join(str(word.get("text", "")) for word in words)
@@ -708,12 +718,16 @@ def _pdf_text_blocks(pdf_file, progress_callback=None):
     return blocks, scanned_pages
 
 
-def extract_invoice(pdf_file, progress_callback=None):
+def extract_invoice(pdf_file, progress_callback=None, prefer_fast=None):
     pdf_file = os.path.abspath(pdf_file)
     if Path(pdf_file).suffix.lower() != ".pdf":
         raise ValueError("只支持 PDF 文件。")
     if not os.path.isfile(pdf_file):
         raise FileNotFoundError("PDF 文件不存在。")
+
+    # ``prefer_fast`` is kept only for compatibility with older callers.  A
+    # flattened text stream loses the left/right columns used by Chinese VAT
+    # invoices, so every platform now reads positioned text from the start.
     blocks, scanned_pages = _pdf_text_blocks(pdf_file, progress_callback)
     if scanned_pages:
         raise ScannedPdfUnsupportedError(scanned_pages)
@@ -869,8 +883,7 @@ def write_invoice_workbook(invoice, output_file, overwrite=False):
         if overwrite:
             os.replace(temporary_file, output_file)
         else:
-            os.link(temporary_file, output_file)
-            os.unlink(temporary_file)
+            output_file = publish_output(temporary_file, output_file)
     except Exception:
         try:
             os.unlink(temporary_file)
@@ -879,6 +892,7 @@ def write_invoice_workbook(invoice, output_file, overwrite=False):
         raise
     finally:
         workbook.close()
+        Path(temporary_file).unlink(missing_ok=True)
     return output_file
 
 
@@ -971,8 +985,7 @@ def write_invoice_ledger(results, failures, output_folder):
     try:
         workbook.save(temporary_file)
         os.chmod(temporary_file, 0o644)
-        os.link(temporary_file, ledger_file)
-        os.unlink(temporary_file)
+        ledger_file = publish_output(temporary_file, ledger_file)
     except Exception:
         try:
             os.unlink(temporary_file)
@@ -981,9 +994,17 @@ def write_invoice_ledger(results, failures, output_folder):
         raise
     finally:
         workbook.close()
+        Path(temporary_file).unlink(missing_ok=True)
 
     log_file = _ledger_log_path(output_folder)
-    _write_invoice_ledger_log(log_file, results, failures, ledger_file)
+    try:
+        _write_invoice_ledger_log(log_file, results, failures, ledger_file)
+    except Exception as error:
+        return InvoiceLedgerResult(
+            str(ledger_file),
+            "",
+            f"{type(error).__name__}: {error}",
+        )
     return InvoiceLedgerResult(str(ledger_file), str(log_file))
 
 
@@ -1001,7 +1022,7 @@ def convert_invoice_pdf(pdf_file, output_file, progress_callback=None, overwrite
         output_path = available_output_path(output_path / f"{invoice_number}.xlsx")
         overwrite = False
     output_file = str(output_path)
-    write_invoice_workbook(invoice, output_file, overwrite=overwrite)
+    output_file = write_invoice_workbook(invoice, output_file, overwrite=overwrite)
     header = invoice.header
     return PdfInvoiceResult(
         output_file=os.path.abspath(output_file),
@@ -1027,14 +1048,70 @@ def convert_invoice_pdfs(pdf_files, output_folder, progress_callback=None):
     results = []
     failures = []
     total = len(pdf_files)
+    progress_total = max(total * 100, 1)
     for index, pdf_file in enumerate(pdf_files, 1):
         if progress_callback:
-            progress_callback(index - 1, total, f"正在解析：{Path(pdf_file).name}")
+            progress_callback(
+                (index - 1) * 100,
+                progress_total,
+                f"正在准备第 {index} / {total} 张：{Path(pdf_file).name}",
+            )
         try:
-            results.append(convert_invoice_pdf(pdf_file, output_folder))
+            def page_progress(page, page_total, message):
+                if progress_callback:
+                    page_fraction = 0
+                    if page_total:
+                        page_fraction = round(max(0, min(page, page_total)) * 99 / page_total)
+                    progress_callback(
+                        (index - 1) * 100 + page_fraction,
+                        progress_total,
+                        f"正在读取第 {index} / {total} 张：{Path(pdf_file).name}（{message}）",
+                    )
+
+            results.append(
+                convert_invoice_pdf(
+                    pdf_file,
+                    output_folder,
+                    progress_callback=page_progress,
+                )
+            )
+            if progress_callback:
+                progress_callback(
+                    index * 100,
+                    progress_total,
+                    f"已完成第 {index} / {total} 张：{Path(pdf_file).name}",
+                )
         except Exception as error:
             failures.append((os.path.abspath(pdf_file), str(error)))
 
     if progress_callback:
-        progress_callback(total, total, "批量解析完成")
+        progress_callback(total * 100, progress_total, "批量解析完成")
     return results, failures
+
+
+def run_invoice_batch_task(source_files, output_folder, result_queue):
+    """Run one invoice batch separately so the desktop app can safely stop it."""
+    try:
+        def progress(value, total, message):
+            result_queue.put(("progress", (int(value), int(total), str(message))))
+
+        results, failures = convert_invoice_pdfs(
+            source_files,
+            output_folder,
+            progress_callback=progress,
+        )
+        ledger_result = None
+        ledger_error = ""
+        if results:
+            progress(
+                len(source_files) * 100,
+                max(len(source_files) * 100, 1),
+                "正在生成发票台账和处理日志…",
+            )
+            try:
+                ledger_result = write_invoice_ledger(results, failures, output_folder)
+            except Exception as error:
+                ledger_error = str(error)
+        result_queue.put(("completed", (results, failures, ledger_result, ledger_error)))
+    except Exception as error:
+        result_queue.put(("failed", f"{type(error).__name__}: {error}"))

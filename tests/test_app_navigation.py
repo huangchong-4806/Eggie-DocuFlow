@@ -29,6 +29,150 @@ class AppNavigationTests(unittest.TestCase):
         self.window.close()
         self.window.pdf_thumbnail_tempdir.cleanup()
 
+    def test_theme_module_is_the_canonical_source(self):
+        import app
+        from ui.theme import (
+            ACCENT_PALETTES as UI_ACCENT_PALETTES,
+            build_theme_colors as ui_build_theme_colors,
+            build_theme_stylesheet as ui_build_theme_stylesheet,
+        )
+
+        self.assertIs(app.ACCENT_PALETTES, UI_ACCENT_PALETTES)
+        self.assertIs(app.build_theme_colors, ui_build_theme_colors)
+        self.assertIs(app.build_theme_stylesheet, ui_build_theme_stylesheet)
+        stylesheet = ui_build_theme_stylesheet(ui_build_theme_colors("cyan"))
+        self.assertIn("QMainWindow", stylesheet)
+        self.assertIn("QWidget#pdfThumbnailBox", stylesheet)
+
+    def test_task_threads_use_ui_module_and_report_results(self):
+        import app
+        from ui.tasks import BackgroundTaskThread, DocumentOCRThread, InvoiceBatchProcessThread
+
+        self.assertIs(app.BackgroundTaskThread, BackgroundTaskThread)
+        self.assertIs(app.DocumentOCRThread, DocumentOCRThread)
+        self.assertIs(app.InvoiceBatchProcessThread, InvoiceBatchProcessThread)
+
+        progress = []
+        completed = []
+        succeeded = BackgroundTaskThread(
+            lambda callback: (callback(1, 1, "完成"), "result")[1]
+        )
+        succeeded.progress.connect(
+            lambda value, total, text: progress.append((value, total, text))
+        )
+        succeeded.completed.connect(completed.append)
+        succeeded.run()
+
+        failures = []
+
+        def fail(_callback):
+            raise OSError("disk full")
+
+        failed = BackgroundTaskThread(fail)
+        failed.failed.connect(failures.append)
+        failed.run()
+
+        self.assertEqual(progress, [(1, 1, "完成")])
+        self.assertEqual(completed, ["result"])
+        self.assertEqual(failures, ["OSError: disk full"])
+
+    def test_invoice_task_can_be_marked_for_forced_stop(self):
+        from ui.tasks import InvoiceBatchProcessThread
+
+        task = InvoiceBatchProcessThread(("sample.pdf",), "output")
+        task.force_stop()
+
+        self.assertTrue(task._force_stop_requested)
+
+    def test_invoice_task_stops_the_separate_process_when_forced(self):
+        from ui.tasks import InvoiceBatchProcessThread
+
+        cancelled = []
+        task = InvoiceBatchProcessThread(("missing.pdf",), tempfile.gettempdir())
+        task.cancelled.connect(lambda: cancelled.append(True))
+        task.force_stop()
+        task.run()
+
+        self.assertEqual(cancelled, [True])
+
+    def test_invoice_task_reports_a_batch_result_from_the_separate_process(self):
+        from ui.tasks import InvoiceBatchProcessThread
+
+        completed = []
+        failures = []
+        task = InvoiceBatchProcessThread(("missing.pdf",), tempfile.gettempdir())
+        task.completed.connect(completed.append)
+        task.failed.connect(failures.append)
+        task.run()
+
+        self.assertFalse(failures)
+        self.assertEqual(len(completed), 1)
+        self.assertEqual(completed[0][0], [])
+        self.assertIn("PDF 文件不存在", completed[0][1][0][1])
+
+    def test_invoice_task_reports_when_process_cannot_start(self):
+        from ui.tasks import InvoiceBatchProcessThread
+
+        class Process:
+            def start(self):
+                raise OSError("无法启动")
+
+            def is_alive(self):
+                return False
+
+        class Context:
+            def Queue(self):
+                return MagicMock()
+
+            def Process(self, **_kwargs):
+                return Process()
+
+        failures = []
+        task = InvoiceBatchProcessThread(("sample.pdf",), tempfile.gettempdir())
+        task.failed.connect(failures.append)
+        with patch("ui.tasks.multiprocessing.get_context", return_value=Context()):
+            task.run()
+
+        self.assertEqual(failures, ["OSError: 无法启动"])
+
+    def test_common_widgets_use_ui_module(self):
+        import app
+        from ui.common_widgets import ClearSpinBox, SelectionComboBox
+
+        self.assertIs(app.ClearSpinBox, ClearSpinBox)
+        self.assertIs(app.SelectionComboBox, SelectionComboBox)
+        self.assertEqual(len(self.window.findChildren(ClearSpinBox)), 6)
+        self.assertIsInstance(self.window.pdf_export_format_combo, SelectionComboBox)
+        self.assertIsInstance(self.window.pdf_export_quality_combo, SelectionComboBox)
+
+    def test_pdf_widgets_use_ui_module(self):
+        import app
+        from ui.pdf_widgets import PdfImageBoard, PdfImageCard, PdfPageBoard, PdfPageCard
+
+        self.assertIs(app.PdfPageCard, PdfPageCard)
+        self.assertIs(app.PdfImageCard, PdfImageCard)
+        self.assertIs(app.PdfPageBoard, PdfPageBoard)
+        self.assertIs(app.PdfImageBoard, PdfImageBoard)
+        self.assertIsInstance(self.window.pdf_page_board, PdfPageBoard)
+        self.assertIsInstance(self.window.pdf_image_board, PdfImageBoard)
+
+    def test_pdf_widgets_share_only_common_base_behavior(self):
+        from ui.pdf_widgets import (
+            DragDropBoard,
+            PdfImageBoard,
+            PdfImageCard,
+            PdfPageBoard,
+            PdfPageCard,
+            PdfThumbnailCard,
+        )
+
+        self.assertTrue(issubclass(PdfPageCard, PdfThumbnailCard))
+        self.assertTrue(issubclass(PdfImageCard, PdfThumbnailCard))
+        self.assertTrue(issubclass(PdfPageBoard, DragDropBoard))
+        self.assertTrue(issubclass(PdfImageBoard, DragDropBoard))
+        self.assertIsNot(PdfPageCard.update_display, PdfImageCard.update_display)
+        self.assertNotEqual(PdfPageCard.drag_mime, PdfImageCard.drag_mime)
+
     def test_sidebar_controls_every_page_and_marks_the_active_menu(self):
         pages = [
             ("home", self.window.show_home, self.window.home_page),

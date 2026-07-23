@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from batch_rename_tool import (
     RenameOptions,
+    _validate_name,
     apply_renames,
     discover_rename_files,
     preview_renames,
@@ -158,6 +159,14 @@ class BatchRenameToolTests(unittest.TestCase):
             [Path(filename).name for filename in files],
             [visible.name, nested_file.name],
         )
+
+    def test_windows_filename_rules_block_reserved_and_unsafe_names(self):
+        for filename in ("报告?.xlsx", "报告 .xlsx", "CON.xlsx", "LPT1.txt"):
+            with self.subTest(filename=filename):
+                with self.assertRaises(ValueError):
+                    _validate_name(filename, platform_name="win32")
+
+        _validate_name("正常报告.xlsx", platform_name="win32")
 
 
 if __name__ == "__main__":

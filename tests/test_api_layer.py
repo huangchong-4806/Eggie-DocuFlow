@@ -11,6 +11,7 @@ from PIL import Image
 
 import api_layer.document as document_module
 from api_layer.config import (
+    _default_config_dir,
     delete_credentials,
     get_config_file,
     is_provider_configured,
@@ -81,6 +82,18 @@ class APILayerTests(unittest.TestCase):
         image.save(pdf_file, "PDF", resolution=150)
         image.close()
         return pdf_file
+
+    def test_windows_config_uses_the_current_users_appdata_folder(self):
+        config_dir = _default_config_dir(
+            "nt",
+            Path("C:/Users/TestUser"),
+            "C:/Users/TestUser/AppData/Roaming",
+        )
+
+        self.assertEqual(
+            config_dir,
+            Path("C:/Users/TestUser/AppData/Roaming/Eggie DocuFlow"),
+        )
 
     def test_extraction_failure_leaves_no_partial_files(self):
         source = self.root / "sample.pdf"

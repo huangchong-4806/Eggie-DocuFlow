@@ -790,7 +790,14 @@ def _build_streaming_workbook(
 
             try:
                 worksheet = workbook.active
-                if metadata.row_count > worksheet.max_row:
+                # Some valid Excel files do not store an explicit sheet size.
+                # In read-only mode openpyxl reports that size as None; refresh
+                # the dimensions before iterating instead of comparing a number
+                # with None.
+                if (
+                    worksheet.max_row is None
+                    or metadata.row_count > worksheet.max_row
+                ):
                     worksheet.reset_dimensions()
 
                 start_row = skip_rows + 1 if file_index > 0 else 1
