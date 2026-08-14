@@ -31,5 +31,8 @@
 - 自动检查：打包前执行 137 项检查。
 - 界面检查：打包前检查主要页面截图的重叠、文字和按钮状态。
 - 文件检查：对代表性 PDF、HTML 和 Excel 结果进行实际打开测试。
+- Windows 验证：已在 Windows 11 虚拟机完成安装并实际启动，界面正常，版本显示为 1.4.0。
 - macOS ZIP 大小：44 MiB（Finder 显示约 45 MB）。
 - macOS ZIP SHA-256：`8d06e758614b0fe7221bdf9142d5b133c12d5df06cd63d9b7e6b8d56aad5f7a3`
+- Windows 安装包大小：约 46 MiB。
+- Windows 安装包 SHA-256：`769d378426cd454ddf93c0c4d6b46270a49eba6494c1c02cdad0cbe5b073fa67`

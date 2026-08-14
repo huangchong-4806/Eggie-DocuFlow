@@ -264,7 +264,7 @@ V1.4.0 不做：
 
 1. 版本统一更新为 V1.4.0。
 2. 打包 macOS 正式 ZIP。
-3. 通过 GitHub 在线 Windows 环境打包 Windows 10/11 64 位安装程序。
+3. 通过现有 Windows 11 虚拟机打包 Windows 10/11 64 位安装程序。
 4. 验证签名、ZIP 完整性、Mac 软件启动、Windows 安装和版本运行。
 5. 检查安装包不包含密钥、`.env`、缓存、测试文件和临时文件。
 6. 输出 Mac 和 Windows 发布文件的 SHA-256 校验值。

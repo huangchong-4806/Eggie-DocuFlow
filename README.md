@@ -275,13 +275,13 @@ users do not need to follow these steps.
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
-python main.py
+scripts/run_macos_python.sh main.py
 ```
 
 ## 测试 / Tests
 
 ```bash
-python -m unittest discover -s tests -v
+QT_QPA_PLATFORM=offscreen scripts/run_macos_python.sh -m unittest discover -s tests -v
 ```
 
 性能基准 / Performance benchmark:
