@@ -15,7 +15,7 @@ from utils.logger import SessionLogger
 from utils.pdf_helper import extract_text, validate_pdf
 
 
-def _ocr_invoice(extraction):
+def invoice_from_extraction(extraction):
     from pdf_invoice_tool import TextBlock, parse_invoice_blocks
 
     blocks = []
@@ -111,7 +111,7 @@ def route_document(
         output_file = available_output_path(output_dir / f"{stem}_发票结构化.xlsx")
         if extraction is not None and extraction.cloud_page_count:
             try:
-                invoice = _ocr_invoice(extraction)
+                invoice = invoice_from_extraction(extraction)
             except ValueError:
                 fallback = available_output_path(output_dir / f"{stem}_发票_OCR文字.txt")
                 return _export_ocr_text(text_file, fallback, INVOICE)

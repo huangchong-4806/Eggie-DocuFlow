@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from PIL import Image
+from PySide6.QtWidgets import QApplication
 from pypdf import PdfReader, PdfWriter
 
 import pdf_toolbox
@@ -11,18 +12,27 @@ import pdf_toolbox
 from pdf_toolbox import (
     COMPRESSION_PRESETS,
     PdfPageRef,
+    add_pdf_marks,
     compress_pdf,
+    compare_pdf_text,
     estimate_compressed_size,
     images_to_pdf,
     is_supported_image_file,
     output_path,
+    make_searchable_pdf,
     pdf_to_images,
     pdfs_to_images,
     save_pages,
+    secure_pdf,
 )
+from api_layer.models import DocumentExtraction, PageText, TextBlock
 
 
 class PdfToolboxTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.application = QApplication.instance() or QApplication([])
+
     def setUp(self):
         self.temporary_directory = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary_directory.name)
@@ -121,6 +131,10 @@ class PdfToolboxTests(unittest.TestCase):
         with Image.open(image_result.image_files[0]) as image:
             self.assertGreaterEqual(image.width, 160)
             self.assertGreaterEqual(image.height, 200)
+        log_text = Path(image_result.log_file).read_text(encoding="utf-8")
+        self.assertIn("页面呈现方式：", log_text)
+        self.assertIn("状态=已生成", log_text)
+        self.assertIn("像素=", log_text)
 
     def test_single_page_pdf_outputs_directly_with_high_resolution(self):
         pdf_file = self.make_pdf("单页文件.pdf", 1)
@@ -158,6 +172,8 @@ class PdfToolboxTests(unittest.TestCase):
         self.assertIn("图片清晰度：300 DPI", log_text)
         self.assertIn("失败文件数：1", log_text)
         self.assertIn("损坏.pdf", log_text)
+        self.assertIn("页面呈现方式=", log_text)
+        self.assertIn("状态=已生成", log_text)
 
     def test_batch_pdf_to_images_reports_file_and_page_progress(self):
         pdf_file = self.make_pdf("进度测试.pdf", 2)
@@ -229,6 +245,86 @@ class PdfToolboxTests(unittest.TestCase):
         with Image.open(preview) as image:
             self.assertLessEqual(image.width, 132)
             self.assertLessEqual(image.height, 180)
+
+    def test_pdf_marks_add_watermark_and_page_numbers(self):
+        source = self.make_pdf("marks.pdf", 2)
+
+        result = add_pdf_marks(
+            source,
+            self.root / "marked.pdf",
+            watermark_text="内部资料",
+            add_page_numbers=True,
+            page_number_start=5,
+        )
+
+        reader = PdfReader(result.output_file)
+        self.assertEqual(len(reader.pages), 2)
+        extracted = "\n".join(page.extract_text() or "" for page in reader.pages)
+        self.assertIn("内部资料", extracted)
+        self.assertIn("5", extracted)
+        self.assertIn("页码：已添加", Path(result.log_file).read_text(encoding="utf-8"))
+
+    def test_pdf_password_can_be_set_and_removed(self):
+        source = self.make_pdf("plain.pdf", 1)
+        protected = secure_pdf(source, self.root / "protected.pdf", new_password="secret-123")
+        protected_reader = PdfReader(protected.output_file)
+        self.assertTrue(protected_reader.is_encrypted)
+        self.assertFalse(protected_reader.decrypt("wrong"))
+        self.assertTrue(protected_reader.decrypt("secret-123"))
+
+        unprotected = secure_pdf(
+            protected.output_file,
+            self.root / "unprotected.pdf",
+            source_password="secret-123",
+        )
+        self.assertFalse(PdfReader(unprotected.output_file).is_encrypted)
+        log_text = Path(unprotected.log_file).read_text(encoding="utf-8")
+        self.assertNotIn("secret-123", log_text)
+        self.assertIn("密码写入日志：否", log_text)
+
+    @patch("api_layer.document.extract_document")
+    def test_searchable_pdf_keeps_page_and_adds_text_layer(self, extract_document_mock):
+        source = self.make_pdf("scan.pdf", 1)
+        extract_document_mock.return_value = DocumentExtraction(
+            source_file=str(source),
+            provider="baidu",
+            pages=(
+                PageText(
+                    1,
+                    "Searchable Text",
+                    "cloud_ocr",
+                    blocks=(TextBlock("Searchable Text", (0.1, 0.1, 0.6, 0.2)),),
+                    width=200,
+                    height=300,
+                ),
+            ),
+            started_at="2026-08-07T12:00:00",
+        )
+
+        result = make_searchable_pdf(
+            source,
+            self.root / "searchable.pdf",
+            "baidu",
+        )
+
+        reader = PdfReader(result.output_file)
+        self.assertEqual(len(reader.pages), 1)
+        extracted = " ".join(reader.pages[0].extract_text().split())
+        self.assertIn("Searchable Text", extracted)
+        self.assertIn("云 OCR 页：1", Path(result.log_file).read_text(encoding="utf-8"))
+
+    def test_pdf_text_compare_writes_openable_html_report(self):
+        project_root = Path(__file__).resolve().parents[1]
+        left = project_root / "test_files" / "合同测试.pdf"
+        right = project_root / "test_files" / "表格测试.pdf"
+
+        result = compare_pdf_text(left, right, self.root / "compare.html")
+
+        report = Path(result.output_file).read_text(encoding="utf-8")
+        self.assertIn("合同测试.pdf", report)
+        self.assertIn("表格测试.pdf", report)
+        self.assertIn("diff_add", report)
+        self.assertIn("仅本机逐行比较", Path(result.log_file).read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

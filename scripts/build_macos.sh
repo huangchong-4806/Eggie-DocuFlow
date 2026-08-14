@@ -39,20 +39,24 @@ if [[ ! -d "$APP_PATH" ]]; then
   exit 1
 fi
 
-/usr/bin/codesign --force --deep --sign - "$APP_PATH"
-/usr/bin/codesign --verify --deep --strict "$APP_PATH"
+SIGN_DIR="$(mktemp -d /tmp/eggie-sign.XXXXXX)"
+trap 'rm -rf "$SIGN_DIR"' EXIT
+SIGNED_APP_PATH="$SIGN_DIR/$APP_NAME"
+/usr/bin/ditto --norsrc "$APP_PATH" "$SIGNED_APP_PATH"
+/usr/bin/xattr -cr "$SIGNED_APP_PATH"
+/usr/bin/codesign --force --deep --sign - "$SIGNED_APP_PATH"
+/usr/bin/codesign --verify --deep --strict "$SIGNED_APP_PATH"
 
-/usr/bin/ditto "$APP_PATH" "$RELEASE_DIR/$APP_NAME"
 (
-  cd "$RELEASE_DIR"
-  COPYFILE_DISABLE=1 /usr/bin/zip -9 -y -q -r "$ZIP_NAME" "$APP_NAME" \
+  cd "$SIGN_DIR"
+  COPYFILE_DISABLE=1 /usr/bin/zip -9 -y -q -r "$RELEASE_DIR/$ZIP_NAME" "$APP_NAME" \
     -x "*.DS_Store" "*/__MACOSX/*"
 )
 
-APP_BYTES="$(/usr/bin/du -sk "$RELEASE_DIR/$APP_NAME" | awk '{print $1 * 1024}')"
+APP_BYTES="$(/usr/bin/du -sk "$SIGNED_APP_PATH" | awk '{print $1 * 1024}')"
 ZIP_BYTES="$(/usr/bin/stat -f '%z' "$RELEASE_DIR/$ZIP_NAME")"
 
 echo "App size: $((APP_BYTES / 1024 / 1024)) MB"
 echo "Zip size: $((ZIP_BYTES / 1024 / 1024)) MB"
 
-echo "Release artifacts are in $RELEASE_DIR"
+echo "Release ZIP is in $RELEASE_DIR"
