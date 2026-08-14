@@ -43,8 +43,11 @@ class BatchEngine:
         folder = Path(input_folder).expanduser().resolve()
         if not folder.is_dir():
             raise NotADirectoryError(f"输入文件夹不存在：{folder}")
-        pattern = "**/*.pdf" if recursive else "*.pdf"
-        return sorted(path for path in folder.glob(pattern) if path.is_file())
+        candidates = folder.rglob("*") if recursive else folder.iterdir()
+        return sorted(
+            path for path in candidates
+            if path.is_file() and path.suffix.lower() == ".pdf"
+        )
 
     def process_folder(
         self,
@@ -65,6 +68,24 @@ class BatchEngine:
         pdf_files = self.scan(input_folder, recursive)
         if progress_callback:
             progress_callback(0, len(pdf_files), f"发现 {len(pdf_files)} 个 PDF")
+
+        return self.process_files(
+            pdf_files,
+            output_dir,
+            progress_callback=progress_callback,
+            log_root=log_root,
+        )
+
+    def process_files(
+        self,
+        pdf_files,
+        output_dir,
+        progress_callback=None,
+        log_root=None,
+    ):
+        output_dir = Path(output_dir).expanduser().resolve()
+        output_dir.mkdir(parents=True, exist_ok=True)
+        pdf_files = [Path(path).expanduser().resolve() for path in pdf_files]
 
         def worker(pdf_file):
             router_progress = progress_callback if self.max_workers == 1 else None

@@ -10,11 +10,13 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from pypdf import PdfWriter
 from PySide6.QtCore import QThread, QTimer
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QGroupBox, QLabel, QPushButton
+from PySide6.QtWidgets import QApplication, QGroupBox, QLabel, QMessageBox, QPushButton
 
 from app import ClearSpinBox, ExcelMergerWindow, PdfImageCard, PdfPageCard
+from batch_processing_tool import BatchPreview
 from ocr_settings_dialog import SoftwareSettingsDialog
 from pdf_toolbox import PdfToolResult
+from version import APP_VERSION
 
 
 class AppNavigationTests(unittest.TestCase):
@@ -43,6 +45,8 @@ class AppNavigationTests(unittest.TestCase):
         stylesheet = ui_build_theme_stylesheet(ui_build_theme_colors("cyan"))
         self.assertIn("QMainWindow", stylesheet)
         self.assertIn("QWidget#pdfThumbnailBox", stylesheet)
+        self.assertNotIn("QCheckBox::indicator", stylesheet)
+        self.assertNotIn("QTreeWidget::indicator", stylesheet)
 
     def test_task_threads_use_ui_module_and_report_results(self):
         import app
@@ -141,7 +145,7 @@ class AppNavigationTests(unittest.TestCase):
 
         self.assertIs(app.ClearSpinBox, ClearSpinBox)
         self.assertIs(app.SelectionComboBox, SelectionComboBox)
-        self.assertEqual(len(self.window.findChildren(ClearSpinBox)), 6)
+        self.assertEqual(len(self.window.findChildren(ClearSpinBox)), 11)
         self.assertIsInstance(self.window.pdf_export_format_combo, SelectionComboBox)
         self.assertIsInstance(self.window.pdf_export_quality_combo, SelectionComboBox)
 
@@ -178,8 +182,10 @@ class AppNavigationTests(unittest.TestCase):
             ("home", self.window.show_home, self.window.home_page),
             ("excel", self.window.show_excel_tool, self.window.excel_page),
             ("split", self.window.show_split_tool, self.window.split_page),
+            ("cleanup", self.window.show_cleanup_tool, self.window.cleanup_page),
             ("invoice", self.window.show_invoice_tool, self.window.invoice_page),
             ("document", self.window.show_document_tool, self.window.document_page),
+            ("batch", self.window.show_batch_tool, self.window.batch_page),
             ("rename", self.window.show_rename_tool, self.window.rename_page),
             ("pdf", self.window.show_pdf_tool, self.window.pdf_page),
         ]
@@ -205,34 +211,94 @@ class AppNavigationTests(unittest.TestCase):
         }
         self.assertNotIn("返回工具首页", button_texts)
         self.assertNotIn("打开 Excel 合并", button_texts)
-        self.assertEqual(len(self.window.findChildren(ClearSpinBox)), 6)
-        self.assertEqual(self.window.stack.count(), 7)
+        self.assertEqual(len(self.window.findChildren(ClearSpinBox)), 11)
+        self.assertEqual(self.window.stack.count(), 9)
         self.assertIn("仅提取文字", button_texts)
         self.assertIn("前往设置", button_texts)
         self.assertNotIn("配置密钥", button_texts)
         self.assertFalse(self.window.document_ocr_checkbox.isChecked())
         self.assertNotIn("ocr", self.window.nav_buttons)
 
+    def test_pdf_enhancement_tabs_start_in_safe_states(self):
+        self.assertEqual(self.window.pdf_tabs.count(), 7)
+        self.assertEqual(
+            [self.window.pdf_tabs.tabText(index) for index in range(7)],
+            [
+                "页面整理",
+                "PDF 压缩",
+                "图片 / PDF 互转",
+                "水印与页码",
+                "PDF 密码",
+                "可搜索 PDF",
+                "文字对比",
+            ],
+        )
+        self.assertFalse(self.window.pdf_marks_start_button.isEnabled())
+        self.assertFalse(self.window.pdf_security_start_button.isEnabled())
+        self.assertFalse(self.window.pdf_searchable_start_button.isEnabled())
+        self.assertFalse(self.window.pdf_compare_start_button.isEnabled())
+        self.assertFalse(self.window.pdf_compare_open_button.isEnabled())
+        self.assertFalse(self.window.pdf_new_password_edit.isHidden())
+        self.window.pdf_security_mode_combo.setCurrentIndex(1)
+        self.assertTrue(self.window.pdf_new_password_edit.isHidden())
+
     def test_home_cards_remove_badges_and_enlarge_open_buttons(self):
         home_labels = {
             label.text() for label in self.window.home_page.findChildren(QLabel)
         }
+        home_text = "\n".join(home_labels)
         open_buttons = [
             button
             for button in self.window.home_page.findChildren(QPushButton)
             if button.text() == "打开"
         ]
 
+        self.assertIsNotNone(self.window.home_logo_label.pixmap())
+        self.assertFalse(self.window.home_logo_label.pixmap().isNull())
+        self.assertNotIn("台账", home_text)
+        window_text = "\n".join(
+            label.text() for label in self.window.findChildren(QLabel)
+        )
+        self.assertEqual(window_text.count(f"版本 {APP_VERSION}"), 1)
         self.assertTrue(
             {"常用", "清晰", "台账", "识别", "安全", "多功能"}.isdisjoint(home_labels)
         )
-        self.assertEqual(len(open_buttons), 6)
+        self.assertEqual(len(open_buttons), 8)
         self.assertTrue(
             all(
                 button.minimumWidth() >= 112 and button.minimumHeight() >= 44
                 for button in open_buttons
             )
         )
+
+    def test_v140_pages_start_in_safe_states(self):
+        self.assertFalse(self.window.cleanup_start_button.isEnabled())
+        self.assertFalse(self.window.cleanup_open_result_button.isEnabled())
+        self.assertTrue(self.window.cleanup_empty_rows_checkbox.isChecked())
+        self.assertTrue(self.window.cleanup_spaces_checkbox.isChecked())
+        self.assertFalse(self.window.cleanup_deduplicate_checkbox.isChecked())
+        self.assertFalse(self.window.batch_start_button.isEnabled())
+        self.assertFalse(self.window.batch_retry_button.isEnabled())
+        self.assertFalse(self.window.batch_ocr_checkbox.isChecked())
+
+    @patch("app.is_provider_configured", return_value=True)
+    @patch("app.QMessageBox.question", return_value=QMessageBox.No)
+    def test_batch_ocr_confirmation_lists_exact_scanned_pages(
+        self, question, _configured
+    ):
+        source = "/tmp/扫描合同.pdf"
+        self.window.batch_ocr_checkbox.setChecked(True)
+        self.window.batch_previews = [
+            BatchPreview(
+                source,
+                page_count=5,
+                scanned_page_count=2,
+                scanned_pages=(2, 4),
+            )
+        ]
+
+        self.assertFalse(self.window._confirm_batch_ocr((source,)))
+        self.assertIn("扫描合同.pdf：第 2、4 页", question.call_args.args[2])
 
     def test_pdf_organizer_actions_share_one_toolbar(self):
         toolbar_buttons = (

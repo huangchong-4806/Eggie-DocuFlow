@@ -1,78 +1,78 @@
 ACCENT_PALETTES = {
     "cyan": {
-        "label": "科技蓝",
-        "accent": "#3B9DFF",
-        "accent_hover": "#2389F0",
-        "accent_pressed": "#1675D1",
-        "accent_soft_dark": "#0E2B36",
-        "accent_border_dark": "#164E63",
-        "primary": "#3198F5",
-        "primary_hover": "#2389F0",
-        "primary_pressed": "#1675D1",
+        "label": "苹果蓝",
+        "accent": "#007AFF",
+        "accent_hover": "#006FE8",
+        "accent_pressed": "#005FCC",
+        "accent_soft_dark": "#DCEEFF",
+        "accent_border_dark": "#9CCBFF",
+        "primary": "#007AFF",
+        "primary_hover": "#006FE8",
+        "primary_pressed": "#005FCC",
     },
     "green": {
-        "label": "翡翠绿",
-        "accent": "#34D399",
-        "accent_hover": "#10B981",
-        "accent_pressed": "#059669",
-        "accent_soft_dark": "#0F2F26",
-        "accent_border_dark": "#166534",
-        "primary": "#10B981",
-        "primary_hover": "#059669",
-        "primary_pressed": "#047857",
+        "label": "薄荷绿",
+        "accent": "#34C759",
+        "accent_hover": "#28B84B",
+        "accent_pressed": "#209E3F",
+        "accent_soft_dark": "#E4F8EA",
+        "accent_border_dark": "#A9E5B8",
+        "primary": "#34C759",
+        "primary_hover": "#28B84B",
+        "primary_pressed": "#209E3F",
     },
     "blue": {
-        "label": "深蓝",
-        "accent": "#60A5FA",
-        "accent_hover": "#3B82F6",
-        "accent_pressed": "#2563EB",
-        "accent_soft_dark": "#172B4E",
-        "accent_border_dark": "#1D4ED8",
-        "primary": "#3B82F6",
-        "primary_hover": "#2563EB",
-        "primary_pressed": "#1D4ED8",
+        "label": "海湾蓝",
+        "accent": "#0A84FF",
+        "accent_hover": "#0071E3",
+        "accent_pressed": "#0060C9",
+        "accent_soft_dark": "#E4F1FF",
+        "accent_border_dark": "#A8D2FF",
+        "primary": "#0A84FF",
+        "primary_hover": "#0071E3",
+        "primary_pressed": "#0060C9",
     },
     "purple": {
-        "label": "紫色",
-        "accent": "#A78BFA",
-        "accent_hover": "#8B5CF6",
-        "accent_pressed": "#7C3AED",
-        "accent_soft_dark": "#2E2453",
-        "accent_border_dark": "#6D28D9",
-        "primary": "#8B5CF6",
-        "primary_hover": "#7C3AED",
-        "primary_pressed": "#6D28D9",
+        "label": "鸢尾紫",
+        "accent": "#AF52DE",
+        "accent_hover": "#9B43C8",
+        "accent_pressed": "#8436AD",
+        "accent_soft_dark": "#F4E8FB",
+        "accent_border_dark": "#D8A7EF",
+        "primary": "#AF52DE",
+        "primary_hover": "#9B43C8",
+        "primary_pressed": "#8436AD",
     },
 }
 
 ACCENT_SOFT_COLORS = {
     "cyan": "#E8F3FF",
-    "green": "#EEF7F1",
-    "blue": "#EFF6FF",
-    "purple": "#F3E8FF",
+    "green": "#ECF9F0",
+    "blue": "#EAF4FF",
+    "purple": "#F6EAFE",
 }
 
 THEME_BASES = {
     "dark": {
-        "window_bg": "#FFFFFF",
-        "panel": "#FFFFFF",
-        "panel_alt": "#F5F5F6",
-        "panel_hover": "#ECEFF2",
-        "text": "#50555C",
-        "title": "#202327",
-        "muted": "#8A8F96",
-        "placeholder": "#A1A6AD",
-        "border": "#DFE2E6",
-        "border_soft": "#EAECF0",
-        "table_header": "#F3F4F6",
-        "table_row": "#FFFFFF",
-        "table_row_alt": "#FAFBFC",
-        "input": "#FFFFFF",
-        "disabled_bg": "#EEF2F5",
-        "disabled_text": "#A0AAB6",
+        "window_bg": "qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #E1F3FF, stop:0.46 #8BC6EF, stop:1 #D7EEFC)",
+        "panel": "rgba(255, 255, 255, 158)",
+        "panel_alt": "rgba(255, 255, 255, 92)",
+        "panel_hover": "rgba(255, 255, 255, 210)",
+        "text": "#30465C",
+        "title": "#10243A",
+        "muted": "#5F7489",
+        "placeholder": "#A3ACBA",
+        "border": "rgba(255, 255, 255, 135)",
+        "border_soft": "rgba(255, 255, 255, 78)",
+        "table_header": "rgba(255, 255, 255, 160)",
+        "table_row": "rgba(255, 255, 255, 196)",
+        "table_row_alt": "rgba(255, 255, 255, 150)",
+        "input": "rgba(255, 255, 255, 210)",
+        "disabled_bg": "rgba(217, 229, 242, 168)",
+        "disabled_text": "#8FA0B2",
         "danger_bg": "#FFF1F2",
-        "danger_text": "#BE123C",
-        "danger_border": "#FDA4AF",
+        "danger_text": "#D92D20",
+        "danger_border": "#FDA29B",
         "shadow": "rgba(15, 23, 42, 24)",
     },
 }
@@ -101,6 +101,7 @@ def build_theme_stylesheet(colors):
     QMainWindow {{
         background: {colors["window_bg"]};
         color: {colors["text"]};
+        font-family: "PingFang SC", "Microsoft YaHei";
     }}
     QWidget#appShell {{
         background: {colors["window_bg"]};
@@ -108,8 +109,10 @@ def build_theme_stylesheet(colors):
     QWidget#homePage,
     QWidget#excelPage,
     QWidget#splitPage,
+    QWidget#cleanupPage,
     QWidget#invoicePage,
     QWidget#documentPage,
+    QWidget#batchPage,
     QWidget#pdfPage,
     QWidget#renamePage {{
         background: {colors["window_bg"]};
@@ -120,7 +123,7 @@ def build_theme_stylesheet(colors):
     }}
     QLabel[role="title"] {{
         color: {colors["title"]};
-        font-size: 26px;
+        font-size: 28px;
         font-weight: 700;
     }}
     QLabel[role="subtitle"],
@@ -142,7 +145,7 @@ def build_theme_stylesheet(colors):
     QGroupBox {{
         background: {colors["panel"]};
         border: 1px solid {colors["border"]};
-        border-radius: 12px;
+        border-radius: 8px;
         margin-top: 12px;
         padding-top: 12px;
         color: {colors["text"]};
@@ -160,7 +163,7 @@ def build_theme_stylesheet(colors):
         alternate-background-color: {colors["table_row_alt"]};
         color: {colors["text"]};
         border: 1px solid {colors["border"]};
-        border-radius: 10px;
+        border-radius: 8px;
         font-size: 13px;
         selection-background-color: {colors["accent"]};
         selection-color: #FFFFFF;
@@ -172,25 +175,6 @@ def build_theme_stylesheet(colors):
     QTreeWidget::item:selected {{
         background: {colors["accent"]};
         color: #FFFFFF;
-    }}
-    QTreeWidget::indicator {{
-        width: 18px;
-        height: 18px;
-        border-radius: 5px;
-        border: 1px solid {colors["border"]};
-        background: {colors["input"]};
-    }}
-    QTreeWidget::indicator:checked {{
-        background: {colors["accent"]};
-        border: 1px solid {colors["accent"]};
-    }}
-    QTreeWidget::indicator:unchecked:selected {{
-        background: {colors["input"]};
-        border: 1px solid #FFFFFF;
-    }}
-    QTreeWidget::indicator:checked:selected {{
-        background: #FFFFFF;
-        border: 1px solid #FFFFFF;
     }}
     QWidget[pdfCard="true"] {{
         background: {colors["table_row"]};
@@ -220,7 +204,7 @@ def build_theme_stylesheet(colors):
     }}
     QTabWidget::pane {{
         border: 1px solid {colors["border"]};
-        border-radius: 10px;
+        border-radius: 8px;
         background: {colors["panel"]};
     }}
     QTabBar::tab {{
@@ -305,22 +289,11 @@ def build_theme_stylesheet(colors):
         color: {colors["text"]};
         spacing: 8px;
     }}
-    QCheckBox::indicator {{
-        width: 18px;
-        height: 18px;
-        border-radius: 5px;
-        border: 1px solid {colors["border"]};
-        background: {colors["input"]};
-    }}
-    QCheckBox::indicator:checked {{
-        background: {colors["accent"]};
-        border: 1px solid {colors["accent"]};
-    }}
     QPushButton {{
         background: {colors["panel"]};
         color: {colors["text"]};
         border: 1px solid {colors["border"]};
-        border-radius: 9px;
+        border-radius: 8px;
         padding: 7px 14px;
         font-weight: 500;
     }}
@@ -343,7 +316,7 @@ def build_theme_stylesheet(colors):
         background: {colors["primary"]};
         color: #FFFFFF;
         border: 1px solid {colors["primary"]};
-        border-radius: 12px;
+        border-radius: 8px;
         font-weight: 700;
         padding: 9px 30px;
     }}
@@ -357,7 +330,7 @@ def build_theme_stylesheet(colors):
     }}
     QPushButton[variant="accent"] {{
         background: {colors["accent_soft"]};
-        color: {colors["accent"]};
+        color: {colors["primary"]};
         border: 1px solid {colors["accent_border"]};
         font-weight: 600;
     }}
@@ -406,32 +379,34 @@ def build_theme_stylesheet(colors):
         color: {colors["title"]};
     }}
     QWidget#homeSidebar {{
-        background: {colors["panel_alt"]};
-        border-right: 1px solid {colors["border"]};
+        background: rgba(15, 67, 108, 232);
+        border-right: 1px solid rgba(255, 255, 255, 86);
     }}
     QWidget#homeMain {{
         background: {colors["window_bg"]};
     }}
     QWidget[homePanel="true"],
     QWidget[homeCard="true"] {{
-        background: {colors["panel_alt"]};
-        border: 1px solid {colors["border"]};
-        border-radius: 12px;
+        background: rgba(255, 255, 255, 126);
+        border: 1px solid rgba(255, 255, 255, 168);
+        border-radius: 8px;
     }}
     QWidget[homeStatus="true"] {{
-        background: {colors["accent_soft"]};
-        border-left: 4px solid {colors["primary"]};
+        background: rgba(255, 255, 255, 112);
+        border: 1px solid rgba(255, 255, 255, 128);
+        border-radius: 8px;
     }}
     QWidget[homeHero="true"] {{
-        background: {colors["accent_soft"]};
-        border-left: 4px solid {colors["primary"]};
+        background: rgba(55, 143, 222, 98);
+        border: 1px solid rgba(255, 255, 255, 150);
+        border-radius: 8px;
     }}
     QWidget[homeCard="true"]:hover {{
         border: 1px solid {colors["primary"]};
     }}
     QLabel[homeRole="title"] {{
         color: {colors["title"]};
-        font-size: 32px;
+        font-size: 34px;
         font-weight: 700;
     }}
     QLabel[homeRole="section"] {{
@@ -461,7 +436,7 @@ def build_theme_stylesheet(colors):
         background: transparent;
         color: {colors["text"]};
         border: none;
-        border-radius: 10px;
+        border-radius: 8px;
         padding: 10px 14px;
         text-align: left;
         font-size: 15px;
@@ -472,20 +447,20 @@ def build_theme_stylesheet(colors):
         color: {colors["primary"]};
     }}
     QPushButton[variant="homeNavActive"] {{
-        background: {colors["primary"]};
-        color: #FFFFFF;
+        background: {colors["accent_soft"]};
+        color: {colors["primary"]};
         border: none;
-        border-radius: 10px;
+        border-radius: 8px;
         padding: 10px 14px;
         text-align: left;
         font-size: 15px;
         font-weight: 700;
     }}
     QPushButton[variant="homeOpen"] {{
-        background: {colors["panel_alt"]};
+        background: rgba(255, 255, 255, 210);
         color: {colors["title"]};
         border: 1px solid {colors["border"]};
-        border-radius: 9px;
+        border-radius: 8px;
         padding: 7px 16px;
         font-weight: 600;
     }}
@@ -509,6 +484,25 @@ def build_theme_stylesheet(colors):
         border-radius: 9px;
         padding: 8px 18px;
         font-weight: 600;
+    }}
+    QWidget#homeSidebar QLabel[homeRole="brand"] {{
+        color: #FFFFFF;
+    }}
+    QWidget#homeSidebar QLabel[homeRole="muted"] {{
+        color: rgba(255, 255, 255, 178);
+    }}
+    QWidget#homeSidebar QPushButton[variant="homeNav"] {{
+        background: transparent;
+        color: rgba(255, 255, 255, 206);
+    }}
+    QWidget#homeSidebar QPushButton[variant="homeNav"]:hover {{
+        background: rgba(255, 255, 255, 34);
+        color: #FFFFFF;
+    }}
+    QWidget#homeSidebar QPushButton[variant="homeNavActive"] {{
+        background: rgba(255, 255, 255, 48);
+        color: #FFFFFF;
+        border: 1px solid rgba(255, 255, 255, 92);
     }}
     QProgressDialog {{
         background: {colors["panel"]};

@@ -58,11 +58,23 @@ from excel_merge_tool import (
     get_file_info,
     split_workbook_by_rows,
 )
+from excel_cleanup_tool import (
+    CleanupOptions,
+    clean_workbook,
+    preview_cleanup,
+    workbook_sheet_names,
+)
 from batch_rename_tool import (
     RenameOptions,
     apply_renames,
     discover_rename_files,
     preview_renames,
+)
+from smart_rename_tool import suggest_smart_renames
+from batch_processing_tool import (
+    discover_pdf_files,
+    inspect_pdf_files,
+    process_pdf_files,
 )
 from document_router import process_document
 from api_layer import (
@@ -77,16 +89,20 @@ from pdf_toolbox import (
     COMPRESSION_PRESETS,
     IMAGE_SUFFIXES,
     PdfPageRef,
+    add_pdf_marks,
     compress_pdf,
+    compare_pdf_text,
     default_output_name,
     estimate_compressed_size,
     images_to_pdf,
+    make_searchable_pdf,
     output_path,
     page_count,
     pdfs_to_images,
     prepare_image_thumbnail,
     render_page_thumbnail,
     save_pages,
+    secure_pdf,
 )
 from ui.common_widgets import ClearSpinBox, SelectionComboBox
 from ui.pdf_widgets import (
@@ -199,6 +215,11 @@ class ExcelMergerWindow(QMainWindow):
         self.split_source_info = {}
         self.split_output_folder = ""
         self.split_result_folder = ""
+        self.cleanup_source_file = ""
+        self.cleanup_output_folder = ""
+        self.cleanup_result_file = ""
+        self.cleanup_preview = None
+        self.cleanup_populating_columns = False
         self.invoice_source_files = []
         self.invoice_output_folder = ""
         self.document_source_file = ""
@@ -208,6 +229,11 @@ class ExcelMergerWindow(QMainWindow):
         self.document_ocr_thread = None
         self.document_ocr_progress = None
         self.document_ocr_task_kind = ""
+        self.batch_source_folder = ""
+        self.batch_output_folder = ""
+        self.batch_previews = []
+        self.batch_failed_files = []
+        self.batch_last_log_file = ""
         self.background_task_thread = None
         self.background_task_progress = None
         self.background_task_status_label = None
@@ -216,12 +242,27 @@ class ExcelMergerWindow(QMainWindow):
         self.rename_previews = []
         self.rename_preview_valid = False
         self.rename_last_log_file = ""
+        self.rename_smart_result = None
         self.pdf_output_folder = ""
         self.pdf_page_cards = []
         self.pdf_compress_source_file = ""
         self.pdf_image_source_files = []
         self.pdf_image_cards = []
         self.pdf_export_source_files = []
+        self.pdf_marks_source_file = ""
+        self.pdf_marks_output_folder = ""
+        self.pdf_marks_result_file = ""
+        self.pdf_security_source_file = ""
+        self.pdf_security_output_folder = ""
+        self.pdf_security_result_file = ""
+        self.pdf_searchable_source_file = ""
+        self.pdf_searchable_output_folder = ""
+        self.pdf_searchable_result_file = ""
+        self.pdf_searchable_inspection = None
+        self.pdf_compare_left_file = ""
+        self.pdf_compare_right_file = ""
+        self.pdf_compare_output_folder = ""
+        self.pdf_compare_result_file = ""
         self.pdf_thumbnail_tempdir = tempfile.TemporaryDirectory(
             prefix="eggie-pdf-thumbs-"
         )
@@ -265,15 +306,19 @@ class ExcelMergerWindow(QMainWindow):
         self.excel_page = QWidget()
         self.excel_page.setObjectName("excelPage")
         self.split_page = self.create_split_page()
+        self.cleanup_page = self.create_cleanup_page()
         self.invoice_page = self.create_invoice_page()
         self.document_page = self.create_document_page()
+        self.batch_page = self.create_batch_page()
         self.rename_page = self.create_rename_page()
         self.pdf_page = self.create_pdf_page()
         self.stack.addWidget(self.home_page)
         self.stack.addWidget(self.excel_page)
         self.stack.addWidget(self.split_page)
+        self.stack.addWidget(self.cleanup_page)
         self.stack.addWidget(self.invoice_page)
         self.stack.addWidget(self.document_page)
+        self.stack.addWidget(self.batch_page)
         self.stack.addWidget(self.rename_page)
         self.stack.addWidget(self.pdf_page)
         self.set_active_navigation("home")
@@ -429,7 +474,7 @@ class ExcelMergerWindow(QMainWindow):
         sidebar = QWidget()
         sidebar.setObjectName("homeSidebar")
         sidebar.setAttribute(Qt.WA_StyledBackground, True)
-        sidebar.setFixedWidth(220)
+        sidebar.setFixedWidth(250)
         layout = QVBoxLayout(sidebar)
         layout.setContentsMargins(20, 22, 18, 20)
         layout.setSpacing(8)
@@ -439,6 +484,17 @@ class ExcelMergerWindow(QMainWindow):
         self.home_logo_pixmap = QPixmap(str(resource_path("assets/app_icon.png")))
         self.home_logo_label = QLabel()
         self.home_logo_label.setFixedSize(52, 52)
+        self.home_logo_label.setAlignment(Qt.AlignCenter)
+        if not self.home_logo_pixmap.isNull():
+            self.home_logo_label.setPixmap(
+                self.home_logo_pixmap.scaled(
+                    QSize(52, 52),
+                    Qt.KeepAspectRatio,
+                    Qt.SmoothTransformation,
+                )
+            )
+        else:
+            self.home_logo_label.setText("Eggie")
         brand.addWidget(self.home_logo_label)
 
         brand_text = QVBoxLayout()
@@ -466,8 +522,10 @@ class ExcelMergerWindow(QMainWindow):
         add_nav("home", "工作台", self.show_home)
         add_nav("excel", "Excel 合并", self.show_excel_tool)
         add_nav("split", "Excel 拆分", self.show_split_tool)
+        add_nav("cleanup", "Excel 数据清理", self.show_cleanup_tool)
         add_nav("invoice", "发票解析", self.show_invoice_tool)
         add_nav("document", "文档处理", self.show_document_tool)
+        add_nav("batch", "批量处理", self.show_batch_tool)
         add_nav("rename", "批量改名", self.show_rename_tool)
         add_nav("pdf", "PDF 工具箱", self.show_pdf_tool)
         layout.addStretch(1)
@@ -517,12 +575,20 @@ class ExcelMergerWindow(QMainWindow):
         title_layout.addWidget(self.home_title_label)
         title_layout.addWidget(self.home_subtitle_label)
         header_layout.addLayout(title_layout, 1)
+        header_right = QHBoxLayout()
+        header_right.setSpacing(10)
+        settings_button = QPushButton("设置")
+        settings_button.setProperty("variant", "homeOpen")
+        settings_button.setMinimumSize(96, 38)
+        settings_button.clicked.connect(self.show_settings)
+        header_right.addWidget(settings_button)
+        header_layout.addLayout(header_right)
         main_layout.addLayout(header_layout)
 
         status = styled_widget(prop_name="homeStatus")
         status_layout = QHBoxLayout(status)
         status_layout.setContentsMargins(18, 12, 18, 12)
-        status_layout.addWidget(home_label("✓ 软件已就绪，请从左侧菜单或下方卡片选择工具。", "body"))
+        status_layout.addWidget(home_label("软件已就绪，请从左侧菜单或下方卡片选择工具。", "body"))
         main_layout.addWidget(status)
 
         banner = styled_widget(prop_name="homeHero")
@@ -535,7 +601,7 @@ class ExcelMergerWindow(QMainWindow):
             home_label("选择工具，添加文件，确认后处理", "cardTitle")
         )
         banner_text_layout.addWidget(
-            home_label("不展示虚假的处理数量或最近文件，只保留真实可用入口。", "muted")
+            home_label("首页只保留真实可用入口，处理结果仍在各工具完成后直接打开。", "muted")
         )
         banner_layout.addLayout(banner_text_layout, 1)
         main_layout.addWidget(banner)
@@ -590,16 +656,19 @@ class ExcelMergerWindow(QMainWindow):
             return card
 
         tool_specs = [
-            ("XL", "#3198F5", "Excel 合并", "按顺序合并多个表格，并保留主要格式。", self.show_excel_tool),
-            ("XL", "#3198F5", "Excel 拆分", "按表头和数据行数拆分成多个文件。", self.show_split_tool),
-            ("PDF", "#3198F5", "发票解析", "批量解析发票，并生成台账汇总。", self.show_invoice_tool),
-            ("DOC", "#3198F5", "文档处理", "自动识别合同、表格和发票类 PDF。", self.show_document_tool),
-            ("REN", "#3198F5", "批量改名", "先预览新文件名，确认后再执行。", self.show_rename_tool),
-            ("PDF", "#3198F5", "PDF 工具箱", "页面整理、压缩和图片互转。", self.show_pdf_tool),
+            ("XL", "#34C759", "Excel 合并", "按顺序合并多个表格，并保留主要格式。", self.show_excel_tool),
+            ("XL", "#0A84FF", "Excel 拆分", "按表头和数据行数拆分成多个文件。", self.show_split_tool),
+            ("XL", "#30B0C7", "Excel 数据清理", "先预览空行、重复行和格式问题，再另存新文件。", self.show_cleanup_tool),
+            ("PDF", "#FF9F0A", "发票解析", "批量解析发票，并生成汇总结果。", self.show_invoice_tool),
+            ("DOC", "#AF52DE", "文档处理", "自动识别合同、表格和发票类 PDF。", self.show_document_tool),
+            ("BAT", "#007AFF", "批量处理", "选择文件夹，自动识别并逐个生成结果。", self.show_batch_tool),
+            ("REN", "#30B0C7", "批量改名", "先预览新文件名，确认后再执行。", self.show_rename_tool),
+            ("PDF", "#FF453A", "PDF 工具箱", "页面整理、压缩和图片互转。", self.show_pdf_tool),
         ]
         for index, spec in enumerate(tool_specs):
             self.home_grid.addWidget(tool_card(*spec), index // 2, index % 2)
         tools_layout.addLayout(self.home_grid)
+        tools_layout.addStretch(1)
         content_layout.addLayout(tools_layout, 1)
         main_layout.addLayout(content_layout, 1)
         return page
@@ -709,6 +778,131 @@ class ExcelMergerWindow(QMainWindow):
         self.split_button.clicked.connect(self.split_workbook)
         self.split_header_rows_spinbox.valueChanged.connect(self.update_split_estimate)
         self.split_rows_per_file_spinbox.valueChanged.connect(self.update_split_estimate)
+        return page
+
+    def create_cleanup_page(self):
+        page = QWidget()
+        page.setObjectName("cleanupPage")
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(22, 18, 22, 18)
+        layout.setSpacing(12)
+
+        title = QLabel("Excel 数据清理")
+        title.setFont(QFont("PingFang SC", 24, QFont.Bold))
+        title.setProperty("role", "title")
+        layout.addWidget(title)
+        subtitle = QLabel("先查看预计变化，再把选中的工作表清理后另存为新文件")
+        subtitle.setProperty("role", "subtitle")
+        layout.addWidget(subtitle)
+
+        source_group = QGroupBox("源文件和工作表")
+        source_layout = QVBoxLayout(source_group)
+        source_row = QHBoxLayout()
+        self.cleanup_source_path_edit = QLineEdit()
+        self.cleanup_source_path_edit.setReadOnly(True)
+        self.cleanup_source_path_edit.setPlaceholderText("请选择 .xlsx 或 .xlsm 文件")
+        self.choose_cleanup_source_button = QPushButton("选择 Excel")
+        self.choose_cleanup_source_button.setProperty("variant", "accent")
+        source_row.addWidget(self.cleanup_source_path_edit, 1)
+        source_row.addWidget(self.choose_cleanup_source_button)
+        source_layout.addLayout(source_row)
+        sheet_row = QHBoxLayout()
+        self.cleanup_sheet_combo = SelectionComboBox()
+        self.cleanup_header_row_spinbox = ClearSpinBox()
+        self.cleanup_header_row_spinbox.setRange(1, 999)
+        self.cleanup_header_row_spinbox.setValue(1)
+        self.cleanup_header_row_spinbox.setSuffix(" 行")
+        self.cleanup_preview_button = QPushButton("更新预览")
+        sheet_row.addWidget(QLabel("工作表："))
+        sheet_row.addWidget(self.cleanup_sheet_combo, 1)
+        sheet_row.addWidget(QLabel("表头所在行："))
+        sheet_row.addWidget(self.cleanup_header_row_spinbox)
+        sheet_row.addWidget(self.cleanup_preview_button)
+        source_layout.addLayout(sheet_row)
+        layout.addWidget(source_group)
+
+        options_group = QGroupBox("清理规则")
+        options_layout = QHBoxLayout(options_group)
+        self.cleanup_empty_rows_checkbox = QCheckBox("删除整行空白")
+        self.cleanup_empty_rows_checkbox.setChecked(True)
+        self.cleanup_spaces_checkbox = QCheckBox("清理文字多余空格")
+        self.cleanup_spaces_checkbox.setChecked(True)
+        self.cleanup_deduplicate_checkbox = QCheckBox("删除重复行")
+        self.cleanup_dates_checkbox = QCheckBox("统一日期显示")
+        self.cleanup_numbers_checkbox = QCheckBox("统一数字显示")
+        for checkbox in (
+            self.cleanup_empty_rows_checkbox,
+            self.cleanup_spaces_checkbox,
+            self.cleanup_deduplicate_checkbox,
+            self.cleanup_dates_checkbox,
+            self.cleanup_numbers_checkbox,
+        ):
+            options_layout.addWidget(checkbox)
+        options_layout.addStretch(1)
+        layout.addWidget(options_group)
+
+        columns_group = QGroupBox("排重列（不勾选任何列时按整行排重）")
+        columns_layout = QVBoxLayout(columns_group)
+        self.cleanup_columns_tree = QTreeWidget()
+        self.cleanup_columns_tree.setHeaderLabels(["可作为排重依据的列"])
+        self.cleanup_columns_tree.setRootIsDecorated(False)
+        self.cleanup_columns_tree.setMaximumHeight(145)
+        columns_layout.addWidget(self.cleanup_columns_tree)
+        layout.addWidget(columns_group)
+
+        preview_group = QGroupBox("预计结果")
+        preview_layout = QVBoxLayout(preview_group)
+        self.cleanup_preview_label = QLabel("等待选择 Excel 文件")
+        self.cleanup_preview_label.setWordWrap(True)
+        self.cleanup_preview_label.setProperty("role", "status")
+        preview_layout.addWidget(self.cleanup_preview_label)
+        layout.addWidget(preview_group)
+
+        output_group = QGroupBox("保存位置")
+        output_layout = QHBoxLayout(output_group)
+        self.cleanup_output_path_edit = QLineEdit()
+        self.cleanup_output_path_edit.setReadOnly(True)
+        self.cleanup_output_path_edit.setPlaceholderText("请选择结果保存文件夹")
+        self.choose_cleanup_output_button = QPushButton("选择文件夹")
+        output_layout.addWidget(self.cleanup_output_path_edit, 1)
+        output_layout.addWidget(self.choose_cleanup_output_button)
+        layout.addWidget(output_group)
+
+        action_layout = QHBoxLayout()
+        self.cleanup_start_button = QPushButton("开始清理并另存")
+        self.cleanup_start_button.setProperty("variant", "primary")
+        self.cleanup_start_button.setMinimumHeight(46)
+        self.cleanup_open_result_button = QPushButton("打开结果")
+        self.cleanup_open_result_button.setMinimumHeight(46)
+        action_layout.addStretch()
+        action_layout.addWidget(self.cleanup_start_button)
+        action_layout.addWidget(self.cleanup_open_result_button)
+        action_layout.addStretch()
+        layout.addLayout(action_layout)
+
+        self.choose_cleanup_source_button.clicked.connect(self.choose_cleanup_source_file)
+        self.choose_cleanup_output_button.clicked.connect(self.choose_cleanup_output_folder)
+        self.cleanup_preview_button.clicked.connect(self.refresh_cleanup_preview)
+        self.cleanup_start_button.clicked.connect(self.start_excel_cleanup)
+        self.cleanup_open_result_button.clicked.connect(
+            lambda: self.open_output_file(self.cleanup_result_file)
+        )
+        self.cleanup_sheet_combo.currentIndexChanged.connect(
+            self.invalidate_cleanup_preview
+        )
+        self.cleanup_header_row_spinbox.valueChanged.connect(
+            self.invalidate_cleanup_preview
+        )
+        self.cleanup_columns_tree.itemChanged.connect(self.invalidate_cleanup_preview)
+        for checkbox in (
+            self.cleanup_empty_rows_checkbox,
+            self.cleanup_spaces_checkbox,
+            self.cleanup_deduplicate_checkbox,
+            self.cleanup_dates_checkbox,
+            self.cleanup_numbers_checkbox,
+        ):
+            checkbox.toggled.connect(self.invalidate_cleanup_preview)
+        self.update_cleanup_button_states()
         return page
 
     def create_invoice_page(self):
@@ -978,6 +1172,125 @@ class ExcelMergerWindow(QMainWindow):
         self.update_document_button_states()
         return page
 
+    def create_batch_page(self):
+        page = QWidget()
+        page.setObjectName("batchPage")
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(22, 18, 22, 18)
+        layout.setSpacing(14)
+
+        title = QLabel("批量处理")
+        title.setFont(QFont("PingFang SC", 24, QFont.Bold))
+        title.setProperty("role", "title")
+        layout.addWidget(title)
+        subtitle = QLabel("选择一个文件夹，逐个识别其中的 PDF 并生成对应结果")
+        subtitle.setProperty("role", "subtitle")
+        layout.addWidget(subtitle)
+
+        source_group = QGroupBox("来源文件夹")
+        source_layout = QVBoxLayout(source_group)
+        source_row = QHBoxLayout()
+        self.batch_source_path_edit = QLineEdit()
+        self.batch_source_path_edit.setReadOnly(True)
+        self.batch_source_path_edit.setPlaceholderText("请选择包含 PDF 的文件夹")
+        self.choose_batch_source_button = QPushButton("选择文件夹")
+        self.choose_batch_source_button.setProperty("variant", "accent")
+        self.batch_recursive_checkbox = QCheckBox("包含子文件夹")
+        self.batch_preview_button = QPushButton("重新检查")
+        source_row.addWidget(self.batch_source_path_edit, 1)
+        source_row.addWidget(self.choose_batch_source_button)
+        source_row.addWidget(self.batch_recursive_checkbox)
+        source_row.addWidget(self.batch_preview_button)
+        source_layout.addLayout(source_row)
+        self.batch_source_status_label = QLabel("尚未选择文件夹")
+        self.batch_source_status_label.setProperty("role", "status")
+        source_layout.addWidget(self.batch_source_status_label)
+        layout.addWidget(source_group)
+
+        preview_group = QGroupBox("处理预览")
+        preview_layout = QVBoxLayout(preview_group)
+        self.batch_file_table = QTreeWidget()
+        self.batch_file_table.setColumnCount(6)
+        self.batch_file_table.setHeaderLabels(
+            ["序号", "PDF 文件", "页数", "扫描页", "预计处理方式", "状态"]
+        )
+        self.batch_file_table.setRootIsDecorated(False)
+        self.batch_file_table.setAlternatingRowColors(True)
+        self.batch_file_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        batch_header = self.batch_file_table.header()
+        batch_header.setSectionResizeMode(0, QHeaderView.Fixed)
+        batch_header.setSectionResizeMode(1, QHeaderView.Stretch)
+        batch_header.setSectionResizeMode(2, QHeaderView.Fixed)
+        batch_header.setSectionResizeMode(3, QHeaderView.Fixed)
+        batch_header.setSectionResizeMode(4, QHeaderView.ResizeToContents)
+        batch_header.setSectionResizeMode(5, QHeaderView.ResizeToContents)
+        self.batch_file_table.setColumnWidth(0, 65)
+        self.batch_file_table.setColumnWidth(2, 70)
+        self.batch_file_table.setColumnWidth(3, 80)
+        preview_layout.addWidget(self.batch_file_table)
+        layout.addWidget(preview_group, 1)
+
+        output_group = QGroupBox("结果保存文件夹")
+        output_layout = QHBoxLayout(output_group)
+        self.batch_output_path_edit = QLineEdit()
+        self.batch_output_path_edit.setReadOnly(True)
+        self.batch_output_path_edit.setPlaceholderText("默认保存在来源文件夹的 Eggie批量处理结果 中")
+        self.choose_batch_output_button = QPushButton("更改文件夹")
+        output_layout.addWidget(self.batch_output_path_edit, 1)
+        output_layout.addWidget(self.choose_batch_output_button)
+        layout.addWidget(output_group)
+
+        options_group = QGroupBox("扫描页识别")
+        options_layout = QHBoxLayout(options_group)
+        self.batch_ocr_checkbox = QCheckBox("扫描页使用云 OCR")
+        self.batch_ocr_provider_combo = SelectionComboBox()
+        for provider_key, provider_label in PROVIDER_LABELS.items():
+            self.batch_ocr_provider_combo.addItem(provider_label, provider_key)
+        provider_index = self.batch_ocr_provider_combo.findData(selected_provider())
+        self.batch_ocr_provider_combo.setCurrentIndex(max(0, provider_index))
+        self.batch_ocr_status_label = QLabel("默认只在本机处理；勾选后仅上传扫描页")
+        self.batch_ocr_status_label.setProperty("role", "hint")
+        options_layout.addWidget(self.batch_ocr_checkbox)
+        options_layout.addWidget(self.batch_ocr_provider_combo)
+        options_layout.addWidget(self.batch_ocr_status_label, 1)
+        layout.addWidget(options_group)
+
+        action_layout = QHBoxLayout()
+        self.batch_start_button = QPushButton("开始批量处理")
+        self.batch_start_button.setProperty("variant", "primary")
+        self.batch_start_button.setMinimumHeight(46)
+        self.batch_retry_button = QPushButton("只重试失败文件")
+        self.batch_retry_button.setMinimumHeight(46)
+        self.batch_open_folder_button = QPushButton("打开结果文件夹")
+        self.batch_open_folder_button.setMinimumHeight(46)
+        action_layout.addStretch()
+        action_layout.addWidget(self.batch_start_button)
+        action_layout.addWidget(self.batch_retry_button)
+        action_layout.addWidget(self.batch_open_folder_button)
+        action_layout.addStretch()
+        layout.addLayout(action_layout)
+        self.batch_status_label = QLabel("等待选择文件夹")
+        self.batch_status_label.setProperty("role", "status")
+        layout.addWidget(self.batch_status_label)
+
+        self.choose_batch_source_button.clicked.connect(self.choose_batch_source_folder)
+        self.choose_batch_output_button.clicked.connect(self.choose_batch_output_folder)
+        self.batch_preview_button.clicked.connect(self.refresh_batch_preview)
+        self.batch_recursive_checkbox.toggled.connect(self.refresh_batch_preview)
+        self.batch_ocr_provider_combo.currentIndexChanged.connect(
+            self.batch_ocr_provider_changed
+        )
+        self.batch_start_button.clicked.connect(self.start_batch_processing)
+        self.batch_retry_button.clicked.connect(self.retry_failed_batch_files)
+        self.batch_open_folder_button.clicked.connect(self.open_batch_output_folder)
+        self.batch_ocr_status_label.setText(
+            "密钥已配置；仅扫描页会上传"
+            if is_provider_configured(self.batch_ocr_provider_combo.currentData())
+            else "密钥未配置；默认仍可本机处理文字 PDF"
+        )
+        self.update_batch_button_states()
+        return page
+
     def create_rename_page(self):
         page = QWidget()
         page.setObjectName("renamePage")
@@ -1077,6 +1390,7 @@ class ExcelMergerWindow(QMainWindow):
             ("前面追加文字", "prefix"),
             ("后面追加文字", "suffix"),
             ("修改后缀", "extension"),
+            ("智能识别命名", "smart"),
         ):
             self.rename_rule_combo.addItem(label_text, rule_key)
         self.rename_rule_primary_label = QLabel("查找文字：")
@@ -1104,7 +1418,9 @@ class ExcelMergerWindow(QMainWindow):
         rules_layout.addWidget(self.rename_rule_count_label)
         rules_layout.addWidget(self.rename_rule_count_spinbox)
 
-        number_layout = QHBoxLayout()
+        self.rename_number_widget = QWidget()
+        number_layout = QHBoxLayout(self.rename_number_widget)
+        number_layout.setContentsMargins(0, 0, 0, 0)
         number_layout.setSpacing(8)
         self.rename_number_start_spinbox.setMinimumWidth(90)
         self.rename_number_digits_spinbox.setMinimumWidth(78)
@@ -1113,7 +1429,29 @@ class ExcelMergerWindow(QMainWindow):
         number_layout.addWidget(self.rename_number_start_spinbox)
         number_layout.addWidget(QLabel("位数"))
         number_layout.addWidget(self.rename_number_digits_spinbox)
-        rules_layout.addLayout(number_layout)
+        rules_layout.addWidget(self.rename_number_widget)
+
+        self.rename_smart_options_widget = QWidget()
+        smart_layout = QVBoxLayout(self.rename_smart_options_widget)
+        smart_layout.setContentsMargins(0, 0, 0, 0)
+        smart_layout.setSpacing(7)
+        smart_ocr_row = QHBoxLayout()
+        self.rename_smart_ocr_checkbox = QCheckBox("扫描页使用云 OCR")
+        self.rename_smart_provider_combo = SelectionComboBox()
+        for provider_key, provider_label in PROVIDER_LABELS.items():
+            self.rename_smart_provider_combo.addItem(provider_label, provider_key)
+        smart_provider_index = self.rename_smart_provider_combo.findData(selected_provider())
+        self.rename_smart_provider_combo.setCurrentIndex(max(0, smart_provider_index))
+        self.rename_smart_settings_button = QPushButton("设置")
+        smart_ocr_row.addWidget(self.rename_smart_ocr_checkbox)
+        smart_ocr_row.addWidget(self.rename_smart_provider_combo, 1)
+        smart_ocr_row.addWidget(self.rename_smart_settings_button)
+        smart_layout.addLayout(smart_ocr_row)
+        smart_hint = QLabel("仅支持 PDF；发票按日期、销售方和金额命名，合同按日期和标题命名。重复内容只标记。")
+        smart_hint.setWordWrap(True)
+        smart_hint.setProperty("role", "hint")
+        smart_layout.addWidget(smart_hint)
+        rules_layout.addWidget(self.rename_smart_options_widget)
         right_layout.addWidget(rules_group)
 
         log_group = QGroupBox("操作日志")
@@ -1188,6 +1526,15 @@ class ExcelMergerWindow(QMainWindow):
         self.rename_number_digits_spinbox.valueChanged.connect(
             lambda _value: self.schedule_rename_preview()
         )
+        self.rename_smart_ocr_checkbox.toggled.connect(
+            lambda _checked: self.schedule_rename_preview()
+        )
+        self.rename_smart_provider_combo.currentIndexChanged.connect(
+            self.rename_smart_provider_changed
+        )
+        self.rename_smart_settings_button.clicked.connect(
+            lambda: self.show_settings(self.rename_smart_provider_combo.currentData())
+        )
         self.update_rename_rule_inputs()
         self.refresh_rename_file_list()
         return page
@@ -1214,6 +1561,10 @@ class ExcelMergerWindow(QMainWindow):
         self.pdf_tabs.addTab(self.create_pdf_organizer_tab(), "页面整理")
         self.pdf_tabs.addTab(self.create_pdf_compress_tab(), "PDF 压缩")
         self.pdf_tabs.addTab(self.create_pdf_convert_tab(), "图片 / PDF 互转")
+        self.pdf_tabs.addTab(self.create_pdf_marks_tab(), "水印与页码")
+        self.pdf_tabs.addTab(self.create_pdf_security_tab(), "PDF 密码")
+        self.pdf_tabs.addTab(self.create_searchable_pdf_tab(), "可搜索 PDF")
+        self.pdf_tabs.addTab(self.create_pdf_compare_tab(), "文字对比")
         layout.addWidget(self.pdf_tabs, 1)
 
         self.update_pdf_button_states()
@@ -1547,6 +1898,331 @@ class ExcelMergerWindow(QMainWindow):
         self.show_pdf_convert_mode(0)
         return tab
 
+    def create_pdf_marks_tab(self):
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(12, 14, 12, 12)
+        layout.setSpacing(11)
+
+        source_group = QGroupBox("选择 PDF")
+        source_layout = QHBoxLayout(source_group)
+        self.pdf_marks_source_edit = QLineEdit()
+        self.pdf_marks_source_edit.setReadOnly(True)
+        self.pdf_marks_source_edit.setPlaceholderText("请选择需要添加水印或页码的 PDF")
+        self.pdf_choose_marks_source_button = QPushButton("选择 PDF")
+        self.pdf_choose_marks_source_button.setProperty("variant", "accent")
+        source_layout.addWidget(self.pdf_marks_source_edit, 1)
+        source_layout.addWidget(self.pdf_choose_marks_source_button)
+        layout.addWidget(source_group)
+
+        watermark_group = QGroupBox("文字水印")
+        watermark_layout = QHBoxLayout(watermark_group)
+        self.pdf_watermark_checkbox = QCheckBox("添加水印")
+        self.pdf_watermark_checkbox.setChecked(True)
+        self.pdf_watermark_text_edit = QLineEdit("内部资料")
+        self.pdf_watermark_text_edit.setPlaceholderText("水印文字")
+        self.pdf_watermark_opacity_spinbox = ClearSpinBox()
+        self.pdf_watermark_opacity_spinbox.setRange(5, 80)
+        self.pdf_watermark_opacity_spinbox.setValue(18)
+        self.pdf_watermark_opacity_spinbox.setSuffix(" %")
+        self.pdf_watermark_angle_spinbox = ClearSpinBox()
+        self.pdf_watermark_angle_spinbox.setRange(-180, 180)
+        self.pdf_watermark_angle_spinbox.setValue(-30)
+        self.pdf_watermark_angle_spinbox.setSuffix("°")
+        self.pdf_watermark_size_spinbox = ClearSpinBox()
+        self.pdf_watermark_size_spinbox.setRange(12, 120)
+        self.pdf_watermark_size_spinbox.setValue(40)
+        self.pdf_watermark_size_spinbox.setSuffix(" 号")
+        self.pdf_watermark_position_combo = SelectionComboBox()
+        for label_text, value in (
+            ("页面中央", "center"),
+            ("左上", "top_left"),
+            ("右上", "top_right"),
+            ("左下", "bottom_left"),
+            ("右下", "bottom_right"),
+        ):
+            self.pdf_watermark_position_combo.addItem(label_text, value)
+        watermark_layout.addWidget(self.pdf_watermark_checkbox)
+        watermark_layout.addWidget(self.pdf_watermark_text_edit, 1)
+        watermark_layout.addWidget(QLabel("透明度"))
+        watermark_layout.addWidget(self.pdf_watermark_opacity_spinbox)
+        watermark_layout.addWidget(QLabel("角度"))
+        watermark_layout.addWidget(self.pdf_watermark_angle_spinbox)
+        watermark_layout.addWidget(QLabel("字号"))
+        watermark_layout.addWidget(self.pdf_watermark_size_spinbox)
+        watermark_layout.addWidget(self.pdf_watermark_position_combo)
+        layout.addWidget(watermark_group)
+
+        number_group = QGroupBox("页码")
+        number_layout = QHBoxLayout(number_group)
+        self.pdf_page_number_checkbox = QCheckBox("添加页码")
+        self.pdf_page_number_start_spinbox = ClearSpinBox()
+        self.pdf_page_number_start_spinbox.setRange(0, 999999)
+        self.pdf_page_number_start_spinbox.setValue(1)
+        self.pdf_page_number_position_combo = SelectionComboBox()
+        for label_text, value in (
+            ("底部居中", "bottom_center"),
+            ("底部左侧", "bottom_left"),
+            ("底部右侧", "bottom_right"),
+            ("顶部居中", "top_center"),
+            ("顶部左侧", "top_left"),
+            ("顶部右侧", "top_right"),
+        ):
+            self.pdf_page_number_position_combo.addItem(label_text, value)
+        number_layout.addWidget(self.pdf_page_number_checkbox)
+        number_layout.addWidget(QLabel("起始页码"))
+        number_layout.addWidget(self.pdf_page_number_start_spinbox)
+        number_layout.addWidget(QLabel("位置"))
+        number_layout.addWidget(self.pdf_page_number_position_combo)
+        number_layout.addStretch(1)
+        layout.addWidget(number_group)
+
+        output_group = QGroupBox("输出设置")
+        output_layout = QHBoxLayout(output_group)
+        self.pdf_marks_output_folder_edit = QLineEdit()
+        self.pdf_marks_output_folder_edit.setReadOnly(True)
+        self.pdf_choose_marks_output_button = QPushButton("选择文件夹")
+        self.pdf_marks_output_name_edit = QLineEdit()
+        self.pdf_marks_output_name_edit.setPlaceholderText(default_output_name("水印页码结果"))
+        output_layout.addWidget(QLabel("文件夹："))
+        output_layout.addWidget(self.pdf_marks_output_folder_edit, 2)
+        output_layout.addWidget(self.pdf_choose_marks_output_button)
+        output_layout.addWidget(QLabel("文件名："))
+        output_layout.addWidget(self.pdf_marks_output_name_edit, 1)
+        layout.addWidget(output_group)
+
+        self.pdf_marks_start_button = QPushButton("生成新 PDF")
+        self.pdf_marks_start_button.setMinimumHeight(46)
+        self.pdf_marks_start_button.setProperty("variant", "primary")
+        self.pdf_marks_status_label = QLabel("尚未选择 PDF")
+        self.pdf_marks_status_label.setProperty("role", "status")
+        layout.addWidget(self.pdf_marks_start_button)
+        layout.addWidget(self.pdf_marks_status_label)
+        layout.addStretch(1)
+
+        self.pdf_choose_marks_source_button.clicked.connect(self.choose_pdf_marks_source)
+        self.pdf_choose_marks_output_button.clicked.connect(self.choose_pdf_marks_output_folder)
+        self.pdf_marks_start_button.clicked.connect(self.create_marked_pdf)
+        self.pdf_watermark_checkbox.toggled.connect(self.update_pdf_marks_controls)
+        self.pdf_page_number_checkbox.toggled.connect(self.update_pdf_marks_controls)
+        self.update_pdf_marks_controls()
+        return tab
+
+    def create_pdf_security_tab(self):
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(12, 14, 12, 12)
+        layout.setSpacing(12)
+
+        source_group = QGroupBox("选择 PDF")
+        source_layout = QHBoxLayout(source_group)
+        self.pdf_security_source_edit = QLineEdit()
+        self.pdf_security_source_edit.setReadOnly(True)
+        self.pdf_security_source_edit.setPlaceholderText("请选择需要设置或移除密码的 PDF")
+        self.pdf_choose_security_source_button = QPushButton("选择 PDF")
+        self.pdf_choose_security_source_button.setProperty("variant", "accent")
+        source_layout.addWidget(self.pdf_security_source_edit, 1)
+        source_layout.addWidget(self.pdf_choose_security_source_button)
+        layout.addWidget(source_group)
+
+        password_group = QGroupBox("密码设置")
+        password_layout = QVBoxLayout(password_group)
+        mode_row = QHBoxLayout()
+        self.pdf_security_mode_combo = SelectionComboBox()
+        self.pdf_security_mode_combo.addItem("设置打开密码", "set")
+        self.pdf_security_mode_combo.addItem("移除已有密码", "remove")
+        mode_row.addWidget(QLabel("操作："))
+        mode_row.addWidget(self.pdf_security_mode_combo)
+        mode_row.addStretch(1)
+        password_layout.addLayout(mode_row)
+        self.pdf_source_password_edit = QLineEdit()
+        self.pdf_source_password_edit.setEchoMode(QLineEdit.Password)
+        self.pdf_source_password_edit.setPlaceholderText("原密码；未加密 PDF 可留空")
+        self.pdf_new_password_edit = QLineEdit()
+        self.pdf_new_password_edit.setEchoMode(QLineEdit.Password)
+        self.pdf_new_password_edit.setPlaceholderText("新密码，至少 6 个字符")
+        self.pdf_confirm_password_edit = QLineEdit()
+        self.pdf_confirm_password_edit.setEchoMode(QLineEdit.Password)
+        self.pdf_confirm_password_edit.setPlaceholderText("再次输入新密码")
+        password_layout.addWidget(QLabel("原密码："))
+        password_layout.addWidget(self.pdf_source_password_edit)
+        self.pdf_new_password_label = QLabel("新密码：")
+        self.pdf_confirm_password_label = QLabel("确认新密码：")
+        password_layout.addWidget(self.pdf_new_password_label)
+        password_layout.addWidget(self.pdf_new_password_edit)
+        password_layout.addWidget(self.pdf_confirm_password_label)
+        password_layout.addWidget(self.pdf_confirm_password_edit)
+        privacy = QLabel("密码只在当前操作中使用，不会保存，也不会写入日志。")
+        privacy.setProperty("role", "hint")
+        password_layout.addWidget(privacy)
+        layout.addWidget(password_group)
+
+        output_group = QGroupBox("输出设置")
+        output_layout = QHBoxLayout(output_group)
+        self.pdf_security_output_folder_edit = QLineEdit()
+        self.pdf_security_output_folder_edit.setReadOnly(True)
+        self.pdf_choose_security_output_button = QPushButton("选择文件夹")
+        self.pdf_security_output_name_edit = QLineEdit()
+        output_layout.addWidget(QLabel("文件夹："))
+        output_layout.addWidget(self.pdf_security_output_folder_edit, 2)
+        output_layout.addWidget(self.pdf_choose_security_output_button)
+        output_layout.addWidget(QLabel("文件名："))
+        output_layout.addWidget(self.pdf_security_output_name_edit, 1)
+        layout.addWidget(output_group)
+
+        self.pdf_security_start_button = QPushButton("生成新 PDF")
+        self.pdf_security_start_button.setMinimumHeight(46)
+        self.pdf_security_start_button.setProperty("variant", "primary")
+        self.pdf_security_status_label = QLabel("尚未选择 PDF")
+        self.pdf_security_status_label.setProperty("role", "status")
+        layout.addWidget(self.pdf_security_start_button)
+        layout.addWidget(self.pdf_security_status_label)
+        layout.addStretch(1)
+
+        self.pdf_choose_security_source_button.clicked.connect(self.choose_pdf_security_source)
+        self.pdf_choose_security_output_button.clicked.connect(self.choose_pdf_security_output_folder)
+        self.pdf_security_mode_combo.currentIndexChanged.connect(self.update_pdf_security_mode)
+        self.pdf_security_start_button.clicked.connect(self.process_pdf_security)
+        self.update_pdf_security_mode()
+        return tab
+
+    def create_searchable_pdf_tab(self):
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(12, 14, 12, 12)
+        layout.setSpacing(12)
+
+        source_group = QGroupBox("选择 PDF")
+        source_layout = QHBoxLayout(source_group)
+        self.pdf_searchable_source_edit = QLineEdit()
+        self.pdf_searchable_source_edit.setReadOnly(True)
+        self.pdf_searchable_source_edit.setPlaceholderText("请选择需要生成可搜索副本的 PDF")
+        self.pdf_choose_searchable_source_button = QPushButton("选择 PDF")
+        self.pdf_choose_searchable_source_button.setProperty("variant", "accent")
+        source_layout.addWidget(self.pdf_searchable_source_edit, 1)
+        source_layout.addWidget(self.pdf_choose_searchable_source_button)
+        layout.addWidget(source_group)
+
+        ocr_group = QGroupBox("扫描页识别")
+        ocr_layout = QHBoxLayout(ocr_group)
+        self.pdf_searchable_provider_combo = SelectionComboBox()
+        for provider_key, provider_label in PROVIDER_LABELS.items():
+            self.pdf_searchable_provider_combo.addItem(provider_label, provider_key)
+        searchable_provider_index = self.pdf_searchable_provider_combo.findData(selected_provider())
+        self.pdf_searchable_provider_combo.setCurrentIndex(max(0, searchable_provider_index))
+        self.pdf_searchable_settings_button = QPushButton("设置")
+        self.pdf_searchable_inspection_label = QLabel("选择 PDF 后显示需要 OCR 的页面")
+        self.pdf_searchable_inspection_label.setProperty("role", "hint")
+        ocr_layout.addWidget(QLabel("OCR 平台："))
+        ocr_layout.addWidget(self.pdf_searchable_provider_combo)
+        ocr_layout.addWidget(self.pdf_searchable_settings_button)
+        ocr_layout.addWidget(self.pdf_searchable_inspection_label, 1)
+        layout.addWidget(ocr_group)
+
+        output_group = QGroupBox("输出设置")
+        output_layout = QHBoxLayout(output_group)
+        self.pdf_searchable_output_folder_edit = QLineEdit()
+        self.pdf_searchable_output_folder_edit.setReadOnly(True)
+        self.pdf_choose_searchable_output_button = QPushButton("选择文件夹")
+        self.pdf_searchable_output_name_edit = QLineEdit()
+        output_layout.addWidget(QLabel("文件夹："))
+        output_layout.addWidget(self.pdf_searchable_output_folder_edit, 2)
+        output_layout.addWidget(self.pdf_choose_searchable_output_button)
+        output_layout.addWidget(QLabel("文件名："))
+        output_layout.addWidget(self.pdf_searchable_output_name_edit, 1)
+        layout.addWidget(output_group)
+
+        hint = QLabel("原页面图像会保留；仅扫描页在确认后调用云 OCR，并加入可搜索文字层。")
+        hint.setProperty("role", "hint")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        self.pdf_searchable_start_button = QPushButton("生成可搜索 PDF")
+        self.pdf_searchable_start_button.setMinimumHeight(46)
+        self.pdf_searchable_start_button.setProperty("variant", "primary")
+        self.pdf_searchable_status_label = QLabel("尚未选择 PDF")
+        self.pdf_searchable_status_label.setProperty("role", "status")
+        layout.addWidget(self.pdf_searchable_start_button)
+        layout.addWidget(self.pdf_searchable_status_label)
+        layout.addStretch(1)
+
+        self.pdf_choose_searchable_source_button.clicked.connect(self.choose_searchable_pdf_source)
+        self.pdf_choose_searchable_output_button.clicked.connect(self.choose_searchable_pdf_output_folder)
+        self.pdf_searchable_settings_button.clicked.connect(
+            lambda: self.show_settings(self.pdf_searchable_provider_combo.currentData())
+        )
+        self.pdf_searchable_provider_combo.currentIndexChanged.connect(
+            self.pdf_searchable_provider_changed
+        )
+        self.pdf_searchable_start_button.clicked.connect(self.create_searchable_pdf)
+        self.update_searchable_pdf_button()
+        return tab
+
+    def create_pdf_compare_tab(self):
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(12, 14, 12, 12)
+        layout.setSpacing(12)
+
+        source_group = QGroupBox("选择两份 PDF")
+        source_layout = QVBoxLayout(source_group)
+        left_row = QHBoxLayout()
+        self.pdf_compare_left_edit = QLineEdit()
+        self.pdf_compare_left_edit.setReadOnly(True)
+        self.pdf_compare_left_edit.setPlaceholderText("第一份 PDF")
+        self.pdf_choose_compare_left_button = QPushButton("选择第一份")
+        left_row.addWidget(self.pdf_compare_left_edit, 1)
+        left_row.addWidget(self.pdf_choose_compare_left_button)
+        right_row = QHBoxLayout()
+        self.pdf_compare_right_edit = QLineEdit()
+        self.pdf_compare_right_edit.setReadOnly(True)
+        self.pdf_compare_right_edit.setPlaceholderText("第二份 PDF")
+        self.pdf_choose_compare_right_button = QPushButton("选择第二份")
+        right_row.addWidget(self.pdf_compare_right_edit, 1)
+        right_row.addWidget(self.pdf_choose_compare_right_button)
+        source_layout.addLayout(left_row)
+        source_layout.addLayout(right_row)
+        layout.addWidget(source_group)
+
+        output_group = QGroupBox("报告保存位置")
+        output_layout = QHBoxLayout(output_group)
+        self.pdf_compare_output_folder_edit = QLineEdit()
+        self.pdf_compare_output_folder_edit.setReadOnly(True)
+        self.pdf_choose_compare_output_button = QPushButton("选择文件夹")
+        self.pdf_compare_output_name_edit = QLineEdit(default_output_name("PDF文字对比", ".html"))
+        output_layout.addWidget(QLabel("文件夹："))
+        output_layout.addWidget(self.pdf_compare_output_folder_edit, 2)
+        output_layout.addWidget(self.pdf_choose_compare_output_button)
+        output_layout.addWidget(QLabel("文件名："))
+        output_layout.addWidget(self.pdf_compare_output_name_edit, 1)
+        layout.addWidget(output_group)
+
+        hint = QLabel("对比只在本机完成；扫描 PDF 请先转换成可搜索 PDF。")
+        hint.setProperty("role", "hint")
+        layout.addWidget(hint)
+        action_layout = QHBoxLayout()
+        self.pdf_compare_start_button = QPushButton("生成文字对比报告")
+        self.pdf_compare_start_button.setMinimumHeight(46)
+        self.pdf_compare_start_button.setProperty("variant", "primary")
+        self.pdf_compare_open_button = QPushButton("打开报告")
+        self.pdf_compare_open_button.setMinimumHeight(46)
+        action_layout.addWidget(self.pdf_compare_start_button, 1)
+        action_layout.addWidget(self.pdf_compare_open_button)
+        layout.addLayout(action_layout)
+        self.pdf_compare_status_label = QLabel("尚未选择两份 PDF")
+        self.pdf_compare_status_label.setProperty("role", "status")
+        layout.addWidget(self.pdf_compare_status_label)
+        layout.addStretch(1)
+
+        self.pdf_choose_compare_left_button.clicked.connect(lambda: self.choose_pdf_compare_source("left"))
+        self.pdf_choose_compare_right_button.clicked.connect(lambda: self.choose_pdf_compare_source("right"))
+        self.pdf_choose_compare_output_button.clicked.connect(self.choose_pdf_compare_output_folder)
+        self.pdf_compare_start_button.clicked.connect(self.create_pdf_compare_report)
+        self.pdf_compare_open_button.clicked.connect(
+            lambda: self.open_output_file(self.pdf_compare_result_file)
+        )
+        self.update_pdf_compare_buttons()
+        return tab
+
     def update_home_responsive_layout(self):
         if not hasattr(self, "home_logo_label"):
             return
@@ -1591,6 +2267,11 @@ class ExcelMergerWindow(QMainWindow):
         self.set_active_navigation("split")
         self.setWindowTitle(f"{self.app_name} - Excel 拆分工具")
 
+    def show_cleanup_tool(self):
+        self.stack.setCurrentWidget(self.cleanup_page)
+        self.set_active_navigation("cleanup")
+        self.setWindowTitle(f"{self.app_name} - Excel 数据清理")
+
     def show_invoice_tool(self):
         self.stack.setCurrentWidget(self.invoice_page)
         self.set_active_navigation("invoice")
@@ -1600,6 +2281,11 @@ class ExcelMergerWindow(QMainWindow):
         self.stack.setCurrentWidget(self.document_page)
         self.set_active_navigation("document")
         self.setWindowTitle(f"{self.app_name} - 文档智能处理")
+
+    def show_batch_tool(self):
+        self.stack.setCurrentWidget(self.batch_page)
+        self.set_active_navigation("batch")
+        self.setWindowTitle(f"{self.app_name} - 批量处理中心")
 
     def show_rename_tool(self):
         self.stack.setCurrentWidget(self.rename_page)
@@ -1635,6 +2321,15 @@ class ExcelMergerWindow(QMainWindow):
         index = self.document_ocr_provider_combo.findData(provider)
         if index >= 0:
             self.document_ocr_provider_combo.setCurrentIndex(index)
+        batch_index = self.batch_ocr_provider_combo.findData(provider)
+        if batch_index >= 0:
+            self.batch_ocr_provider_combo.setCurrentIndex(batch_index)
+        smart_index = self.rename_smart_provider_combo.findData(provider)
+        if smart_index >= 0:
+            self.rename_smart_provider_combo.setCurrentIndex(smart_index)
+        searchable_index = self.pdf_searchable_provider_combo.findData(provider)
+        if searchable_index >= 0:
+            self.pdf_searchable_provider_combo.setCurrentIndex(searchable_index)
         self.refresh_document_ocr_status()
 
     def save_accent_setting(self, accent_name):
@@ -1834,6 +2529,253 @@ class ExcelMergerWindow(QMainWindow):
             on_cancel()
             return
         QMessageBox.information(self, "任务已结束", "当前任务已强制结束。")
+
+    def choose_batch_source_folder(self):
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            "选择包含 PDF 的文件夹",
+            self.dialog_folder("batch_source", self.batch_source_folder),
+        )
+        if not folder:
+            return
+        self.batch_source_folder = os.path.abspath(folder)
+        self.remember_dialog_folder("batch_source", self.batch_source_folder)
+        self.batch_source_path_edit.setText(self.batch_source_folder)
+        self.batch_output_folder = str(
+            Path(self.batch_source_folder) / "Eggie批量处理结果"
+        )
+        self.batch_output_path_edit.setText(self.batch_output_folder)
+        self.refresh_batch_preview()
+
+    def choose_batch_output_folder(self):
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            "选择批量结果保存文件夹",
+            self.dialog_folder("batch_output", self.batch_output_folder),
+        )
+        if not folder:
+            return
+        self.batch_output_folder = os.path.abspath(folder)
+        self.remember_dialog_folder("batch_output", self.batch_output_folder)
+        self.batch_output_path_edit.setText(self.batch_output_folder)
+        self.update_batch_button_states()
+
+    def refresh_batch_preview(self, *_args):
+        if not self.batch_source_folder:
+            return
+        try:
+            files = discover_pdf_files(
+                self.batch_source_folder,
+                recursive=self.batch_recursive_checkbox.isChecked(),
+            )
+        except Exception as error:
+            QMessageBox.warning(self, "无法读取文件夹", str(error))
+            return
+        self.batch_file_table.clear()
+        self.batch_previews = []
+        self.batch_failed_files = []
+        if not files:
+            self.batch_source_status_label.setText("没有发现 PDF 文件")
+            self.update_batch_button_states()
+            return
+
+        def worker(progress_callback):
+            return inspect_pdf_files(files, progress_callback)
+
+        self.batch_source_status_label.setText(f"正在检查 {len(files)} 个 PDF…")
+        self.start_background_task(
+            "检查批量文件",
+            f"正在检查 {len(files)} 个 PDF…",
+            worker,
+            self.display_batch_previews,
+            total=len(files),
+            status_label=self.batch_source_status_label,
+        )
+
+    def display_batch_previews(self, previews):
+        self.batch_previews = list(previews)
+        self.batch_file_table.clear()
+        invalid_count = 0
+        scanned_pages = 0
+        for index, preview in enumerate(self.batch_previews, 1):
+            status = "可处理"
+            if preview.error_message:
+                status = "检查失败"
+                invalid_count += 1
+            scanned_pages += preview.scanned_page_count
+            item = QTreeWidgetItem(
+                [
+                    str(index),
+                    Path(preview.source_file).name,
+                    str(preview.page_count or "-"),
+                    str(preview.scanned_page_count or 0),
+                    preview.suggested_action,
+                    status,
+                ]
+            )
+            item.setData(0, Qt.UserRole, preview.source_file)
+            item.setToolTip(1, preview.source_file)
+            if preview.error_message:
+                item.setToolTip(5, preview.error_message)
+            self.batch_file_table.addTopLevelItem(item)
+        self.batch_source_status_label.setText(
+            f"发现 {len(previews)} 个 PDF，扫描页 {scanned_pages} 个，"
+            f"检查失败 {invalid_count} 个"
+        )
+        self.batch_status_label.setText("预览完成，确认设置后可以开始处理")
+        self.update_batch_button_states()
+
+    def batch_ocr_provider_changed(self):
+        provider = self.batch_ocr_provider_combo.currentData()
+        try:
+            select_provider(provider)
+        except OSError as error:
+            QMessageBox.warning(self, "无法保存选择", str(error))
+        index = self.document_ocr_provider_combo.findData(provider)
+        if index >= 0 and self.document_ocr_provider_combo.currentIndex() != index:
+            self.document_ocr_provider_combo.setCurrentIndex(index)
+        self.batch_ocr_status_label.setText(
+            "密钥已配置；仅扫描页会上传"
+            if is_provider_configured(provider)
+            else "密钥未配置；请先到设置中填写"
+        )
+
+    def update_batch_button_states(self):
+        has_output = bool(self.batch_output_folder)
+        self.batch_preview_button.setEnabled(bool(self.batch_source_folder))
+        self.batch_start_button.setEnabled(bool(self.batch_previews) and has_output)
+        self.batch_retry_button.setEnabled(bool(self.batch_failed_files) and has_output)
+        self.batch_open_folder_button.setEnabled(
+            has_output and Path(self.batch_output_folder).is_dir()
+        )
+
+    def _set_batch_rows_waiting(self, files):
+        targets = {str(Path(path).resolve()) for path in files}
+        for index in range(self.batch_file_table.topLevelItemCount()):
+            item = self.batch_file_table.topLevelItem(index)
+            source = str(Path(item.data(0, Qt.UserRole)).resolve())
+            if source in targets:
+                item.setText(5, "等待处理")
+                item.setToolTip(5, "")
+
+    def _confirm_batch_ocr(self, files):
+        if not self.batch_ocr_checkbox.isChecked():
+            return True
+        provider = self.batch_ocr_provider_combo.currentData()
+        if not is_provider_configured(provider):
+            QMessageBox.warning(
+                self,
+                "OCR 密钥未配置",
+                "请先在软件设置中填写所选 OCR 平台的密钥。",
+            )
+            return False
+        selected = {str(Path(path).resolve()) for path in files}
+        scanned = [
+            preview
+            for preview in self.batch_previews
+            if str(Path(preview.source_file).resolve()) in selected
+            and preview.scanned_pages
+        ]
+        if not scanned:
+            return True
+        scanned_count = sum(len(preview.scanned_pages) for preview in scanned)
+        details = "\n".join(
+            f"{Path(preview.source_file).name}：第 "
+            f"{'、'.join(map(str, preview.scanned_pages))} 页"
+            for preview in scanned[:8]
+        )
+        if len(scanned) > 8:
+            details += f"\n另有 {len(scanned) - 8} 个文件"
+        provider_label = PROVIDER_LABELS.get(provider, provider)
+        answer = QMessageBox.question(
+            self,
+            "确认使用云 OCR",
+            f"共 {scanned_count} 个扫描页会发送给 {provider_label}：\n\n"
+            f"{details}\n\n有文字的页面仍在本机读取。是否继续？",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        return answer == QMessageBox.Yes
+
+    def start_batch_processing(self, files=None):
+        files = tuple(files or (preview.source_file for preview in self.batch_previews))
+        if not files or not self.batch_output_folder:
+            QMessageBox.information(self, "信息不完整", "请先选择文件夹并完成预览。")
+            return
+        if not self._confirm_batch_ocr(files):
+            return
+        use_ocr = self.batch_ocr_checkbox.isChecked()
+        provider = self.batch_ocr_provider_combo.currentData()
+        self._set_batch_rows_waiting(files)
+
+        def worker(progress_callback):
+            return process_pdf_files(
+                files,
+                self.batch_output_folder,
+                use_ocr=use_ocr,
+                provider_name=provider,
+                progress_callback=progress_callback,
+            )
+
+        self.start_background_task(
+            "批量处理 PDF",
+            f"准备处理 {len(files)} 个 PDF…",
+            worker,
+            self.batch_processing_completed,
+            total=len(files),
+            status_label=self.batch_status_label,
+        )
+
+    def batch_processing_completed(self, result):
+        rows = {}
+        for index in range(self.batch_file_table.topLevelItemCount()):
+            item = self.batch_file_table.topLevelItem(index)
+            rows[str(Path(item.data(0, Qt.UserRole)).resolve())] = item
+        self.batch_failed_files = []
+        for item_result in result.results:
+            data = item_result.get("data") if isinstance(item_result.get("data"), dict) else {}
+            source = str(Path(data.get("source_file", "")).resolve())
+            row = rows.get(source)
+            if item_result.get("status") == "success":
+                status = f"成功：{DOCUMENT_TYPE_LABELS.get(item_result.get('doc_type'), '普通文档')}"
+                tooltip = item_result.get("output_file", "")
+            else:
+                status = "失败"
+                tooltip = data.get("error_message", "处理失败")
+                if source:
+                    self.batch_failed_files.append(source)
+            if row is not None:
+                row.setText(5, status)
+                row.setToolTip(5, tooltip)
+        self.batch_last_log_file = result.log_file
+        self.batch_status_label.setText(
+            f"处理完成：成功 {len(result.successful)} 个，失败 {len(result.failed)} 个；"
+            f"日志：{result.log_file}"
+        )
+        self.update_batch_button_states()
+        message = QMessageBox(self)
+        message.setWindowTitle("批量处理完成")
+        message.setIcon(QMessageBox.Warning if result.failed else QMessageBox.Information)
+        message.setText(
+            f"成功 {len(result.successful)} 个，失败 {len(result.failed)} 个"
+        )
+        message.setInformativeText(
+            f"结果文件夹：\n{self.batch_output_folder}\n\n处理日志：\n{result.log_file}"
+        )
+        open_button = message.addButton("打开文件夹", QMessageBox.ActionRole)
+        ok_button = message.addButton("确定", QMessageBox.AcceptRole)
+        message.setDefaultButton(ok_button)
+        message.exec()
+        if message.clickedButton() is open_button:
+            self.open_batch_output_folder()
+
+    def retry_failed_batch_files(self):
+        if self.batch_failed_files:
+            self.start_batch_processing(tuple(self.batch_failed_files))
+
+    def open_batch_output_folder(self):
+        if self.batch_output_folder and Path(self.batch_output_folder).is_dir():
+            QDesktopServices.openUrl(QUrl.fromLocalFile(self.batch_output_folder))
 
     def selected_pdf_page_items(self):
         return [card for card in self.pdf_page_cards if card.is_checked()]
@@ -2198,6 +3140,453 @@ class ExcelMergerWindow(QMainWindow):
             card.deleteLater()
         self.refresh_pdf_page_cards_layout()
         self.refresh_pdf_page_numbers()
+
+    def choose_pdf_marks_source(self):
+        filename, _ = QFileDialog.getOpenFileName(
+            self,
+            "选择需要添加水印或页码的 PDF",
+            self.dialog_folder("open"),
+            "PDF 文件 (*.pdf)",
+        )
+        if not filename:
+            return
+        self.remember_dialog_folder("open", filename)
+        self.pdf_marks_source_file = os.path.abspath(filename)
+        self.pdf_marks_source_edit.setText(self.pdf_marks_source_file)
+        self.pdf_marks_source_edit.setToolTip(self.pdf_marks_source_file)
+        self.pdf_marks_output_folder = str(Path(filename).parent / "output")
+        self.pdf_marks_output_folder_edit.setText(self.pdf_marks_output_folder)
+        self.pdf_marks_output_name_edit.setText(
+            default_output_name(f"{Path(filename).stem}_水印页码")
+        )
+        self.pdf_marks_status_label.setText("已选择 PDF，确认设置后可生成新文件")
+        self.update_pdf_marks_controls()
+
+    def choose_pdf_marks_output_folder(self):
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            "选择水印和页码结果保存文件夹",
+            self.dialog_folder("save", self.pdf_marks_output_folder),
+            QFileDialog.ShowDirsOnly,
+        )
+        if not folder:
+            return
+        self.pdf_marks_output_folder = os.path.abspath(folder)
+        self.remember_dialog_folder("save", folder)
+        self.pdf_marks_output_folder_edit.setText(self.pdf_marks_output_folder)
+        self.update_pdf_marks_controls()
+
+    def update_pdf_marks_controls(self):
+        watermark_enabled = self.pdf_watermark_checkbox.isChecked()
+        for widget in (
+            self.pdf_watermark_text_edit,
+            self.pdf_watermark_opacity_spinbox,
+            self.pdf_watermark_angle_spinbox,
+            self.pdf_watermark_size_spinbox,
+            self.pdf_watermark_position_combo,
+        ):
+            widget.setEnabled(watermark_enabled)
+        self.pdf_page_number_start_spinbox.setEnabled(
+            self.pdf_page_number_checkbox.isChecked()
+        )
+        self.pdf_page_number_position_combo.setEnabled(
+            self.pdf_page_number_checkbox.isChecked()
+        )
+        self.pdf_marks_start_button.setEnabled(
+            bool(self.pdf_marks_source_file and self.pdf_marks_output_folder)
+            and (watermark_enabled or self.pdf_page_number_checkbox.isChecked())
+        )
+
+    def create_marked_pdf(self):
+        watermark_text = (
+            self.pdf_watermark_text_edit.text().strip()
+            if self.pdf_watermark_checkbox.isChecked()
+            else ""
+        )
+        add_page_numbers = self.pdf_page_number_checkbox.isChecked()
+        if not watermark_text and not add_page_numbers:
+            QMessageBox.warning(self, "尚未完成设置", "请填写水印文字或启用页码。")
+            return
+        try:
+            output_file = output_path(
+                self.pdf_marks_output_folder,
+                self.pdf_marks_output_name_edit.text(),
+                default_output_name("水印页码结果"),
+            )
+        except Exception as error:
+            QMessageBox.critical(self, "无法生成", str(error))
+            return
+
+        source_file = self.pdf_marks_source_file
+        watermark_opacity = self.pdf_watermark_opacity_spinbox.value() / 100
+        watermark_angle = self.pdf_watermark_angle_spinbox.value()
+        watermark_size = self.pdf_watermark_size_spinbox.value()
+        watermark_position = self.pdf_watermark_position_combo.currentData()
+        page_number_start = self.pdf_page_number_start_spinbox.value()
+        page_number_position = self.pdf_page_number_position_combo.currentData()
+
+        def completed(result):
+            self.pdf_marks_result_file = result.output_file
+            self.pdf_marks_status_label.setText(
+                f"已生成：{Path(result.output_file).name}"
+            )
+            self.save_pdf_result_message("PDF 水印与页码完成", result)
+
+        self.start_background_task(
+            "正在生成 PDF",
+            f"正在处理：{Path(source_file).name}",
+            lambda progress: add_pdf_marks(
+                source_file,
+                output_file,
+                watermark_text=watermark_text,
+                watermark_opacity=watermark_opacity,
+                watermark_angle=watermark_angle,
+                watermark_font_size=watermark_size,
+                watermark_position=watermark_position,
+                add_page_numbers=add_page_numbers,
+                page_number_start=page_number_start,
+                page_number_position=page_number_position,
+                progress_callback=progress,
+            ),
+            completed,
+            lambda error: QMessageBox.critical(self, "生成失败", error),
+            status_label=self.pdf_marks_status_label,
+        )
+
+    def choose_pdf_security_source(self):
+        filename, _ = QFileDialog.getOpenFileName(
+            self,
+            "选择需要设置或移除密码的 PDF",
+            self.dialog_folder("open"),
+            "PDF 文件 (*.pdf)",
+        )
+        if not filename:
+            return
+        self.remember_dialog_folder("open", filename)
+        self.pdf_security_source_file = os.path.abspath(filename)
+        self.pdf_security_source_edit.setText(self.pdf_security_source_file)
+        self.pdf_security_source_edit.setToolTip(self.pdf_security_source_file)
+        self.pdf_security_output_folder = str(Path(filename).parent / "output")
+        self.pdf_security_output_folder_edit.setText(self.pdf_security_output_folder)
+        self.pdf_security_status_label.setText("已选择 PDF，密码不会被保存")
+        self.update_pdf_security_mode()
+
+    def choose_pdf_security_output_folder(self):
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            "选择 PDF 密码处理结果保存文件夹",
+            self.dialog_folder("save", self.pdf_security_output_folder),
+            QFileDialog.ShowDirsOnly,
+        )
+        if not folder:
+            return
+        self.pdf_security_output_folder = os.path.abspath(folder)
+        self.remember_dialog_folder("save", folder)
+        self.pdf_security_output_folder_edit.setText(self.pdf_security_output_folder)
+        self.update_pdf_security_mode()
+
+    def update_pdf_security_mode(self):
+        setting_password = self.pdf_security_mode_combo.currentData() == "set"
+        for widget in (
+            self.pdf_new_password_label,
+            self.pdf_new_password_edit,
+            self.pdf_confirm_password_label,
+            self.pdf_confirm_password_edit,
+        ):
+            widget.setVisible(setting_password)
+        if self.pdf_security_source_file:
+            suffix = "已加密" if setting_password else "无密码"
+            self.pdf_security_output_name_edit.setText(
+                default_output_name(f"{Path(self.pdf_security_source_file).stem}_{suffix}")
+            )
+        self.pdf_security_start_button.setEnabled(
+            bool(self.pdf_security_source_file and self.pdf_security_output_folder)
+        )
+
+    def process_pdf_security(self):
+        setting_password = self.pdf_security_mode_combo.currentData() == "set"
+        source_password = self.pdf_source_password_edit.text()
+        new_password = self.pdf_new_password_edit.text() if setting_password else ""
+        if setting_password:
+            if len(new_password) < 6:
+                QMessageBox.warning(self, "密码太短", "新密码至少需要 6 个字符。")
+                return
+            if new_password != self.pdf_confirm_password_edit.text():
+                QMessageBox.warning(self, "密码不一致", "两次输入的新密码不一致。")
+                return
+        try:
+            output_file = output_path(
+                self.pdf_security_output_folder,
+                self.pdf_security_output_name_edit.text(),
+                default_output_name("PDF密码处理结果"),
+            )
+        except Exception as error:
+            QMessageBox.critical(self, "无法生成", str(error))
+            return
+
+        source_file = self.pdf_security_source_file
+        action_text = "设置密码" if setting_password else "移除密码"
+
+        def completed(result):
+            self.pdf_security_result_file = result.output_file
+            self.pdf_security_status_label.setText(
+                f"{action_text}完成：{Path(result.output_file).name}"
+            )
+            self.save_pdf_result_message(f"PDF {action_text}完成", result)
+
+        started = self.start_background_task(
+            f"正在{action_text}",
+            f"正在处理：{Path(source_file).name}",
+            lambda _progress: secure_pdf(
+                source_file,
+                output_file,
+                new_password=new_password,
+                source_password=source_password,
+            ),
+            completed,
+            lambda error: QMessageBox.critical(self, f"{action_text}失败", error),
+            status_label=self.pdf_security_status_label,
+        )
+        if started:
+            self.pdf_source_password_edit.clear()
+            self.pdf_new_password_edit.clear()
+            self.pdf_confirm_password_edit.clear()
+
+    def choose_searchable_pdf_source(self):
+        filename, _ = QFileDialog.getOpenFileName(
+            self,
+            "选择需要生成可搜索副本的 PDF",
+            self.dialog_folder("open"),
+            "PDF 文件 (*.pdf)",
+        )
+        if not filename:
+            return
+        self.remember_dialog_folder("open", filename)
+        self.pdf_searchable_source_file = os.path.abspath(filename)
+        self.pdf_searchable_source_edit.setText(self.pdf_searchable_source_file)
+        self.pdf_searchable_source_edit.setToolTip(self.pdf_searchable_source_file)
+        self.pdf_searchable_output_folder = str(Path(filename).parent / "output")
+        self.pdf_searchable_output_folder_edit.setText(self.pdf_searchable_output_folder)
+        self.pdf_searchable_output_name_edit.setText(
+            default_output_name(f"{Path(filename).stem}_可搜索")
+        )
+        self.pdf_searchable_inspection = None
+        self.pdf_searchable_inspection_label.setText("正在检查 PDF 页面…")
+        self.pdf_searchable_status_label.setText("正在检查 PDF…")
+        self.update_searchable_pdf_button()
+        self.start_background_task(
+            "正在检查 PDF",
+            f"正在检查页面：{Path(filename).name}",
+            lambda _progress: inspect_pdf(filename),
+            self.searchable_pdf_inspection_completed,
+            lambda error: QMessageBox.critical(self, "无法读取 PDF", error),
+            status_label=self.pdf_searchable_status_label,
+        )
+
+    def searchable_pdf_inspection_completed(self, inspection):
+        self.pdf_searchable_inspection = inspection
+        if inspection.scanned_pages:
+            pages = "、".join(map(str, inspection.scanned_pages))
+            self.pdf_searchable_inspection_label.setText(
+                f"共 {inspection.page_count} 页，需要 OCR：第 {pages} 页"
+            )
+            self.pdf_searchable_status_label.setText(
+                f"检查完成，{len(inspection.scanned_pages)} 个扫描页需要 OCR"
+            )
+        else:
+            self.pdf_searchable_inspection_label.setText(
+                f"共 {inspection.page_count} 页，均已包含可搜索文字"
+            )
+            self.pdf_searchable_status_label.setText("检查完成，可在本机生成副本")
+        self.update_searchable_pdf_button()
+
+    def choose_searchable_pdf_output_folder(self):
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            "选择可搜索 PDF 保存文件夹",
+            self.dialog_folder("save", self.pdf_searchable_output_folder),
+            QFileDialog.ShowDirsOnly,
+        )
+        if not folder:
+            return
+        self.pdf_searchable_output_folder = os.path.abspath(folder)
+        self.remember_dialog_folder("save", folder)
+        self.pdf_searchable_output_folder_edit.setText(self.pdf_searchable_output_folder)
+        self.update_searchable_pdf_button()
+
+    def pdf_searchable_provider_changed(self):
+        provider = self.pdf_searchable_provider_combo.currentData()
+        try:
+            select_provider(provider)
+        except OSError as error:
+            QMessageBox.warning(self, "无法保存选择", str(error))
+        for combo in (
+            self.document_ocr_provider_combo,
+            self.batch_ocr_provider_combo,
+            self.rename_smart_provider_combo,
+        ):
+            index = combo.findData(provider)
+            if index >= 0 and combo.currentIndex() != index:
+                combo.setCurrentIndex(index)
+        self.update_searchable_pdf_button()
+
+    def update_searchable_pdf_button(self):
+        self.pdf_searchable_start_button.setEnabled(
+            bool(
+                self.pdf_searchable_source_file
+                and self.pdf_searchable_output_folder
+                and self.pdf_searchable_inspection is not None
+            )
+        )
+
+    def create_searchable_pdf(self):
+        inspection = self.pdf_searchable_inspection
+        if inspection is None:
+            QMessageBox.warning(self, "尚未完成检查", "请先选择 PDF 并等待检查完成。")
+            return
+        provider = self.pdf_searchable_provider_combo.currentData()
+        if inspection.scanned_pages:
+            if not is_provider_configured(provider):
+                QMessageBox.warning(
+                    self,
+                    "OCR 密钥未配置",
+                    "检测到扫描页，请先在设置中填写所选 OCR 平台的密钥。",
+                )
+                return
+            pages = "、".join(map(str, inspection.scanned_pages))
+            answer = QMessageBox.question(
+                self,
+                "发送扫描页前确认",
+                f"第 {pages} 页会发送给 "
+                f"{PROVIDER_LABELS.get(provider, provider)} 识别文字；"
+                "其他页面仍在本机处理。\n\n是否继续？",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if answer != QMessageBox.Yes:
+                return
+        try:
+            output_file = output_path(
+                self.pdf_searchable_output_folder,
+                self.pdf_searchable_output_name_edit.text(),
+                default_output_name("可搜索PDF"),
+            )
+        except Exception as error:
+            QMessageBox.critical(self, "无法生成", str(error))
+            return
+
+        source_file = self.pdf_searchable_source_file
+
+        def completed(result):
+            self.pdf_searchable_result_file = result.output_file
+            self.pdf_searchable_status_label.setText(
+                f"已生成：{Path(result.output_file).name}"
+            )
+            self.save_pdf_result_message("可搜索 PDF 生成完成", result)
+
+        self.start_background_task(
+            "正在生成可搜索 PDF",
+            f"正在处理：{Path(source_file).name}",
+            lambda progress: make_searchable_pdf(
+                source_file,
+                output_file,
+                provider,
+                progress_callback=progress,
+            ),
+            completed,
+            lambda error: QMessageBox.critical(self, "生成失败", error),
+            status_label=self.pdf_searchable_status_label,
+        )
+
+    def choose_pdf_compare_source(self, side):
+        filename, _ = QFileDialog.getOpenFileName(
+            self,
+            "选择需要对比的 PDF",
+            self.dialog_folder("open"),
+            "PDF 文件 (*.pdf)",
+        )
+        if not filename:
+            return
+        filename = os.path.abspath(filename)
+        self.remember_dialog_folder("open", filename)
+        if side == "left":
+            self.pdf_compare_left_file = filename
+            self.pdf_compare_left_edit.setText(filename)
+            self.pdf_compare_left_edit.setToolTip(filename)
+        else:
+            self.pdf_compare_right_file = filename
+            self.pdf_compare_right_edit.setText(filename)
+            self.pdf_compare_right_edit.setToolTip(filename)
+        if not self.pdf_compare_output_folder:
+            self.pdf_compare_output_folder = str(Path(filename).parent / "output")
+            self.pdf_compare_output_folder_edit.setText(self.pdf_compare_output_folder)
+        self.update_pdf_compare_buttons()
+
+    def choose_pdf_compare_output_folder(self):
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            "选择对比报告保存文件夹",
+            self.dialog_folder("save", self.pdf_compare_output_folder),
+            QFileDialog.ShowDirsOnly,
+        )
+        if not folder:
+            return
+        self.pdf_compare_output_folder = os.path.abspath(folder)
+        self.remember_dialog_folder("save", folder)
+        self.pdf_compare_output_folder_edit.setText(self.pdf_compare_output_folder)
+        self.update_pdf_compare_buttons()
+
+    def update_pdf_compare_buttons(self):
+        self.pdf_compare_start_button.setEnabled(
+            bool(
+                self.pdf_compare_left_file
+                and self.pdf_compare_right_file
+                and self.pdf_compare_output_folder
+            )
+        )
+        self.pdf_compare_open_button.setEnabled(
+            bool(self.pdf_compare_result_file and Path(self.pdf_compare_result_file).is_file())
+        )
+
+    def create_pdf_compare_report(self):
+        name = self.pdf_compare_output_name_edit.text().strip() or default_output_name(
+            "PDF文字对比", ".html"
+        )
+        if not name.lower().endswith(".html"):
+            name += ".html"
+        if Path(name).name != name or any(character in name for character in ("\0", ":")):
+            QMessageBox.warning(self, "文件名不正确", "报告文件名包含不允许的字符。")
+            return
+        output_file = str(Path(self.pdf_compare_output_folder).expanduser().resolve() / name)
+        left_file = self.pdf_compare_left_file
+        right_file = self.pdf_compare_right_file
+
+        def completed(result):
+            self.pdf_compare_result_file = result.output_file
+            self.pdf_compare_status_label.setText(
+                f"已生成：{Path(result.output_file).name}"
+            )
+            self.update_pdf_compare_buttons()
+            self.save_pdf_result_message(
+                "PDF 文字对比完成",
+                result,
+                "报告已在本机生成。",
+            )
+
+        self.start_background_task(
+            "正在对比 PDF 文字",
+            "正在读取两份 PDF…",
+            lambda progress: compare_pdf_text(
+                left_file,
+                right_file,
+                output_file,
+                progress_callback=progress,
+            ),
+            completed,
+            lambda error: QMessageBox.critical(self, "对比失败", error),
+            total=2,
+            status_label=self.pdf_compare_status_label,
+        )
 
     def save_pdf_result_message(self, title, result, extra_text="", open_target=""):
         open_target = open_target or result.output_file or (
@@ -3163,17 +4552,22 @@ class ExcelMergerWindow(QMainWindow):
         return self.rename_rule_combo.currentData() or "replace"
 
     def handle_rename_rule_changed(self, *_args):
+        self.rename_smart_result = None
         self.rename_rule_primary_edit.clear()
         self.rename_rule_secondary_edit.clear()
         self.rename_rule_count_spinbox.setValue(1)
         self.update_rename_rule_inputs()
-        self.schedule_rename_preview()
+        if self.current_rename_rule() == "smart":
+            self.refresh_rename_file_list()
+        else:
+            self.schedule_rename_preview()
 
     def update_rename_rule_inputs(self):
         rule = self.current_rename_rule()
         count_rule = rule in ("trim_start", "trim_end")
         two_text_rule = rule == "replace"
         one_text_rule = rule in ("delete_text", "prefix", "suffix", "extension")
+        smart_rule = rule == "smart"
 
         labels = {
             "replace": ("查找文字：", "替换为："),
@@ -3194,6 +4588,8 @@ class ExcelMergerWindow(QMainWindow):
         self.rename_rule_secondary_edit.setVisible(two_text_rule)
         self.rename_rule_count_label.setVisible(count_rule)
         self.rename_rule_count_spinbox.setVisible(count_rule)
+        self.rename_number_widget.setVisible(not smart_rule)
+        self.rename_smart_options_widget.setVisible(smart_rule)
 
     def rename_options(self):
         rule = self.current_rename_rule()
@@ -3213,13 +4609,22 @@ class ExcelMergerWindow(QMainWindow):
             prefix=primary_text if rule == "prefix" else "",
             suffix=primary_text if rule == "suffix" else "",
             extension=primary_text if rule == "extension" else "",
-            numbering_enabled=self.rename_numbering_checkbox.isChecked(),
+            numbering_enabled=(
+                self.rename_numbering_checkbox.isChecked() and rule != "smart"
+            ),
             number_start=self.rename_number_start_spinbox.value(),
             number_digits=self.rename_number_digits_spinbox.value(),
         )
 
     def schedule_rename_preview(self):
         self.rename_preview_valid = False
+        self.rename_smart_result = None
+        if self.current_rename_rule() == "smart":
+            self.rename_preview_timer.stop()
+            if self.rename_source_files:
+                self.rename_status_label.setText("请点击“刷新预览”开始智能识别")
+            self.update_rename_button_states()
+            return
         self.rename_preview_timer.start()
         self.update_rename_button_states()
 
@@ -3227,6 +4632,14 @@ class ExcelMergerWindow(QMainWindow):
         self.rename_preview_valid = False
         self.update_rename_button_states()
         files = tuple(self.rename_source_files)
+        if self.current_rename_rule() == "smart":
+            self.rename_smart_result = None
+            self.display_rename_previews(preview_renames(files, RenameOptions()))
+            self.rename_preview_valid = False
+            if files:
+                self.rename_status_label.setText("请点击“刷新预览”开始智能识别")
+            self.update_rename_button_states()
+            return True
         options = self.rename_options()
         if len(files) > RENAME_WARNING_COUNT and not force_sync:
             self.rename_status_label.setText(
@@ -3350,7 +4763,112 @@ class ExcelMergerWindow(QMainWindow):
 
     def refresh_rename_preview_with_warning(self):
         self.rename_preview_timer.stop()
+        if self.current_rename_rule() == "smart":
+            self.refresh_smart_rename_preview()
+            return
         self.refresh_rename_file_list(on_complete=self.warn_blank_rename_preview)
+
+    def rename_smart_provider_changed(self):
+        provider = self.rename_smart_provider_combo.currentData()
+        try:
+            select_provider(provider)
+        except OSError as error:
+            QMessageBox.warning(self, "无法保存选择", str(error))
+        for combo in (
+            self.document_ocr_provider_combo,
+            self.batch_ocr_provider_combo,
+        ):
+            index = combo.findData(provider)
+            if index >= 0 and combo.currentIndex() != index:
+                combo.setCurrentIndex(index)
+        self.schedule_rename_preview()
+
+    def refresh_smart_rename_preview(self):
+        if not self.rename_source_files:
+            QMessageBox.warning(self, "尚未添加文件", "请先添加需要改名的 PDF。")
+            return
+        use_ocr = self.rename_smart_ocr_checkbox.isChecked()
+        provider = self.rename_smart_provider_combo.currentData()
+        if use_ocr and not is_provider_configured(provider):
+            QMessageBox.warning(
+                self,
+                "OCR 密钥未配置",
+                "请先在软件设置中填写所选 OCR 平台的密钥。",
+            )
+            return
+        pdf_files = tuple(
+            path for path in self.rename_source_files
+            if Path(path).suffix.lower() == ".pdf"
+        )
+        if use_ocr and pdf_files:
+            self.start_background_task(
+                "检查扫描页",
+                f"正在检查 {len(pdf_files)} 个 PDF 是否包含扫描页…",
+                lambda progress: inspect_pdf_files(pdf_files, progress),
+                lambda inspections: self.confirm_smart_ocr_and_start(
+                    inspections,
+                    provider,
+                ),
+                total=len(pdf_files),
+                status_label=self.rename_status_label,
+            )
+            return
+        self.run_smart_rename_preview(False, provider)
+
+    def confirm_smart_ocr_and_start(self, inspections, provider):
+        scanned = [preview for preview in inspections if preview.scanned_pages]
+        if scanned:
+            page_count = sum(len(preview.scanned_pages) for preview in scanned)
+            details = "\n".join(
+                f"{Path(preview.source_file).name}：第 "
+                f"{', '.join(map(str, preview.scanned_pages))} 页"
+                for preview in scanned[:8]
+            )
+            if len(scanned) > 8:
+                details += f"\n另有 {len(scanned) - 8} 个文件"
+            answer = QMessageBox.question(
+                self,
+                "确认使用云 OCR",
+                f"共 {page_count} 个扫描页会发送给 {PROVIDER_LABELS.get(provider, provider)}：\n\n"
+                f"{details}\n\n有文字的页面仍在本机读取。是否继续？",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if answer != QMessageBox.Yes:
+                self.rename_status_label.setText("已取消云 OCR 智能命名")
+                return
+        self.run_smart_rename_preview(True, provider)
+
+    def run_smart_rename_preview(self, use_ocr, provider):
+        files = tuple(self.rename_source_files)
+        self.rename_status_label.setText(f"正在智能识别 {len(files)} 个文件…")
+        self.start_background_task(
+            "智能识别命名",
+            f"正在识别 {len(files)} 个文件并检查重复内容…",
+            lambda progress: suggest_smart_renames(
+                files,
+                use_ocr=use_ocr,
+                provider_name=provider,
+                progress_callback=progress,
+            ),
+            self.smart_rename_preview_completed,
+            total=len(files),
+            status_label=self.rename_status_label,
+        )
+
+    def smart_rename_preview_completed(self, result):
+        self.rename_smart_result = result
+        self.display_rename_previews(result.previews)
+        duplicate_count = sum(bool(item.duplicate_of) for item in result.suggestions)
+        unchanged_count = sum(not preview.will_rename for preview in result.previews)
+        rename_count = sum(preview.will_rename for preview in result.previews)
+        blocked_count = sum(preview.blocked for preview in result.previews)
+        self.rename_status_label.setText(
+            f"智能预览完成：将改名 {rename_count} 个，保持原名 {unchanged_count} 个，"
+            f"重复内容 {duplicate_count} 个，冲突 {blocked_count} 个"
+        )
+        self.rename_preview_valid = True
+        self.update_rename_button_states()
 
     def update_rename_button_states(self):
         has_files = bool(self.rename_source_files)
@@ -3504,6 +5022,11 @@ class ExcelMergerWindow(QMainWindow):
             return
 
         previews = tuple(self.rename_previews)
+        smart_metadata = (
+            self.rename_smart_result.metadata_by_source
+            if self.current_rename_rule() == "smart" and self.rename_smart_result
+            else None
+        )
 
         def rename_completed(result):
             self.rename_last_log_file = result.log_file
@@ -3520,7 +5043,9 @@ class ExcelMergerWindow(QMainWindow):
             "正在批量改名",
             f"准备处理 {rename_count} 个文件…",
             lambda progress: apply_renames(
-                previews, progress_callback=progress
+                previews,
+                progress_callback=progress,
+                metadata_by_source=smart_metadata,
             ),
             rename_completed,
             lambda error: QMessageBox.critical(self, "改名失败", error),
@@ -3633,7 +5158,7 @@ class ExcelMergerWindow(QMainWindow):
         )
         if ledger_result:
             detail += (
-                f"\n\n台账文件：\n{ledger_result.output_file}"
+                f"\n\n汇总结果：\n{ledger_result.output_file}"
             )
             if ledger_result.log_file:
                 detail += f"\n\n日志文件：\n{ledger_result.log_file}"
@@ -3665,14 +5190,14 @@ class ExcelMergerWindow(QMainWindow):
             if ledger_error:
                 QMessageBox.warning(
                     self,
-                    "台账生成失败",
-                    f"单张发票 Excel 已生成，但台账汇总失败：\n{ledger_error}",
+                    "汇总结果生成失败",
+                    f"单张发票 Excel 已生成，但批量汇总结果失败：\n{ledger_error}",
                 )
             elif ledger_result and ledger_result.log_error:
                 QMessageBox.warning(
                     self,
                     "处理日志未生成",
-                    "单张发票 Excel 和台账 Excel 均已生成，"
+                    "单张发票 Excel 和汇总结果均已生成，"
                     f"但处理日志未生成：\n{ledger_result.log_error}",
                 )
             if results or failures:
@@ -3719,7 +5244,7 @@ class ExcelMergerWindow(QMainWindow):
                 progress_callback(
                     len(source_files) * 100,
                     max(len(source_files) * 100, 1),
-                    "正在生成发票台账和处理日志…",
+                    "正在生成发票汇总结果和处理日志…",
                 )
                 try:
                     ledger_result = write_invoice_ledger(
@@ -4137,6 +5662,198 @@ class ExcelMergerWindow(QMainWindow):
         message.exec()
         if message.clickedButton() == open_button:
             self.open_output_file(self.document_result_file)
+
+    def choose_cleanup_source_file(self):
+        filename, _ = QFileDialog.getOpenFileName(
+            self,
+            "选择需要清理的 Excel 文件",
+            self.dialog_folder("cleanup_open"),
+            "Excel 文件 (*.xlsx *.xlsm)",
+        )
+        if not filename:
+            return
+        self.cleanup_source_file = os.path.abspath(filename)
+        self.cleanup_source_path_edit.setText(self.cleanup_source_file)
+        self.cleanup_source_path_edit.setToolTip(self.cleanup_source_file)
+        self.remember_dialog_folder("cleanup_open", Path(filename).parent)
+        self.cleanup_output_folder = str(Path(filename).parent / "Eggie Excel 清理结果")
+        self.cleanup_output_path_edit.setText(self.cleanup_output_folder)
+        self.cleanup_result_file = ""
+        self.cleanup_preview = None
+
+        def worker(_progress_callback):
+            return workbook_sheet_names(self.cleanup_source_file)
+
+        self.start_background_task(
+            "读取 Excel",
+            "正在读取工作表名称…",
+            worker,
+            self.cleanup_source_loaded,
+            status_label=self.cleanup_preview_label,
+        )
+
+    def cleanup_source_loaded(self, sheet_names):
+        self.cleanup_sheet_combo.blockSignals(True)
+        self.cleanup_sheet_combo.clear()
+        self.cleanup_sheet_combo.addItems(list(sheet_names))
+        self.cleanup_sheet_combo.blockSignals(False)
+        if not sheet_names:
+            self.cleanup_preview_label.setText("这个 Excel 没有可处理的工作表")
+            self.update_cleanup_button_states()
+            return
+        self.refresh_cleanup_preview()
+
+    def current_cleanup_options(self):
+        columns = []
+        for index in range(self.cleanup_columns_tree.topLevelItemCount()):
+            item = self.cleanup_columns_tree.topLevelItem(index)
+            if item.checkState(0) == Qt.Checked:
+                columns.append(int(item.data(0, Qt.UserRole)))
+        return CleanupOptions(
+            sheet_name=self.cleanup_sheet_combo.currentText(),
+            header_row=self.cleanup_header_row_spinbox.value(),
+            remove_empty_rows=self.cleanup_empty_rows_checkbox.isChecked(),
+            trim_whitespace=self.cleanup_spaces_checkbox.isChecked(),
+            deduplicate=self.cleanup_deduplicate_checkbox.isChecked(),
+            duplicate_columns=tuple(columns),
+            normalize_dates=self.cleanup_dates_checkbox.isChecked(),
+            normalize_numbers=self.cleanup_numbers_checkbox.isChecked(),
+        )
+
+    def invalidate_cleanup_preview(self, *_args):
+        if self.cleanup_populating_columns:
+            return
+        self.cleanup_preview = None
+        if self.cleanup_source_file and self.cleanup_sheet_combo.currentText():
+            self.cleanup_preview_label.setText("规则已变化，请点击“更新预览”")
+        self.update_cleanup_button_states()
+
+    def refresh_cleanup_preview(self):
+        if not self.cleanup_source_file or not self.cleanup_sheet_combo.currentText():
+            return
+        options = self.current_cleanup_options()
+
+        def worker(_progress_callback):
+            return preview_cleanup(self.cleanup_source_file, options)
+
+        self.start_background_task(
+            "检查 Excel",
+            f"正在检查工作表：{options.sheet_name}",
+            worker,
+            self.display_cleanup_preview,
+            status_label=self.cleanup_preview_label,
+        )
+
+    def display_cleanup_preview(self, preview):
+        selected_columns = {
+            int(self.cleanup_columns_tree.topLevelItem(index).data(0, Qt.UserRole))
+            for index in range(self.cleanup_columns_tree.topLevelItemCount())
+            if self.cleanup_columns_tree.topLevelItem(index).checkState(0) == Qt.Checked
+        }
+        self.cleanup_populating_columns = True
+        self.cleanup_columns_tree.blockSignals(True)
+        self.cleanup_columns_tree.clear()
+        for index, header in enumerate(preview.headers, 1):
+            item = QTreeWidgetItem([f"第 {index} 列：{header}"])
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setCheckState(0, Qt.Checked if index in selected_columns else Qt.Unchecked)
+            item.setData(0, Qt.UserRole, index)
+            self.cleanup_columns_tree.addTopLevelItem(item)
+        self.cleanup_columns_tree.blockSignals(False)
+        self.cleanup_populating_columns = False
+        self.cleanup_preview = preview
+        formula_note = (
+            f"；公式 {preview.formula_cells} 个，请处理后检查公式结果"
+            if preview.formula_cells
+            else ""
+        )
+        self.cleanup_preview_label.setText(
+            f"数据行 {preview.original_rows}，空白行 {preview.blank_rows}，"
+            f"重复行 {preview.duplicate_rows}，空格问题 {preview.whitespace_cells}，"
+            f"日期 {preview.date_cells}，数字 {preview.number_cells}{formula_note}"
+        )
+        self.update_cleanup_button_states()
+
+    def choose_cleanup_output_folder(self):
+        folder = QFileDialog.getExistingDirectory(
+            self,
+            "选择 Excel 清理结果保存文件夹",
+            self.dialog_folder("cleanup_output", self.cleanup_output_folder),
+        )
+        if not folder:
+            return
+        self.cleanup_output_folder = os.path.abspath(folder)
+        self.remember_dialog_folder("cleanup_output", self.cleanup_output_folder)
+        self.cleanup_output_path_edit.setText(self.cleanup_output_folder)
+        self.update_cleanup_button_states()
+
+    def update_cleanup_button_states(self):
+        ready = bool(
+            self.cleanup_source_file
+            and self.cleanup_sheet_combo.currentText()
+            and self.cleanup_output_folder
+            and self.cleanup_preview is not None
+        )
+        self.cleanup_preview_button.setEnabled(
+            bool(self.cleanup_source_file and self.cleanup_sheet_combo.currentText())
+        )
+        self.cleanup_start_button.setEnabled(ready)
+        self.cleanup_open_result_button.setEnabled(bool(self.cleanup_result_file))
+
+    def start_excel_cleanup(self):
+        if self.cleanup_preview is None:
+            QMessageBox.information(self, "请先更新预览", "规则变化后需要重新查看预计结果。")
+            return
+        if self.cleanup_preview.formula_cells:
+            answer = QMessageBox.question(
+                self,
+                "工作表包含公式",
+                f"检测到 {self.cleanup_preview.formula_cells} 个公式。删除行可能影响公式引用，"
+                "软件会另存新文件，不修改原文件。\n\n是否继续？",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if answer != QMessageBox.Yes:
+                return
+        options = self.current_cleanup_options()
+
+        def worker(progress_callback):
+            return clean_workbook(
+                self.cleanup_source_file,
+                self.cleanup_output_folder,
+                options,
+                progress_callback,
+            )
+
+        self.start_background_task(
+            "Excel 数据清理",
+            "正在清理并生成新文件…",
+            worker,
+            self.excel_cleanup_completed,
+            total=max(self.cleanup_preview.original_rows, 1),
+            status_label=self.cleanup_preview_label,
+        )
+
+    def excel_cleanup_completed(self, result):
+        self.cleanup_result_file = result.output_file
+        self.cleanup_preview_label.setText(
+            f"清理完成：删除 {result.removed_rows} 行，剩余数据行 {result.final_rows}；"
+            f"日志：{result.log_file}"
+        )
+        self.update_cleanup_button_states()
+        message = QMessageBox(self)
+        message.setWindowTitle("Excel 清理完成")
+        message.setIcon(QMessageBox.Information)
+        message.setText("已生成新的 Excel 文件，原文件没有修改")
+        message.setInformativeText(
+            f"结果文件：\n{result.output_file}\n\n处理日志：\n{result.log_file}"
+        )
+        open_button = message.addButton("打开结果", QMessageBox.ActionRole)
+        ok_button = message.addButton("确定", QMessageBox.AcceptRole)
+        message.setDefaultButton(ok_button)
+        message.exec()
+        if message.clickedButton() is open_button:
+            self.open_output_file(result.output_file)
 
     def choose_split_source_file(self):
         filename, _ = QFileDialog.getOpenFileName(

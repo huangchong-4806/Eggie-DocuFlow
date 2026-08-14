@@ -912,16 +912,16 @@ LEDGER_FIELDS = (
 
 def _ledger_log_path(output_folder):
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    return available_output_path(Path(output_folder) / f"发票台账汇总日志_{stamp}.txt")
+    return available_output_path(Path(output_folder) / f"发票批量汇总日志_{stamp}.txt")
 
 
 def _write_invoice_ledger_log(log_file, results, failures, ledger_file):
     total_items = sum(result.item_count for result in results)
     total_abnormal = sum(result.abnormal_count for result in results)
     with Path(log_file).open("w", encoding="utf-8") as handle:
-        handle.write("发票台账汇总日志\n")
+        handle.write("发票批量汇总日志\n")
         handle.write(f"生成时间：{datetime.now():%Y-%m-%d %H:%M:%S}\n")
-        handle.write(f"台账文件：{ledger_file}\n\n")
+        handle.write(f"汇总结果：{ledger_file}\n\n")
         handle.write("匹配结果：\n")
         for result in results:
             handle.write(
@@ -940,7 +940,7 @@ def _write_invoice_ledger_log(log_file, results, failures, ledger_file):
         handle.write(f"明细行数合计={total_items}\n")
         handle.write(f"校验异常合计={total_abnormal}\n")
         handle.write("\n文件生成状态：\n")
-        handle.write(f"ledger_file={ledger_file}\n")
+        handle.write(f"summary_file={ledger_file}\n")
         handle.write(f"log_file={log_file}\n")
 
 
@@ -950,12 +950,12 @@ def write_invoice_ledger(results, failures, output_folder):
     output_folder = Path(output_folder).expanduser().resolve()
     output_folder.mkdir(parents=True, exist_ok=True)
     ledger_file = available_output_path(
-        output_folder / f"发票台账汇总_{datetime.now():%Y%m%d}.xlsx"
+        output_folder / f"发票批量汇总_{datetime.now():%Y%m%d}.xlsx"
     )
 
     workbook = Workbook()
     sheet = workbook.active
-    sheet.title = "发票台账"
+    sheet.title = "发票汇总"
     sheet.append(LEDGER_FIELDS)
     for result in results:
         sheet.append(
@@ -1106,7 +1106,7 @@ def run_invoice_batch_task(source_files, output_folder, result_queue):
             progress(
                 len(source_files) * 100,
                 max(len(source_files) * 100, 1),
-                "正在生成发票台账和处理日志…",
+                "正在生成发票汇总结果和处理日志…",
             )
             try:
                 ledger_result = write_invoice_ledger(results, failures, output_folder)

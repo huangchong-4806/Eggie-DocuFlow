@@ -1,11 +1,11 @@
 # Eggie DocuFlow / Eggie文档处理系统
 
-![Version](https://img.shields.io/badge/version-1.3.12-blue)
+![Version](https://img.shields.io/badge/version-1.4.0-blue)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-blue)
 ![Python](https://img.shields.io/badge/Python-3.10%2B-green)
 
 Eggie DocuFlow 是一个面向日常办公场景的 Excel、PDF 与文件处理工具。当前版本支持
-Excel 合并、Excel 拆分、文本型 PDF 发票结构化解析、PDF 文档智能处理、批量文件改名，以及 PDF 工具箱。
+Excel 合并、拆分与数据清理、PDF 发票解析、文档智能处理、PDF 文件夹批量处理、智能改名，以及 PDF 工具箱。
 
 当前版本重点解决以下问题：
 
@@ -15,16 +15,20 @@ Excel 合并、Excel 拆分、文本型 PDF 发票结构化解析、PDF 文档�
 - 按自定义数据行数拆分 Excel 文件
 - 拆分文件自动保留指定表头
 - 拆分结果自动集中保存到独立文件夹
+- Excel 数据清理支持空白行、文字空格、重复数据和日期数字格式预览
 - PDF 发票转换为财务结构化 Excel，并自动校验金额与税额
 - PDF 文档智能路由：自动识别发票、合同、表格和未知文档
 - 文档处理内可选接入用户自备的百度智能云或阿里云 OCR 密钥
 - 可复制文字的 PDF 页仅在本机读取，仅扫描页在用户确认后调用云 OCR
 - 可单独导出文字、保留页码与位置的 JSON 以及不包含密钥和正文的处理日志
+- 批量处理中心可扫描文件夹、逐份预览、失败继续并单独重试失败文件
 - 合同 PDF 输出 Word 文档，表格 PDF 输出 Excel，未知 PDF 输出文本说明
 - 文档智能处理支持增强排版转换，合同可套正式样式并还原附件表格，表格可保留边框和版式
 - 批量改名工具支持先预览再执行，支持替换、删除、追加、改后缀、删除开头或结尾文字
 - 改名预览出现空白文件名时会弹窗提醒并阻止执行
+- 智能改名可从发票或合同中生成名称建议，并标记内容完全相同的文件
 - PDF 工具箱支持缩略图拖拽排序、多选旋转、拆分、删除、压缩、图片转 PDF 和 PDF 转图片
+- PDF 工具箱新增文字水印、页码、打开密码、可搜索 PDF 和两份 PDF 文字对比
 - 文件和文件夹选择会记住上次打开位置
 - 图片转 PDF 会自动过滤非图片或无法读取的文件
 - 支持较大文件的低内存处理
@@ -60,8 +64,8 @@ The current release focuses on:
 
 1. 打开本项目右侧的 **Releases**
 2. 下载最新版安装包
-3. Mac：解压后运行 `EggieDocuFlow_V1.3.12_mac.app`
-4. Windows：运行 `EggieDocuFlow_V1.3.12_Windows_x64_Setup.exe`，按安装向导完成安装后，从桌面或开始菜单打开软件
+3. Mac：解压后运行 `EggieDocuFlow_V1.4.0_mac.app`
+4. Windows：运行 `EggieDocuFlow_V1.4.0_Windows_x64_Setup.exe`，按安装向导完成安装后，从桌面或开始菜单打开软件
 5. 本版本未做 Apple 公证；如果 macOS 阻止打开，请在 Finder 中右键 App，选择“打开”，再确认“打开”
 
 If you only want to use the application, you do not need to install Python or
@@ -69,8 +73,8 @@ run the source code.
 
 1. Open **Releases** on the right side of this repository
 2. Download the latest application package
-3. On macOS, extract the package and launch `EggieDocuFlow_V1.3.12_mac.app`
-4. On Windows, run `EggieDocuFlow_V1.3.12_Windows_x64_Setup.exe`, then launch the app from the desktop or Start menu
+3. On macOS, extract the package and launch `EggieDocuFlow_V1.4.0_mac.app`
+4. On Windows, run `EggieDocuFlow_V1.4.0_Windows_x64_Setup.exe`, then launch the app from the desktop or Start menu
 5. This release is not Apple-notarized. If macOS blocks it, right-click the App in Finder, choose **Open**, then confirm **Open**
 
 > Windows 版支持 Windows 10/11 64 位系统；安装程序默认安装到 `C:\Program Files\Eggie DocuFlow`，安装时会请求 Windows 管理员授权，并提供标准卸载入口。
@@ -78,23 +82,19 @@ run the source code.
 
 ## 软件界面 / Screenshots
 
-![Eggie DocuFlow 工作台](docs/ui/home_runtime_check_20260713.png)
+![Eggie DocuFlow 工作台](docs/ui/v1_4_0_home.png)
 
 ### 统一后的工具页面 / Unified Tool Pages
 
-![全部工具页总览](docs/ui/all_pages_runtime_check_20260709.png)
+![Excel 合并工具](docs/ui/v1_4_0_excel_merge.png)
 
-![Excel 合并工具](docs/ui/excel_merge_runtime_check_20260709.png)
+![Excel 数据清理](docs/ui/v1_4_0_excel_cleanup.png)
 
-![Excel 拆分工具](docs/ui/excel_split_runtime_check_20260709.png)
+![PDF 批量处理](docs/ui/v1_4_0_batch.png)
 
-![PDF 发票解析](docs/ui/invoice_runtime_check_20260709.png)
+![智能改名](docs/ui/v1_4_0_smart_rename.png)
 
-![文档智能处理](docs/ui/document_runtime_check_20260709.png)
-
-![批量改名工具](docs/ui/rename_runtime_check_20260709.png)
-
-![PDF 工具箱](docs/ui/pdf_runtime_check_20260709.png)
+![PDF 工具箱](docs/ui/v1_4_0_pdf_toolbox.png)
 
 ## 主要功能 / Features
 
@@ -122,6 +122,13 @@ run the source code.
 - 优化了大文件拆分速度 / Large-file splitting performance has been improved
 - 原始 Excel 文件只读取，不会被修改 / The original Excel file is read-only and will not be modified
 
+### Excel 数据清理 / Excel Cleanup
+
+- 选择工作表和表头行后，先预览将删除的空白行、空格和重复行 / Preview blank rows, extra spaces, and duplicate rows before cleanup
+- 可按指定列判断重复数据 / Choose which columns determine duplicate rows
+- 只为已有日期和数字数据统一显示格式，不改变实际数值 / Normalize display formats without changing stored values
+- 源文件不变，始终生成新文件和详细日志 / Always creates a new workbook and a detailed log
+
 ### PDF发票解析工具 / PDF Invoice Parser
 
 - 支持 100 页以内、可复制文字的 PDF 发票 / Supports text-based PDF invoices up to 100 pages
@@ -147,6 +154,20 @@ run the source code.
 - 不勾选云 OCR 时，原有处理流程不变 / The original document workflow remains unchanged when cloud OCR is disabled
 - 可在同一页面点击“仅提取文字”，生成 TXT、JSON 和排查日志 / Text-only extraction creates TXT, JSON, and diagnostic log outputs
 
+### 批量处理中心 / Batch Processing Center
+
+- 扫描文件夹中的 PDF，可选是否包含子文件夹 / Scan PDFs in one folder with optional subfolder support
+- 开始前显示页数、扫描页数和建议处理方式 / Preview pages, scanned pages, and suggested processing before starting
+- 单个文件失败不影响后续文件，可只重试失败项 / Continue after individual failures and retry failed files only
+- 扫描页只有在用户配置密钥并确认页码后才会发送给所选 OCR 平台 / Send scanned pages to OCR only after credential setup and explicit confirmation
+
+### 批量改名 / Batch Rename
+
+- 保留原有查找替换、删除、前后缀和编号规则 / Keeps the existing replace, delete, prefix, suffix, and numbering rules
+- 新增智能识别命名，可根据发票或合同内容生成建议文件名 / Suggest names from invoice or contract content
+- 按文件内容检查重复项，只标记不自动删除 / Detect exact duplicates without deleting files
+- 所有改名仍需先预览，重名、空名和目标已存在时会阻止执行 / Preview-first execution blocks unsafe rename results
+
 ### PDF 工具箱 / PDF Toolbox
 
 - 页面整理支持缩略图拖拽排序 / Page organizer supports thumbnail drag-and-drop ordering
@@ -156,6 +177,10 @@ run the source code.
 - 支持多张图片合成 PDF / Converts multiple images into one PDF
 - 支持 PDF 每页导出 PNG 或 JPG 图片 / Exports each PDF page as PNG or JPG images
 - 图片转 PDF 支持缩略图预览、拖拽排序、双击放大和自动过滤非图片文件 / Images-to-PDF supports thumbnail preview, drag ordering, double-click preview, and automatic non-image filtering
+- 支持添加文字水印和页码，可调整位置、透明度、角度和起始页码 / Adds configurable text watermarks and page numbers
+- 支持设置 PDF 打开密码，或在已知原密码时生成无密码副本 / Sets or removes PDF open passwords when the original password is known
+- 为扫描页生成可搜索文字层，保留原页面图像 / Creates searchable text layers while preserving scanned-page images
+- 将两份可搜索 PDF 的文字差异生成本机 HTML 报告 / Builds a local HTML text-difference report for two searchable PDFs
 
 ## 使用方法 / Usage
 
@@ -177,6 +202,12 @@ run the source code.
 4. 选择输出位置并点击“开始拆分”。 / Choose an output location and click **Start Split**.
 5. 程序会自动创建“原文件名_拆分结果”文件夹并保存全部拆分文件。 / The app automatically creates an output folder and saves all split files there.
 
+清理 Excel：
+
+1. 进入“Excel 数据清理”并选择工作簿。 / Open **Excel Cleanup** and select a workbook.
+2. 选择工作表、表头行和清理规则。 / Choose the sheet, header row, and cleanup rules.
+3. 查看预览数量，确认后生成新文件。 / Review the preview counts, then create a new workbook.
+
 解析 PDF 发票：
 
 1. 选择一个或多个文本型 PDF 发票。 / Select one or more text-based PDF invoices.
@@ -191,6 +222,12 @@ run the source code.
 4. 查看识别类型、状态和输出文件路径。 / Review the detected type, status, and output path.
 5. 如需识别扫描件，先在软件“设置 → 第三方服务”中配置自己的 OCR 密钥，再回到文档处理页面选择平台并勾选“扫描页使用云 OCR”。 / For scanned pages, configure your own OCR credentials under **Settings → Third-party Services**, then return to Document Processing and enable cloud OCR.
 6. 只需要文字时，点击“仅提取文字”。 / Use **Extract Text Only** when no document conversion is needed.
+
+批量处理 PDF：
+
+1. 进入“批量处理中心”，选择文件夹并查看预览。 / Open **Batch Processing Center**, select a folder, and review the preview.
+2. 选择保存位置；需要识别扫描页时再启用 OCR。 / Choose the output folder and enable OCR only when scanned pages need it.
+3. 完成后查看逐件状态，可只重试失败文件。 / Review each result and retry only failed files when needed.
 
 OCR 的注册、密钥、数据流向、费用和法律责任说明请阅读 [OCR 使用说明](docs/OCR使用说明.pdf)。
 
@@ -207,6 +244,7 @@ PDF 工具箱：
 2. 在“页面整理”中添加 PDF，拖动缩略图调整顺序，可多选页面旋转、拆分或删除。 / Add PDFs in **Page Organizer**, drag thumbnails to reorder, and multi-select pages to rotate, split, or delete.
 3. 在“PDF 压缩”中选择压缩档位，查看预计体积后生成压缩结果。 / Use **PDF Compression** to pick a preset, review the estimated size, and create a compressed copy.
 4. 在“图片 / PDF 互转”中添加图片或文件夹，拖动缩略图排序后合成 PDF，也可以把 PDF 导出为 JPG 或 PNG。 / Use **Image / PDF Conversion** to add images or folders, reorder thumbnails, build PDFs, or export PDF pages as JPG or PNG.
+5. 其他标签页可生成带水印页码、带密码或可搜索的 PDF，以及本机文字对比报告。 / Other tabs create marked, password-protected, searchable PDFs, and local text comparison reports.
 
 ## 使用说明与注意事项 / Notes
 
@@ -264,13 +302,14 @@ PYTHON=.venv/bin/python scripts/build_macos.sh
 
 构建结果位于 `release/`，正式版文件名为：
 
-- `EggieDocuFlow_V1.3.12_mac.app`
-- `EggieDocuFlow_V1.3.12_mac.zip`
+- `EggieDocuFlow_V1.4.0_mac.zip`
+
+解压 ZIP 后得到 `EggieDocuFlow_V1.4.0_mac.app`。
 
 打包脚本保留所有 `qtbase` 系统语言翻译，并移除本工具不使用的 Qt 网络、TLS、
 SVG 和图片插件。
 
-Build artifacts are written to `release/`. The packaging script keeps all
+The release ZIP is written to `release/`. The packaging script keeps all
 `qtbase` system-language translations and removes unused Qt network, TLS, SVG,
 and image plugins.
 
@@ -284,17 +323,28 @@ powershell -ExecutionPolicy Bypass -File scripts\\build_windows.ps1
 
 构建完成后，`release/` 中会生成：
 
-- `EggieDocuFlow_V1.3.12_Windows_x64_Setup.exe`
+- `EggieDocuFlow_V1.4.0_Windows_x64_Setup.exe`
 
 安装完成后请在真实 Windows 环境中打开软件，并用 Microsoft Excel 实际打开软件生成的 Excel 文件；出现损坏或修复提示时不得交付该安装包。
 
 ## 版本记录 / Changelog
 
+### V1.4.0
+
+- 新增 PDF 文件夹批量处理中心，支持处理前预览、失败继续和失败重试 / Added a PDF batch processing center with previews, failure isolation, and retry
+- 新增 Excel 数据清理，支持预览空白行、空格、重复行和显示格式调整 / Added preview-first Excel data cleanup
+- 批量改名新增发票和合同智能命名建议，并标记内容重复文件 / Added smart invoice/contract naming and exact duplicate detection
+- PDF 工具箱新增水印页码、密码、可搜索 PDF 和文字对比 / Added PDF marks, passwords, searchable PDFs, and text comparison
+- 首页、工具页、按钮、表格和设置页统一为更轻盈的浅色玻璃风格 / Unified the interface with a lighter glass-style design
+- 优化首页 Logo、卡片、按钮间距和勾选状态，减少拥挤和重叠 / Refined the logo, cards, spacing, and checkbox states
+- 统一复用同一套 OCR 接入，删除已停用的重复代码 / Unified OCR integration and removed the retired duplicate path
+- 全部新功能遵循“源文件不改、先预览、生成新文件、留日志”的安全规则 / All new tools preserve sources, preview first, create new outputs, and keep useful logs
+
 ### V1.3.12
 
 - 修复 Windows 发票读取任务意外结束后界面无法恢复的问题；异常时会明确提示，不会一直停在处理中 / Fixed recovery after an unexpected end of the Windows invoice-reading task; the app now clearly reports the exception instead of remaining in processing state
 - 多页发票会显示实际读取页数进度；不会因页数而自动停止 / Multi-page invoices now show real page-reading progress and never stop automatically based on page count
-- 台账 Excel 已生成但处理日志未生成时，会保留台账并单独说明日志问题，避免误报台账生成失败 / If the ledger Excel is created but its processing log is not, the ledger is retained and the log issue is reported separately
+- 发票汇总结果已生成但处理日志未生成时，会保留汇总结果并单独说明日志问题，避免误报汇总生成失败 / If the invoice summary Excel is created but its processing log is not, the summary is retained and the log issue is reported separately
 
 ### V1.3.11
 
@@ -348,7 +398,7 @@ powershell -ExecutionPolicy Bypass -File scripts\\build_windows.ps1
 - 统一按钮、输入框、表格、卡片边框和页面底色 / Unified buttons, inputs, tables, card borders, and page backgrounds
 - Excel 合并增加合并前预览，显示行数、列数和合并单元格数量 / Added pre-merge preview for rows, columns, and merged-cell count
 - Excel 拆分增加预计生成文件数量提示 / Added estimated output file count before Excel splitting
-- PDF 发票解析新增发票台账汇总和汇总日志 / Added invoice ledger summary and ledger logs
+- PDF 发票解析新增发票批量汇总结果和汇总日志 / Added invoice batch summary output and summary logs
 - 修复打包版首页左上角 logo 不显示的问题 / Fixed the missing logo in the packaged app home page
 - 保存整套页面截图作为后续 UI 调整参考 / Saved full-page UI screenshots for future design iteration
 

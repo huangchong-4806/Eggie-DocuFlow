@@ -246,28 +246,7 @@ def _rename_without_overwrite(source_path, target_path):
         raise
 
 
-def preview_renames(files, options):
-    absolute_files = [os.path.abspath(filename) for filename in files]
-    rows = []
-    target_counts = {}
-
-    for index, source_path in enumerate(absolute_files):
-        try:
-            if not Path(source_path).is_file():
-                raise ValueError("源文件不存在。")
-            target_path = os.path.abspath(
-                _target_for(
-                    source_path,
-                    options,
-                    options.number_start + index,
-                )
-            )
-            key = _path_key(target_path)
-            target_counts[key] = target_counts.get(key, 0) + 1
-            rows.append((source_path, target_path, "", key))
-        except ValueError as error:
-            rows.append((source_path, source_path, str(error), ""))
-
+def _build_previews(rows, target_counts):
     previews = []
     for source_path, target_path, error, key in rows:
         if error:
@@ -317,12 +296,56 @@ def preview_renames(files, options):
     return tuple(previews)
 
 
+def preview_renames(files, options):
+    absolute_files = [os.path.abspath(filename) for filename in files]
+    rows = []
+    target_counts = {}
+
+    for index, source_path in enumerate(absolute_files):
+        try:
+            if not Path(source_path).is_file():
+                raise ValueError("源文件不存在。")
+            target_path = os.path.abspath(
+                _target_for(
+                    source_path,
+                    options,
+                    options.number_start + index,
+                )
+            )
+            key = _path_key(target_path)
+            target_counts[key] = target_counts.get(key, 0) + 1
+            rows.append((source_path, target_path, "", key))
+        except ValueError as error:
+            rows.append((source_path, source_path, str(error), ""))
+    return _build_previews(rows, target_counts)
+
+
+def preview_explicit_renames(pairs):
+    rows = []
+    target_counts = {}
+    for source_path, target_path in pairs:
+        source_path = os.path.abspath(source_path)
+        target_path = os.path.abspath(target_path)
+        try:
+            if not Path(source_path).is_file():
+                raise ValueError("源文件不存在。")
+            if Path(source_path).parent != Path(target_path).parent:
+                raise ValueError("智能改名不能移动文件。")
+            _validate_name(Path(target_path).name)
+            key = _path_key(target_path)
+            target_counts[key] = target_counts.get(key, 0) + 1
+            rows.append((source_path, target_path, "", key))
+        except ValueError as error:
+            rows.append((source_path, source_path, str(error), ""))
+    return _build_previews(rows, target_counts)
+
+
 def _log_path(folder):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     return Path(folder) / f"批量改名日志_{timestamp}.txt"
 
 
-def _write_action_log(handle, index, preview, status, error):
+def _write_action_log(handle, index, preview, status, error, metadata=None):
     handle.write(f"序号：{index}\n")
     handle.write(f"处理时间：{datetime.now().isoformat(timespec='seconds')}\n")
     handle.write(f"原文件路径：{preview.source_path}\n")
@@ -331,10 +354,18 @@ def _write_action_log(handle, index, preview, status, error):
     handle.write(f"新文件名：{Path(preview.target_path).name}\n")
     handle.write(f"处理结果：{status}\n")
     handle.write(f"失败原因：{error}\n")
+    for key, value in (metadata or {}).items():
+        clean_value = str(value).replace("\r", " ").replace("\n", " ")
+        handle.write(f"{key}：{clean_value}\n")
     handle.write("-" * 60 + "\n")
 
 
-def apply_renames(previews, log_folder=None, progress_callback=None):
+def apply_renames(
+    previews,
+    log_folder=None,
+    progress_callback=None,
+    metadata_by_source=None,
+):
     if any(preview.blocked for preview in previews):
         raise ValueError("预览中还有不能改名的文件，请先处理后再执行。")
     if not previews:
@@ -371,7 +402,14 @@ def apply_renames(previews, log_folder=None, progress_callback=None):
                     status = "失败"
                     error = str(rename_error)
 
-            _write_action_log(handle, index, preview, status, error)
+            _write_action_log(
+                handle,
+                index,
+                preview,
+                status,
+                error,
+                (metadata_by_source or {}).get(preview.source_path),
+            )
             actions.append(
                 RenameAction(preview.source_path, preview.target_path, status, error)
             )

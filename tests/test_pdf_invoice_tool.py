@@ -383,7 +383,7 @@ class PdfInvoiceToolTests(unittest.TestCase):
         with ZipFile(output) as archive:
             self.assertIsNone(archive.testzip())
 
-    def test_invoice_ledger_workbook_opens_and_logs_key_fields(self):
+    def test_invoice_summary_workbook_opens_and_logs_key_fields(self):
         result = PdfInvoiceResult(
             output_file=str(self.root / "invoice.xlsx"),
             item_count=2,
@@ -408,7 +408,7 @@ class PdfInvoiceToolTests(unittest.TestCase):
         workbook = load_workbook(ledger.output_file)
         try:
             sheet = workbook.active
-            self.assertEqual(sheet.title, "发票台账")
+            self.assertEqual(sheet.title, "发票汇总")
             self.assertEqual(sheet["B2"].value, "12345678")
             self.assertEqual(sheet["F2"].value, 100)
             self.assertEqual(sheet["I2"].value, 1)
@@ -416,12 +416,14 @@ class PdfInvoiceToolTests(unittest.TestCase):
             workbook.close()
 
         log_text = Path(ledger.log_file).read_text(encoding="utf-8")
+        self.assertIn("发票批量汇总日志", log_text)
         self.assertIn("匹配结果", log_text)
         self.assertIn("invoice_number=12345678", log_text)
         self.assertIn("seller_name=销方公司", log_text)
         self.assertIn("seller_tax_id=91310000987654321X", log_text)
         self.assertIn("失败 source_file=", log_text)
         self.assertIn("文件生成状态", log_text)
+        self.assertIn("summary_file=", log_text)
 
     def test_ledger_is_kept_when_only_its_log_cannot_be_written(self):
         result = PdfInvoiceResult(

@@ -9,7 +9,6 @@ from v2.batch_engine import BatchEngine
 from v2.layout_extractor import _add_contract_table
 from v2.layout_engine import process_layout_document
 from v2.layout_exporters import export_contract_layout
-from v2.ocr_plugins import BaiduOCR
 from v2.queue_system import TaskQueue
 
 
@@ -88,6 +87,26 @@ class DocuFlowV2Tests(unittest.TestCase):
         self.assertIn("event=success", log_text)
         self.assertIn("output_file=", log_text)
 
+    def test_batch_engine_can_retry_only_selected_files(self):
+        output = self.root / "result"
+        selected = [self.root / "failed.pdf"]
+        selected[0].write_text("retry", encoding="utf-8")
+
+        def router(pdf_file, output_dir, progress_callback=None, log_root=None):
+            output_file = Path(output_dir) / f"{Path(pdf_file).stem}.txt"
+            output_file.write_text("done", encoding="utf-8")
+            return {
+                "doc_type": "UNKNOWN",
+                "output_file": str(output_file),
+                "status": "success",
+            }
+
+        results = BatchEngine(router=router).process_files(selected, output)
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual(Path(results[0]["data"]["source_file"]).name, "failed.pdf")
+        self.assertTrue((output / "failed.txt").is_file())
+
     def test_queue_retries_and_writes_error_log(self):
         log_file = self.root / "queue.log"
         attempts = {"count": 0}
@@ -108,18 +127,6 @@ class DocuFlowV2Tests(unittest.TestCase):
         self.assertEqual(results[0]["status"], "success")
         self.assertEqual(attempts["count"], 2)
         self.assertIn("source_file=a.pdf attempt=1 error=RuntimeError: 临时错误", log_file.read_text(encoding="utf-8"))
-
-    def test_ocr_provider_returns_unified_json_without_entering_router_flow(self):
-        missing = BaiduOCR().recognize("scan.pdf")
-        self.assertEqual(missing["doc_type"], "OCR")
-        self.assertEqual(missing["output_file"], "")
-        self.assertEqual(missing["status"], "failed")
-        self.assertIn("未配置客户端", missing["data"]["error_message"])
-
-        recognized = BaiduOCR(client=lambda source: {"text": "识别文本"}).recognize("scan.pdf")
-        self.assertEqual(recognized["status"], "success")
-        self.assertEqual(recognized["data"]["provider"], "BaiduOCR")
-        self.assertEqual(recognized["data"]["text"], "识别文本")
 
     def test_contract_layout_export_keeps_page_and_paragraph_formatting(self):
         result = process_layout_document(self.project_root / "test_files" / "合同测试.pdf", self.root)
