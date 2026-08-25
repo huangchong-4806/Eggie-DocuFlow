@@ -1,8 +1,28 @@
-# Eggie DocuFlow / Eggie文档处理系统
+# Eggie DocuFlow｜免费的 Excel 与 PDF 桌面处理工具
 
 ![Version](https://img.shields.io/badge/version-1.4.0-blue)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-blue)
-![Python](https://img.shields.io/badge/Python-3.10%2B-green)
+
+Eggie文档处理系统无需安装 Python，下载后即可使用。适合日常办公中的 Excel
+合并、拆分与数据清理、PDF 发票解析、批量处理、文件改名和 PDF 页面整理。
+
+- 免费使用，支持 macOS 与 Windows
+- Excel 与 PDF 默认在本机处理；只有用户主动启用 OCR 时，扫描页才会发送给所选服务商
+- Excel 与 PDF 处理保留原文件并生成新结果；文件改名必须先预览再执行
+- macOS 当前仅支持 Apple 芯片和 macOS 11 及以上版本；Windows 支持 64 位 Windows 10/11
+
+## 直接下载 V1.4.0 / Direct Download
+
+- [下载 Mac 版（Apple 芯片，ZIP）](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/download/v1.4.0/EggieDocuFlow_V1.4.0_mac.zip)
+- [下载 Windows 版（64 位安装包）](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/download/v1.4.0/EggieDocuFlow_V1.4.0_Windows_x64_Setup.exe)
+
+> Mac 版暂未经过 Apple 公证。首次打开被阻止时，请在 Finder 中右键 App，选择“打开”，再确认“打开”。
+>
+> 部分 Windows 电脑可能显示“Windows 已保护你的电脑”或“未知发布者”。如果出现，请确认安装包来自本页，再选择“更多信息”→“仍要运行”。
+>
+> 请只从本仓库发布页下载安装包，不要下载页面底部由 GitHub 自动生成的 Source code。
+
+## 功能概览 / Features Overview
 
 Eggie DocuFlow 是一个面向日常办公场景的 Excel、PDF 与文件处理工具。当前版本支持
 Excel 合并、拆分与数据清理、PDF 发票解析、文档智能处理、PDF 文件夹批量处理、智能改名，以及 PDF 工具箱。
@@ -58,24 +78,20 @@ The current release focuses on:
 - Low-memory processing for larger workbooks
 - Simple and user-friendly macOS and Windows graphical interfaces
 
-## 普通用户如何下载 / Download
+## 安装与首次打开说明 / Installation Notes
 
 如果你只是想直接使用软件，不需要安装 Python，也不需要运行源码。
 
-1. 打开本项目右侧的 **Releases**
-2. 下载最新版安装包
-3. Mac：解压后运行 `EggieDocuFlow_V1.4.0_mac.app`
-4. Windows：运行 `EggieDocuFlow_V1.4.0_Windows_x64_Setup.exe`，按安装向导完成安装后，从桌面或开始菜单打开软件
-5. 本版本未做 Apple 公证；如果 macOS 阻止打开，请在 Finder 中右键 App，选择“打开”，再确认“打开”
+1. Mac：下载 ZIP，解压后运行 `EggieDocuFlow_V1.4.0_mac.app`
+2. Windows：下载安装包并运行 `EggieDocuFlow_V1.4.0_Windows_x64_Setup.exe`，完成安装后从桌面或开始菜单打开软件
+3. 本版本未做 Apple 公证；如果 macOS 阻止打开，请在 Finder 中右键 App，选择“打开”，再确认“打开”
 
 If you only want to use the application, you do not need to install Python or
 run the source code.
 
-1. Open **Releases** on the right side of this repository
-2. Download the latest application package
-3. On macOS, extract the package and launch `EggieDocuFlow_V1.4.0_mac.app`
-4. On Windows, run `EggieDocuFlow_V1.4.0_Windows_x64_Setup.exe`, then launch the app from the desktop or Start menu
-5. This release is not Apple-notarized. If macOS blocks it, right-click the App in Finder, choose **Open**, then confirm **Open**
+1. On macOS, download and extract the ZIP, then launch `EggieDocuFlow_V1.4.0_mac.app`
+2. On Windows, run `EggieDocuFlow_V1.4.0_Windows_x64_Setup.exe`, then launch the app from the desktop or Start menu
+3. This release is not Apple-notarized. If macOS blocks it, right-click the App in Finder, choose **Open**, then confirm **Open**
 
 > Windows 版支持 Windows 10/11 64 位系统；安装程序默认安装到 `C:\Program Files\Eggie DocuFlow`，安装时会请求 Windows 管理员授权，并提供标准卸载入口。
 > The Windows build supports 64-bit Windows 10/11. It installs to `C:\Program Files\Eggie DocuFlow` by default, requests Windows administrator approval during setup, and includes a standard uninstall entry.
