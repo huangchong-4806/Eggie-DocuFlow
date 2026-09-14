@@ -160,6 +160,7 @@ env.bak/
 venv.bak/
 
 # Local release output and benchmark files
+.workbuddy/
 outputs/
 output/
 work/

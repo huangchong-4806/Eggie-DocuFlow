@@ -1,5 +1,18 @@
 # Eggie DocuFlow V1.4.0 发布说明
 
+## 下载安装
+
+- [Mac 版下载：Apple 芯片，macOS 11 或以上](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/download/v1.4.0/EggieDocuFlow_V1.4.0_mac.zip)
+- [Windows 版下载：Windows 10/11 64 位](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/download/v1.4.0/EggieDocuFlow_V1.4.0_Windows_x64_Setup.exe)
+
+普通用户只需下载上面对应的安装包，不要下载页面底部由 GitHub 自动生成的 Source code。
+
+软件无需安装 Python。Excel 与 PDF 默认在本机处理并保留原文件；文件改名必须先预览再执行。
+
+> Mac 版暂未经过 Apple 公证。首次打开被阻止时，请在 Finder 中右键软件，选择“打开”，再确认“打开”。
+>
+> 部分 Windows 电脑可能显示“Windows 已保护你的电脑”或“未知发布者”。如果出现，请确认安装包来自本页，再选择“更多信息”→“仍要运行”。
+
 ## 本次新增
 
 - 批量处理中心：扫描 PDF 文件夹，处理前显示页数、扫描页和建议操作；单文件失败不会中断整个任务，可只重试失败项。
