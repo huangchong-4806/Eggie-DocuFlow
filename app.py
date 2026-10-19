@@ -22,7 +22,6 @@ from PySide6.QtGui import (
     QFont,
     QIcon,
     QPixmap,
-    QTransform,
 )
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -32,6 +31,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QFileDialog,
     QGridLayout,
+    QFormLayout,
     QGroupBox,
     QHeaderView,
     QHBoxLayout,
@@ -58,6 +58,8 @@ from excel_merge_tool import (
     get_file_info,
     split_workbook_by_rows,
 )
+from ui.excel_category_split import CategorySplitPage
+from ui.presentation import ToolEntry, Disclosure, tool_icon, contain_page_form
 from excel_cleanup_tool import (
     CleanupOptions,
     clean_workbook,
@@ -88,8 +90,6 @@ from pdf_invoice_tool import convert_invoice_pdfs, write_invoice_ledger
 from pdf_toolbox import (
     COMPRESSION_PRESETS,
     IMAGE_SUFFIXES,
-    PdfPageRef,
-    add_pdf_marks,
     compress_pdf,
     compare_pdf_text,
     default_output_name,
@@ -100,8 +100,6 @@ from pdf_toolbox import (
     page_count,
     pdfs_to_images,
     prepare_image_thumbnail,
-    render_page_thumbnail,
-    save_pages,
     secure_pdf,
 )
 from ui.common_widgets import ClearSpinBox, SelectionComboBox
@@ -115,11 +113,13 @@ from ui.pdf_widgets import (
     PdfImageCard,
     PdfPageBoard,
     PdfPageCard,
+    load_image_pixmap,
 )
 from ui.theme import ACCENT_PALETTES, build_theme_colors, build_theme_stylesheet
 from ui.tasks import BackgroundTaskThread, DocumentOCRThread, InvoiceBatchProcessThread
+from ui.pdf_workspace import PdfWorkspaceWidget
 from v2.layout_engine import process_layout_document
-from version import APP_VERSION
+from version import APP_VERSION, BUILD_TYPE
 
 
 APP_NAME_ZH = "Eggie文档处理系统"
@@ -132,8 +132,6 @@ DOCUMENT_TYPE_LABELS = {
 }
 PDF_IMAGE_WARNING_COUNT = 100
 PDF_IMAGE_MAX_COUNT = 300
-PDF_PAGE_WARNING_COUNT = 500
-PDF_PAGE_MAX_COUNT = 1000
 RENAME_WARNING_COUNT = 5000
 RENAME_MAX_COUNT = 20000
 
@@ -243,15 +241,10 @@ class ExcelMergerWindow(QMainWindow):
         self.rename_preview_valid = False
         self.rename_last_log_file = ""
         self.rename_smart_result = None
-        self.pdf_output_folder = ""
-        self.pdf_page_cards = []
         self.pdf_compress_source_file = ""
         self.pdf_image_source_files = []
         self.pdf_image_cards = []
         self.pdf_export_source_files = []
-        self.pdf_marks_source_file = ""
-        self.pdf_marks_output_folder = ""
-        self.pdf_marks_result_file = ""
         self.pdf_security_source_file = ""
         self.pdf_security_output_folder = ""
         self.pdf_security_result_file = ""
@@ -268,13 +261,10 @@ class ExcelMergerWindow(QMainWindow):
         )
         self.refreshing_list = False
         self.settings = QSettings("EggieDocuFlow", "EggieDocuFlow")
-        old_settings = QSettings("ExcelMergeTool", "MacSimpleOfficeTools")
-        self.accent_name = self.settings.value(
-            "appearance/accent",
-            old_settings.value("appearance/accent", "cyan"),
-        )
+        # Keep the earlier theme preference intact; the approved warm design has its own preference.
+        self.accent_name = self.settings.value("appearance/warm-accent", "green")
         if self.accent_name not in ACCENT_PALETTES:
-            self.accent_name = "cyan"
+            self.accent_name = "green"
         application = QApplication.instance()
         self.system_locale = getattr(
             application,
@@ -346,7 +336,8 @@ class ExcelMergerWindow(QMainWindow):
         self.add_folder_button = QPushButton("添加文件夹")
         self.move_up_button = QPushButton("上移")
         self.move_down_button = QPushButton("下移")
-        self.delete_button = QPushButton("删除选中")
+        self.delete_button = QPushButton("移出列表")
+        self.delete_button.setToolTip("从待处理列表移除，不删除原文件")
         self.clear_button = QPushButton("清空列表")
         self.add_files_button.setProperty("variant", "accent")
         self.add_folder_button.setProperty("variant", "accent")
@@ -363,6 +354,7 @@ class ExcelMergerWindow(QMainWindow):
             button.setMinimumHeight(34)
             button_layout.addWidget(button)
 
+        button_layout.addStretch(1)
         main_layout.addLayout(button_layout)
 
         file_group = QGroupBox("待合并文件（请选择文件后使用“上移 / 下移”调整顺序）")
@@ -427,10 +419,10 @@ class ExcelMergerWindow(QMainWindow):
         main_layout.addWidget(save_group)
 
         options_layout = QHBoxLayout()
-        options_layout.setAlignment(Qt.AlignCenter)
-        options_layout.setSpacing(28)
+        options_layout.setAlignment(Qt.AlignLeft)
+        options_layout.setSpacing(16)
 
-        skip_rows_label = QLabel("后续文件跳过行数：")
+        skip_rows_label = QLabel("跳过开头行数：")
         self.skip_rows_spinbox = ClearSpinBox()
         self.skip_rows_spinbox.setRange(0, 99)
         self.skip_rows_spinbox.setValue(1)
@@ -444,17 +436,17 @@ class ExcelMergerWindow(QMainWindow):
         options_layout.addWidget(skip_rows_label)
         options_layout.addWidget(self.skip_rows_spinbox)
         options_layout.addWidget(self.merged_cells_checkbox)
+        options_layout.addStretch(1)
         main_layout.addLayout(options_layout)
 
         self.merge_button = QPushButton("开始合并")
-        self.merge_button.setMinimumHeight(48)
-        self.merge_button.setMinimumWidth(230)
+        self.merge_button.setMinimumHeight(38)
+        self.merge_button.setMinimumWidth(140)
         self.merge_button.setFont(QFont("PingFang SC", 14, QFont.Bold))
         self.merge_button.setProperty("variant", "primary")
         merge_layout = QHBoxLayout()
         merge_layout.addStretch()
         merge_layout.addWidget(self.merge_button)
-        merge_layout.addStretch()
         main_layout.addLayout(merge_layout)
 
         self.add_files_button.clicked.connect(self.add_files)
@@ -474,21 +466,21 @@ class ExcelMergerWindow(QMainWindow):
         sidebar = QWidget()
         sidebar.setObjectName("homeSidebar")
         sidebar.setAttribute(Qt.WA_StyledBackground, True)
-        sidebar.setFixedWidth(250)
+        sidebar.setFixedWidth(200)
         layout = QVBoxLayout(sidebar)
-        layout.setContentsMargins(20, 22, 18, 20)
+        layout.setContentsMargins(12, 20, 12, 16)
         layout.setSpacing(8)
 
         brand = QHBoxLayout()
         brand.setSpacing(10)
         self.home_logo_pixmap = QPixmap(str(resource_path("assets/app_icon.png")))
         self.home_logo_label = QLabel()
-        self.home_logo_label.setFixedSize(52, 52)
+        self.home_logo_label.setFixedSize(32, 32)
         self.home_logo_label.setAlignment(Qt.AlignCenter)
         if not self.home_logo_pixmap.isNull():
             self.home_logo_label.setPixmap(
                 self.home_logo_pixmap.scaled(
-                    QSize(52, 52),
+                    QSize(32, 32),
                     Qt.KeepAspectRatio,
                     Qt.SmoothTransformation,
                 )
@@ -499,7 +491,7 @@ class ExcelMergerWindow(QMainWindow):
 
         brand_text = QVBoxLayout()
         brand_text.setSpacing(2)
-        name = QLabel("Eggie DocuFlow")
+        name = QLabel("Eggie")
         name.setProperty("homeRole", "brand")
         subtitle = QLabel("文档处理系统")
         subtitle.setProperty("homeRole", "muted")
@@ -513,7 +505,9 @@ class ExcelMergerWindow(QMainWindow):
 
         def add_nav(key, text, handler):
             button = QPushButton(text)
-            button.setMinimumHeight(44)
+            button.setMinimumHeight(38)
+            button.setIcon(tool_icon(key))
+            button.setIconSize(QSize(18, 18))
             button.setProperty("variant", "homeNav")
             button.clicked.connect(handler)
             layout.addWidget(button)
@@ -530,147 +524,45 @@ class ExcelMergerWindow(QMainWindow):
         add_nav("pdf", "PDF 工具箱", self.show_pdf_tool)
         layout.addStretch(1)
 
-        version = QLabel(f"版本 {APP_VERSION}")
+        version_suffix = {"development": "（开发版）", "release_candidate": "（发布候选版）"}.get(BUILD_TYPE, "")
+        version = QLabel(f"版本 {APP_VERSION}{version_suffix}")
         version.setProperty("homeRole", "muted")
         layout.addWidget(version)
         settings_button = QPushButton("设置")
-        settings_button.setMinimumHeight(42)
+        settings_button.setMinimumHeight(38)
+        settings_button.setIcon(tool_icon("settings"))
         settings_button.setProperty("variant", "homeNav")
         settings_button.clicked.connect(self.show_settings)
         layout.addWidget(settings_button)
         return sidebar
 
     def create_home_page(self):
-        page = QWidget()
-        page.setObjectName("homePage")
-        page.setAttribute(Qt.WA_StyledBackground, True)
-        root_layout = QVBoxLayout(page)
-        self.home_layout = root_layout
-        root_layout.setContentsMargins(28, 26, 28, 26)
-        root_layout.setSpacing(16)
-
-        def styled_widget(object_name=None, prop_name=None):
-            widget = QWidget()
-            widget.setAttribute(Qt.WA_StyledBackground, True)
-            if object_name:
-                widget.setObjectName(object_name)
-            if prop_name:
-                widget.setProperty(prop_name, "true")
-            return widget
-
-        def home_label(text, role, word_wrap=False):
-            label = QLabel(text)
-            label.setProperty("homeRole", role)
-            label.setWordWrap(word_wrap)
-            return label
-
-        main_layout = root_layout
-
-        header_layout = QHBoxLayout()
-        header_layout.setSpacing(12)
-        title_layout = QVBoxLayout()
-        title_layout.setSpacing(3)
-        self.home_title_label = home_label("工作台", "title")
-        self.home_subtitle_label = home_label("浅色、克制、清晰的科技感工作台", "muted")
-        title_layout.addWidget(self.home_title_label)
-        title_layout.addWidget(self.home_subtitle_label)
-        header_layout.addLayout(title_layout, 1)
-        header_right = QHBoxLayout()
-        header_right.setSpacing(10)
-        settings_button = QPushButton("设置")
-        settings_button.setProperty("variant", "homeOpen")
-        settings_button.setMinimumSize(96, 38)
-        settings_button.clicked.connect(self.show_settings)
-        header_right.addWidget(settings_button)
-        header_layout.addLayout(header_right)
-        main_layout.addLayout(header_layout)
-
-        status = styled_widget(prop_name="homeStatus")
-        status_layout = QHBoxLayout(status)
-        status_layout.setContentsMargins(18, 12, 18, 12)
-        status_layout.addWidget(home_label("软件已就绪，请从左侧菜单或下方卡片选择工具。", "body"))
-        main_layout.addWidget(status)
-
-        banner = styled_widget(prop_name="homeHero")
-        banner_layout = QHBoxLayout(banner)
-        banner_layout.setContentsMargins(20, 16, 20, 16)
-        banner_layout.setSpacing(12)
-        banner_text_layout = QVBoxLayout()
-        banner_text_layout.setSpacing(2)
-        banner_text_layout.addWidget(
-            home_label("选择工具，添加文件，确认后处理", "cardTitle")
-        )
-        banner_text_layout.addWidget(
-            home_label("首页只保留真实可用入口，处理结果仍在各工具完成后直接打开。", "muted")
-        )
-        banner_layout.addLayout(banner_text_layout, 1)
-        main_layout.addWidget(banner)
-
-        content_layout = QHBoxLayout()
-        content_layout.setSpacing(20)
-        tools_layout = QVBoxLayout()
-        tools_layout.setSpacing(14)
-        tools_layout.addWidget(home_label("常用工具", "section"))
-        self.home_grid = QGridLayout()
-        self.home_grid.setHorizontalSpacing(18)
-        self.home_grid.setVerticalSpacing(18)
-        self.home_tool_buttons = []
-        self.home_tool_cards = []
-
-        def tool_card(tag, accent, title, desc, handler):
-            card = styled_widget(prop_name="homeCard")
-            card.setMinimumHeight(116)
-            card_layout = QVBoxLayout(card)
-            card_layout.setContentsMargins(18, 16, 18, 16)
-            card_layout.setSpacing(8)
-
-            title_row = QHBoxLayout()
-            title_row.setSpacing(12)
-            tag_label = QLabel(tag)
-            tag_label.setAlignment(Qt.AlignCenter)
-            tag_label.setFixedSize(46, 46)
-            tag_label.setStyleSheet(
-                f"background: {accent}; color: #FFFFFF; border-radius: 10px; "
-                "font-weight: 700;"
-            )
-            title_row.addWidget(tag_label)
-
-            title_label = home_label(title, "cardTitle")
-            title_row.addWidget(title_label, 1)
-            card_layout.addLayout(title_row)
-
-            bottom_row = QHBoxLayout()
-            bottom_row.setSpacing(12)
-            desc_label = home_label(desc, "body", True)
-            desc_label.setMinimumHeight(38)
-            bottom_row.addWidget(desc_label, 1)
-
-            open_button = QPushButton("打开")
-            open_button.setProperty("variant", "homeOpen")
-            open_button.setMinimumSize(112, 44)
-            open_button.clicked.connect(handler)
-            bottom_row.addWidget(open_button, 0, Qt.AlignBottom)
-            card_layout.addLayout(bottom_row)
-            self.home_tool_buttons.append(open_button)
-            self.home_tool_cards.append(card)
-            return card
-
-        tool_specs = [
-            ("XL", "#34C759", "Excel 合并", "按顺序合并多个表格，并保留主要格式。", self.show_excel_tool),
-            ("XL", "#0A84FF", "Excel 拆分", "按表头和数据行数拆分成多个文件。", self.show_split_tool),
-            ("XL", "#30B0C7", "Excel 数据清理", "先预览空行、重复行和格式问题，再另存新文件。", self.show_cleanup_tool),
-            ("PDF", "#FF9F0A", "发票解析", "批量解析发票，并生成汇总结果。", self.show_invoice_tool),
-            ("DOC", "#AF52DE", "文档处理", "自动识别合同、表格和发票类 PDF。", self.show_document_tool),
-            ("BAT", "#007AFF", "批量处理", "选择文件夹，自动识别并逐个生成结果。", self.show_batch_tool),
-            ("REN", "#30B0C7", "批量改名", "先预览新文件名，确认后再执行。", self.show_rename_tool),
-            ("PDF", "#FF453A", "PDF 工具箱", "页面整理、压缩和图片互转。", self.show_pdf_tool),
+        page = QWidget(); page.setObjectName("homePage")
+        root = QVBoxLayout(page); self.home_layout = root
+        root.setContentsMargins(28, 24, 28, 24); root.setSpacing(12)
+        self.home_title_label = QLabel("工作台"); self.home_title_label.setProperty("role", "title")
+        self.home_subtitle_label = QLabel("选择工具，开始处理文件"); self.home_subtitle_label.setProperty("role", "subtitle")
+        root.addWidget(self.home_title_label); root.addWidget(self.home_subtitle_label); root.addSpacing(12)
+        panel = QWidget(); panel.setProperty("homePanel", "true")
+        panel.setAttribute(Qt.WA_StyledBackground, True)
+        self.home_grid = QGridLayout(panel); self.home_grid.setContentsMargins(16, 8, 16, 8)
+        self.home_grid.setHorizontalSpacing(24); self.home_grid.setVerticalSpacing(0)
+        self.home_tool_buttons = []; self.home_tool_cards = []
+        specs = [
+            ("excel", "Excel 合并", "按顺序合并多个表格", self.show_excel_tool),
+            ("split", "Excel 拆分", "按固定行数或指定列分类拆分", self.show_split_tool),
+            ("cleanup", "数据清理", "先预览变化，再清理并另存", self.show_cleanup_tool),
+            ("invoice", "发票解析", "提取发票信息，每份另存为 Excel", self.show_invoice_tool),
+            ("document", "文档处理", "识别 PDF 并生成对应结果", self.show_document_tool),
+            ("batch", "批量处理", "逐个处理文件夹中的 PDF", self.show_batch_tool),
+            ("rename", "批量改名", "先核对新名称，再执行改名", self.show_rename_tool),
+            ("pdf", "PDF 工具箱", "整理页面、脱敏、水印与转换", self.show_pdf_tool),
         ]
-        for index, spec in enumerate(tool_specs):
-            self.home_grid.addWidget(tool_card(*spec), index // 2, index % 2)
-        tools_layout.addLayout(self.home_grid)
-        tools_layout.addStretch(1)
-        content_layout.addLayout(tools_layout, 1)
-        main_layout.addLayout(content_layout, 1)
+        for index, spec in enumerate(specs):
+            entry = ToolEntry(*spec)
+            self.home_grid.addWidget(entry, index // 2, index % 2)
+            self.home_tool_buttons.append(entry); self.home_tool_cards.append(entry)
+        root.addWidget(panel); root.addStretch(1)
         return page
 
     def create_split_page(self):
@@ -679,17 +571,26 @@ class ExcelMergerWindow(QMainWindow):
         layout = QVBoxLayout(page)
         layout.setContentsMargins(22, 18, 22, 18)
         layout.setSpacing(14)
-
         title = QLabel("Excel 拆分")
-        title.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        title.setFont(QFont("PingFang SC", 24, QFont.Bold))
         title.setProperty("role", "title")
         layout.addWidget(title)
-
-        subtitle = QLabel("选择一个 Excel 文件，按表头和数据行数拆分成多个文件")
-        subtitle.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        subtitle = QLabel("将一张表拆成清晰有序的多个结果，原文件保持不变。")
         subtitle.setProperty("role", "subtitle")
         layout.addWidget(subtitle)
+        self.split_mode_tabs = QTabWidget()
+        self.split_mode_tabs.setObjectName("splitModeTabs")
+        self.split_mode_tabs.addTab(self.create_row_split_page(), "按固定行数拆分")
+        self.category_split_page = CategorySplitPage()
+        self.split_mode_tabs.addTab(self.category_split_page, "按分类拆分")
+        layout.addWidget(self.split_mode_tabs)
+        return page
+
+    def create_row_split_page(self):
+        page = QWidget()
+        page.setObjectName("splitPage")
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(22, 18, 22, 18)
+        layout.setSpacing(14)
 
         source_group = QGroupBox("源文件")
         source_layout = QVBoxLayout(source_group)
@@ -714,7 +615,7 @@ class ExcelMergerWindow(QMainWindow):
         source_layout.addWidget(self.split_source_status_label)
         layout.addWidget(source_group)
 
-        output_group = QGroupBox("输出文件夹")
+        output_group = QGroupBox("保存文件夹")
         output_layout = QHBoxLayout(output_group)
         output_layout.setContentsMargins(12, 14, 12, 10)
         output_layout.setSpacing(10)
@@ -733,7 +634,7 @@ class ExcelMergerWindow(QMainWindow):
         options_layout = QHBoxLayout(options_group)
         options_layout.setContentsMargins(12, 18, 12, 14)
         options_layout.setSpacing(18)
-        options_layout.setAlignment(Qt.AlignCenter)
+        options_layout.setAlignment(Qt.AlignLeft)
 
         header_rows_label = QLabel("表头行数：")
         self.split_header_rows_spinbox = ClearSpinBox()
@@ -759,18 +660,18 @@ class ExcelMergerWindow(QMainWindow):
         options_layout.addWidget(self.split_header_rows_spinbox)
         options_layout.addWidget(rows_per_file_label)
         options_layout.addWidget(self.split_rows_per_file_spinbox)
+        layout.removeWidget(output_group)
         layout.addWidget(options_group)
-        layout.addStretch(1)
+        layout.addWidget(output_group)
 
         self.split_button = QPushButton("开始拆分")
-        self.split_button.setMinimumHeight(48)
-        self.split_button.setMinimumWidth(230)
+        self.split_button.setMinimumHeight(38)
+        self.split_button.setMinimumWidth(140)
         self.split_button.setFont(QFont("PingFang SC", 14, QFont.Bold))
         self.split_button.setProperty("variant", "primary")
         split_button_layout = QHBoxLayout()
         split_button_layout.addStretch()
         split_button_layout.addWidget(self.split_button)
-        split_button_layout.addStretch()
         layout.addLayout(split_button_layout)
 
         self.choose_split_source_button.clicked.connect(self.choose_split_source_file)
@@ -778,6 +679,8 @@ class ExcelMergerWindow(QMainWindow):
         self.split_button.clicked.connect(self.split_workbook)
         self.split_header_rows_spinbox.valueChanged.connect(self.update_split_estimate)
         self.split_rows_per_file_spinbox.valueChanged.connect(self.update_split_estimate)
+        layout.addStretch(1)
+        contain_page_form(page, 0, 860)
         return page
 
     def create_cleanup_page(self):
@@ -822,33 +725,35 @@ class ExcelMergerWindow(QMainWindow):
         layout.addWidget(source_group)
 
         options_group = QGroupBox("清理规则")
-        options_layout = QHBoxLayout(options_group)
-        self.cleanup_empty_rows_checkbox = QCheckBox("删除整行空白")
+        options_layout = QGridLayout(options_group)
+        options_layout.setHorizontalSpacing(28); options_layout.setVerticalSpacing(14)
+        self.cleanup_empty_rows_checkbox = QCheckBox("删除空白行")
         self.cleanup_empty_rows_checkbox.setChecked(True)
         self.cleanup_spaces_checkbox = QCheckBox("清理文字多余空格")
         self.cleanup_spaces_checkbox.setChecked(True)
         self.cleanup_deduplicate_checkbox = QCheckBox("删除重复行")
         self.cleanup_dates_checkbox = QCheckBox("统一日期显示")
         self.cleanup_numbers_checkbox = QCheckBox("统一数字显示")
-        for checkbox in (
+        for index, checkbox in enumerate((
             self.cleanup_empty_rows_checkbox,
             self.cleanup_spaces_checkbox,
             self.cleanup_deduplicate_checkbox,
             self.cleanup_dates_checkbox,
             self.cleanup_numbers_checkbox,
-        ):
-            options_layout.addWidget(checkbox)
-        options_layout.addStretch(1)
+        )):
+            options_layout.addWidget(checkbox, index // 2, index % 2)
         layout.addWidget(options_group)
 
-        columns_group = QGroupBox("排重列（不勾选任何列时按整行排重）")
+        columns_group = QGroupBox("判断重复的列（不选时按整行判断）")
         columns_layout = QVBoxLayout(columns_group)
         self.cleanup_columns_tree = QTreeWidget()
-        self.cleanup_columns_tree.setHeaderLabels(["可作为排重依据的列"])
+        self.cleanup_columns_tree.setHeaderLabels(["判断重复的列"])
         self.cleanup_columns_tree.setRootIsDecorated(False)
         self.cleanup_columns_tree.setMaximumHeight(145)
         columns_layout.addWidget(self.cleanup_columns_tree)
         layout.addWidget(columns_group)
+        columns_group.setVisible(False)
+        self.cleanup_deduplicate_checkbox.toggled.connect(columns_group.setVisible)
 
         preview_group = QGroupBox("预计结果")
         preview_layout = QVBoxLayout(preview_group)
@@ -871,13 +776,12 @@ class ExcelMergerWindow(QMainWindow):
         action_layout = QHBoxLayout()
         self.cleanup_start_button = QPushButton("开始清理并另存")
         self.cleanup_start_button.setProperty("variant", "primary")
-        self.cleanup_start_button.setMinimumHeight(46)
+        self.cleanup_start_button.setMinimumHeight(38)
         self.cleanup_open_result_button = QPushButton("打开结果")
-        self.cleanup_open_result_button.setMinimumHeight(46)
+        self.cleanup_open_result_button.setMinimumHeight(38)
         action_layout.addStretch()
         action_layout.addWidget(self.cleanup_start_button)
         action_layout.addWidget(self.cleanup_open_result_button)
-        action_layout.addStretch()
         layout.addLayout(action_layout)
 
         self.choose_cleanup_source_button.clicked.connect(self.choose_cleanup_source_file)
@@ -903,6 +807,8 @@ class ExcelMergerWindow(QMainWindow):
         ):
             checkbox.toggled.connect(self.invalidate_cleanup_preview)
         self.update_cleanup_button_states()
+        layout.addStretch(1)
+        contain_page_form(page)
         return page
 
     def create_invoice_page(self):
@@ -918,7 +824,7 @@ class ExcelMergerWindow(QMainWindow):
         title.setProperty("role", "title")
         layout.addWidget(title)
 
-        subtitle = QLabel("统一提取发票头信息和明细，自动校验金额与税额")
+        subtitle = QLabel("统一提取发票基本信息和明细，自动校验金额与税额")
         subtitle.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         subtitle.setProperty("role", "subtitle")
         layout.addWidget(subtitle)
@@ -926,7 +832,8 @@ class ExcelMergerWindow(QMainWindow):
         source_button_layout = QHBoxLayout()
         source_button_layout.setSpacing(10)
         self.choose_invoice_source_button = QPushButton("添加 PDF 发票")
-        self.delete_invoice_source_button = QPushButton("删除选中")
+        self.delete_invoice_source_button = QPushButton("移出列表")
+        self.delete_invoice_source_button.setToolTip("从待处理列表移除，不删除原文件")
         self.clear_invoice_source_button = QPushButton("清空列表")
         self.choose_invoice_source_button.setProperty("variant", "accent")
         self.delete_invoice_source_button.setProperty("variant", "danger")
@@ -987,19 +894,18 @@ class ExcelMergerWindow(QMainWindow):
         hint = QLabel(
             "每张 PDF 独立生成一个 Excel；单个失败不影响其他发票。扫描图片型 PDF 暂不支持。"
         )
-        hint.setAlignment(Qt.AlignCenter)
+        hint.setAlignment(Qt.AlignLeft)
         hint.setProperty("role", "hint")
         hint.setWordWrap(True)
-        layout.addWidget(hint)
+        layout.insertWidget(3, hint)
         self.invoice_convert_button = QPushButton("开始识别并生成 Excel")
-        self.invoice_convert_button.setMinimumHeight(48)
-        self.invoice_convert_button.setMinimumWidth(260)
+        self.invoice_convert_button.setMinimumHeight(38)
+        self.invoice_convert_button.setMinimumWidth(190)
         self.invoice_convert_button.setFont(QFont("PingFang SC", 14, QFont.Bold))
         self.invoice_convert_button.setProperty("variant", "primary")
         button_layout = QHBoxLayout()
         button_layout.addStretch()
         button_layout.addWidget(self.invoice_convert_button)
-        button_layout.addStretch()
         layout.addLayout(button_layout)
 
         self.choose_invoice_source_button.clicked.connect(self.add_invoice_files)
@@ -1065,8 +971,8 @@ class ExcelMergerWindow(QMainWindow):
         ocr_group = QGroupBox("扫描件文字识别（在当前文档处理中使用）")
         ocr_layout = QVBoxLayout(ocr_group)
         ocr_top_row = QHBoxLayout()
-        self.document_ocr_checkbox = QCheckBox("扫描页使用云 OCR")
-        self.document_ocr_provider_combo = QComboBox()
+        self.document_ocr_checkbox = QCheckBox("扫描页使用云端文字识别")
+        self.document_ocr_provider_combo = SelectionComboBox()
         for provider_key, provider_label in PROVIDER_LABELS.items():
             self.document_ocr_provider_combo.addItem(provider_label, provider_key)
         configured_provider = selected_provider()
@@ -1100,9 +1006,11 @@ class ExcelMergerWindow(QMainWindow):
         ocr_result_row.addWidget(self.document_ocr_extract_button)
         ocr_result_row.addWidget(self.document_ocr_open_button)
         ocr_layout.addLayout(ocr_result_row)
-        layout.addWidget(ocr_group)
+        self.document_ocr_disclosure = Disclosure("扫描件文字识别与仅提取文字", ocr_group)
+        layout.addWidget(self.document_ocr_disclosure)
 
         result_group = QGroupBox("处理结果")
+        self.document_result_group = result_group
         result_layout = QVBoxLayout(result_group)
         self.document_status_label = QLabel("等待选择 PDF 文件")
         self.document_status_label.setProperty("role", "status")
@@ -1110,34 +1018,31 @@ class ExcelMergerWindow(QMainWindow):
         self.document_result_path_edit.setReadOnly(True)
         self.document_result_path_edit.setPlaceholderText("处理完成后在这里显示结果路径")
         self.document_result_path_edit.setMinimumHeight(34)
-        result_layout.addWidget(self.document_status_label)
+        layout.addWidget(self.document_status_label)
         result_layout.addWidget(self.document_result_path_edit)
         layout.addWidget(result_group)
+        result_group.hide()
+        self.document_result_path_edit.textChanged.connect(lambda text: result_group.setVisible(bool(text)))
 
-        hint = QLabel(
-            "处理顺序：PDF 分类 → 路由 → 输出。不勾选云 OCR 时，原有处理方式完全不变；"
-            "勾选后，扫描页识别文字会继续进入同一文档处理流程。"
-            "扫描页识别暂不与增强排版同时使用。"
-        )
-        hint.setAlignment(Qt.AlignCenter)
+        hint = QLabel("默认在本机处理；云端文字识别需要另行确认。扫描页识别暂不与增强排版同时使用。")
+        hint.setAlignment(Qt.AlignLeft)
         hint.setProperty("role", "hint")
         hint.setWordWrap(True)
         layout.addWidget(hint)
         layout.addStretch(1)
 
         button_layout = QHBoxLayout()
-        self.document_process_button = QPushButton("一键识别并处理")
-        self.document_process_button.setMinimumHeight(48)
-        self.document_process_button.setMinimumWidth(230)
+        self.document_process_button = QPushButton("开始处理")
+        self.document_process_button.setMinimumHeight(38)
+        self.document_process_button.setMinimumWidth(140)
         self.document_process_button.setFont(QFont("PingFang SC", 14, QFont.Bold))
         self.document_process_button.setProperty("variant", "primary")
         self.open_document_result_button = QPushButton("打开结果")
-        self.open_document_result_button.setMinimumHeight(48)
+        self.open_document_result_button.setMinimumHeight(38)
         self.open_document_result_button.setMinimumWidth(140)
         button_layout.addStretch()
         button_layout.addWidget(self.document_process_button)
         button_layout.addWidget(self.open_document_result_button)
-        button_layout.addStretch()
         layout.addLayout(button_layout)
 
         self.choose_document_source_button.clicked.connect(
@@ -1170,6 +1075,7 @@ class ExcelMergerWindow(QMainWindow):
         )
         self.refresh_document_ocr_status()
         self.update_document_button_states()
+        contain_page_form(page)
         return page
 
     def create_batch_page(self):
@@ -1242,7 +1148,7 @@ class ExcelMergerWindow(QMainWindow):
 
         options_group = QGroupBox("扫描页识别")
         options_layout = QHBoxLayout(options_group)
-        self.batch_ocr_checkbox = QCheckBox("扫描页使用云 OCR")
+        self.batch_ocr_checkbox = QCheckBox("扫描页使用云端文字识别")
         self.batch_ocr_provider_combo = SelectionComboBox()
         for provider_key, provider_label in PROVIDER_LABELS.items():
             self.batch_ocr_provider_combo.addItem(provider_label, provider_key)
@@ -1258,16 +1164,15 @@ class ExcelMergerWindow(QMainWindow):
         action_layout = QHBoxLayout()
         self.batch_start_button = QPushButton("开始批量处理")
         self.batch_start_button.setProperty("variant", "primary")
-        self.batch_start_button.setMinimumHeight(46)
-        self.batch_retry_button = QPushButton("只重试失败文件")
-        self.batch_retry_button.setMinimumHeight(46)
+        self.batch_start_button.setMinimumHeight(38)
+        self.batch_retry_button = QPushButton("重试失败文件")
+        self.batch_retry_button.setMinimumHeight(38)
         self.batch_open_folder_button = QPushButton("打开结果文件夹")
-        self.batch_open_folder_button.setMinimumHeight(46)
+        self.batch_open_folder_button.setMinimumHeight(38)
         action_layout.addStretch()
         action_layout.addWidget(self.batch_start_button)
         action_layout.addWidget(self.batch_retry_button)
         action_layout.addWidget(self.batch_open_folder_button)
-        action_layout.addStretch()
         layout.addLayout(action_layout)
         self.batch_status_label = QLabel("等待选择文件夹")
         self.batch_status_label.setProperty("role", "status")
@@ -1321,7 +1226,9 @@ class ExcelMergerWindow(QMainWindow):
         source_button_layout.setSpacing(10)
         self.rename_add_files_button = QPushButton("添加文件")
         self.rename_add_folder_button = QPushButton("添加文件夹")
-        self.rename_delete_button = QPushButton("删除选中")
+        for button in (self.rename_add_files_button, self.rename_add_folder_button): button.setProperty("compactToolbar", "true")
+        self.rename_delete_button = QPushButton("移出列表")
+        self.rename_delete_button.setToolTip("从待处理列表移除，不删除原文件")
         self.rename_clear_button = QPushButton("清空列表")
         self.rename_add_files_button.setProperty("variant", "accent")
         self.rename_add_folder_button.setProperty("variant", "accent")
@@ -1342,6 +1249,7 @@ class ExcelMergerWindow(QMainWindow):
             "请酌情拆分任务"
         )
         self.rename_limit_label.setProperty("role", "hint")
+        self.rename_limit_label.setWordWrap(True)
         left_layout.addWidget(self.rename_limit_label)
 
         self.rename_file_table = QTreeWidget()
@@ -1381,15 +1289,15 @@ class ExcelMergerWindow(QMainWindow):
         rules_layout.setContentsMargins(12, 18, 12, 12)
         rules_layout.setSpacing(7)
 
-        self.rename_rule_combo = QComboBox()
+        self.rename_rule_combo = SelectionComboBox()
         for label_text, rule_key in (
             ("替换文字", "replace"),
             ("删除指定文字", "delete_text"),
             ("删除开头几个字", "trim_start"),
             ("删除结尾几个字", "trim_end"),
-            ("前面追加文字", "prefix"),
-            ("后面追加文字", "suffix"),
-            ("修改后缀", "extension"),
+            ("开头添加文字", "prefix"),
+            ("末尾添加文字", "suffix"),
+            ("修改扩展名", "extension"),
             ("智能识别命名", "smart"),
         ):
             self.rename_rule_combo.addItem(label_text, rule_key)
@@ -1419,16 +1327,16 @@ class ExcelMergerWindow(QMainWindow):
         rules_layout.addWidget(self.rename_rule_count_spinbox)
 
         self.rename_number_widget = QWidget()
-        number_layout = QHBoxLayout(self.rename_number_widget)
+        number_layout = QGridLayout(self.rename_number_widget)
         number_layout.setContentsMargins(0, 0, 0, 0)
         number_layout.setSpacing(8)
         self.rename_number_start_spinbox.setMinimumWidth(90)
         self.rename_number_digits_spinbox.setMinimumWidth(78)
-        number_layout.addWidget(self.rename_numbering_checkbox)
-        number_layout.addWidget(QLabel("起始"))
-        number_layout.addWidget(self.rename_number_start_spinbox)
-        number_layout.addWidget(QLabel("位数"))
-        number_layout.addWidget(self.rename_number_digits_spinbox)
+        number_layout.addWidget(self.rename_numbering_checkbox, 0, 0, 1, 4)
+        number_layout.addWidget(QLabel("起始"), 1, 0)
+        number_layout.addWidget(self.rename_number_start_spinbox, 1, 1)
+        number_layout.addWidget(QLabel("位数"), 1, 2)
+        number_layout.addWidget(self.rename_number_digits_spinbox, 1, 3)
         rules_layout.addWidget(self.rename_number_widget)
 
         self.rename_smart_options_widget = QWidget()
@@ -1436,7 +1344,7 @@ class ExcelMergerWindow(QMainWindow):
         smart_layout.setContentsMargins(0, 0, 0, 0)
         smart_layout.setSpacing(7)
         smart_ocr_row = QHBoxLayout()
-        self.rename_smart_ocr_checkbox = QCheckBox("扫描页使用云 OCR")
+        self.rename_smart_ocr_checkbox = QCheckBox("扫描页使用云端文字识别")
         self.rename_smart_provider_combo = SelectionComboBox()
         for provider_key, provider_label in PROVIDER_LABELS.items():
             self.rename_smart_provider_combo.addItem(provider_label, provider_key)
@@ -1466,13 +1374,14 @@ class ExcelMergerWindow(QMainWindow):
         self.rename_open_log_button.setMinimumHeight(34)
         log_layout.addWidget(self.rename_log_path_edit)
         log_layout.addWidget(self.rename_open_log_button)
-        right_layout.addWidget(log_group)
+        self.rename_log_disclosure = Disclosure("操作日志", log_group)
+        right_layout.addWidget(self.rename_log_disclosure)
 
         action_layout = QHBoxLayout()
         self.rename_preview_button = QPushButton("刷新预览")
         self.rename_execute_button = QPushButton("开始改名")
         self.rename_preview_button.setMinimumHeight(44)
-        self.rename_execute_button.setMinimumHeight(48)
+        self.rename_execute_button.setMinimumHeight(38)
         self.rename_execute_button.setMinimumWidth(170)
         self.rename_execute_button.setFont(QFont("PingFang SC", 14, QFont.Bold))
         self.rename_execute_button.setProperty("variant", "primary")
@@ -1480,7 +1389,11 @@ class ExcelMergerWindow(QMainWindow):
         action_layout.addWidget(self.rename_execute_button, 1)
         right_layout.addLayout(action_layout)
         right_layout.addStretch(1)
-        content_layout.addLayout(right_layout, 1)
+        rules_panel = QWidget(); rules_panel.setLayout(right_layout)
+        rules_panel.setMinimumWidth(320); rules_panel.setMaximumWidth(380)
+        rules_scroll = QScrollArea(); rules_scroll.setWidgetResizable(True); rules_scroll.setWidget(rules_panel)
+        rules_scroll.setMinimumWidth(330); rules_scroll.setMaximumWidth(390)
+        content_layout.addWidget(rules_scroll, 1)
         layout.addLayout(content_layout, 1)
 
         self.rename_add_files_button.clicked.connect(self.add_rename_files)
@@ -1552,134 +1465,34 @@ class ExcelMergerWindow(QMainWindow):
         title.setProperty("role", "title")
         layout.addWidget(title)
 
-        subtitle = QLabel("整理页面、压缩文件，并支持图片和 PDF 互转")
+        subtitle = QLabel("页面编辑与内容编辑共用文档 · 涂黑脱敏、水印、页码均在本机完成")
         subtitle.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         subtitle.setProperty("role", "subtitle")
         layout.addWidget(subtitle)
 
-        self.pdf_tabs = QTabWidget()
-        self.pdf_tabs.addTab(self.create_pdf_organizer_tab(), "页面整理")
-        self.pdf_tabs.addTab(self.create_pdf_compress_tab(), "PDF 压缩")
-        self.pdf_tabs.addTab(self.create_pdf_convert_tab(), "图片 / PDF 互转")
-        self.pdf_tabs.addTab(self.create_pdf_marks_tab(), "水印与页码")
-        self.pdf_tabs.addTab(self.create_pdf_security_tab(), "PDF 密码")
-        self.pdf_tabs.addTab(self.create_searchable_pdf_tab(), "可搜索 PDF")
-        self.pdf_tabs.addTab(self.create_pdf_compare_tab(), "文字对比")
-        layout.addWidget(self.pdf_tabs, 1)
+        self.pdf_workspace = PdfWorkspaceWidget(self)
+        self.pdf_workspace.close_ready.connect(self.close)
+        self.pdf_tabs = self.pdf_workspace.module_tabs
+        more = QWidget()
+        more_layout = QVBoxLayout(more)
+        more_hint = QLabel("这里独立选择文件；如需处理编辑后的文档，请先另存 PDF，再选择该副本。")
+        more_hint.setWordWrap(True)
+        more_hint.setProperty("role", "hint")
+        more_layout.addWidget(more_hint)
+        self.pdf_more_tabs = QTabWidget()
+        self.pdf_more_tabs.addTab(self.create_pdf_compress_tab(), "PDF 压缩")
+        self.pdf_more_tabs.addTab(self.create_pdf_convert_tab(), "图片 / PDF 互转")
+        self.pdf_more_tabs.addTab(self.create_pdf_security_tab(), "PDF 密码")
+        self.pdf_more_tabs.addTab(self.create_searchable_pdf_tab(), "可搜索 PDF")
+        self.pdf_more_tabs.addTab(self.create_pdf_compare_tab(), "文字对比")
+        for index in (0, 2, 3, 4):
+            contain_page_form(self.pdf_more_tabs.widget(index), 0, 920)
+        more_layout.addWidget(self.pdf_more_tabs, 1)
+        self.pdf_tabs.addTab(more, "独立工具")
+        layout.addWidget(self.pdf_workspace, 1)
 
         self.update_pdf_button_states()
         return page
-
-    def create_pdf_organizer_tab(self):
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(12, 14, 12, 12)
-        layout.setSpacing(10)
-
-        self.pdf_organizer_button_layout = QHBoxLayout()
-        self.pdf_organizer_button_layout.setSpacing(6)
-        self.pdf_add_button = QPushButton("添加 PDF")
-        self.pdf_clear_button = QPushButton("清空页面")
-        self.pdf_check_all_button = QPushButton("全选")
-        self.pdf_uncheck_all_button = QPushButton("取消全选")
-        self.pdf_move_previous_button = QPushButton("前移")
-        self.pdf_move_next_button = QPushButton("后移")
-        self.pdf_rotate_left_button = QPushButton("左转")
-        self.pdf_rotate_right_button = QPushButton("右转")
-        self.pdf_rotate_180_button = QPushButton("旋转 180 度")
-        self.pdf_delete_pages_button = QPushButton("删除勾选")
-        self.pdf_split_selected_button = QPushButton("拆分勾选")
-        self.pdf_save_pages_button = QPushButton("保存当前顺序")
-        self.pdf_add_button.setProperty("variant", "accent")
-        self.pdf_delete_pages_button.setProperty("variant", "danger")
-        self.pdf_save_pages_button.setProperty("variant", "primary")
-        for button in (
-            self.pdf_add_button,
-            self.pdf_clear_button,
-            self.pdf_check_all_button,
-            self.pdf_uncheck_all_button,
-            self.pdf_move_previous_button,
-            self.pdf_move_next_button,
-            self.pdf_rotate_left_button,
-            self.pdf_rotate_right_button,
-            self.pdf_rotate_180_button,
-            self.pdf_delete_pages_button,
-            self.pdf_split_selected_button,
-            self.pdf_save_pages_button,
-        ):
-            button.setMinimumHeight(34)
-        for button in (
-            self.pdf_add_button,
-            self.pdf_clear_button,
-            self.pdf_check_all_button,
-            self.pdf_uncheck_all_button,
-            self.pdf_move_previous_button,
-            self.pdf_move_next_button,
-            self.pdf_rotate_left_button,
-            self.pdf_rotate_right_button,
-            self.pdf_rotate_180_button,
-            self.pdf_delete_pages_button,
-            self.pdf_split_selected_button,
-        ):
-            button.setProperty("compactToolbar", "true")
-            button.setMinimumWidth(0)
-            button.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Fixed)
-            self.pdf_organizer_button_layout.addWidget(button)
-        self.pdf_organizer_button_layout.addStretch(1)
-        layout.addLayout(self.pdf_organizer_button_layout)
-
-        self.pdf_page_limit_label = QLabel(
-            "当前 0 / 1,000 页；处理数量越多，处理速度越慢，"
-            "请酌情拆分任务"
-        )
-        self.pdf_page_limit_label.setProperty("role", "hint")
-        layout.addWidget(self.pdf_page_limit_label)
-
-        self.pdf_page_scroll = QScrollArea()
-        self.pdf_page_scroll.setWidgetResizable(True)
-        self.pdf_page_board = PdfPageBoard(self)
-        self.pdf_page_scroll.setWidget(self.pdf_page_board)
-        layout.addWidget(self.pdf_page_scroll, 1)
-
-        save_group = QGroupBox("输出设置")
-        save_layout = QVBoxLayout(save_group)
-        save_layout.setContentsMargins(12, 14, 12, 10)
-        save_fields_layout = QHBoxLayout()
-        self.pdf_output_folder_edit = QLineEdit()
-        self.pdf_output_folder_edit.setReadOnly(True)
-        self.pdf_output_folder_edit.setPlaceholderText("请选择结果保存文件夹")
-        self.pdf_choose_output_folder_button = QPushButton("选择文件夹")
-        self.pdf_output_name_edit = QLineEdit()
-        self.pdf_output_name_edit.setPlaceholderText(default_output_name("PDF合并结果"))
-        self.pdf_save_pages_button.setText("保存结果")
-        self.pdf_save_pages_button.setMinimumHeight(44)
-        save_fields_layout.addWidget(QLabel("文件夹："))
-        save_fields_layout.addWidget(self.pdf_output_folder_edit, 2)
-        save_fields_layout.addWidget(self.pdf_choose_output_folder_button)
-        save_fields_layout.addWidget(QLabel("文件名："))
-        save_fields_layout.addWidget(self.pdf_output_name_edit, 1)
-        save_layout.addLayout(save_fields_layout)
-        save_layout.addWidget(self.pdf_save_pages_button)
-        layout.addWidget(save_group)
-
-        self.pdf_status_label = QLabel("尚未添加 PDF")
-        self.pdf_status_label.setProperty("role", "status")
-        layout.addWidget(self.pdf_status_label)
-
-        self.pdf_add_button.clicked.connect(self.add_pdf_files)
-        self.pdf_clear_button.clicked.connect(self.clear_pdf_pages)
-        self.pdf_check_all_button.clicked.connect(lambda: self.set_all_pdf_page_checks(True))
-        self.pdf_uncheck_all_button.clicked.connect(lambda: self.set_all_pdf_page_checks(False))
-        self.pdf_move_previous_button.clicked.connect(lambda: self.move_checked_pdf_pages(-1))
-        self.pdf_move_next_button.clicked.connect(lambda: self.move_checked_pdf_pages(1))
-        self.pdf_rotate_left_button.clicked.connect(lambda: self.rotate_selected_pdf_pages(-90))
-        self.pdf_rotate_right_button.clicked.connect(lambda: self.rotate_selected_pdf_pages(90))
-        self.pdf_rotate_180_button.clicked.connect(lambda: self.rotate_selected_pdf_pages(180))
-        self.pdf_delete_pages_button.clicked.connect(self.delete_selected_pdf_pages)
-        self.pdf_split_selected_button.clicked.connect(self.split_selected_pdf_pages)
-        self.pdf_save_pages_button.clicked.connect(self.save_pdf_pages)
-        self.pdf_choose_output_folder_button.clicked.connect(self.choose_pdf_output_folder)
-        return tab
 
     def create_pdf_compress_tab(self):
         tab = QWidget()
@@ -1699,21 +1512,21 @@ class ExcelMergerWindow(QMainWindow):
         source_layout.addWidget(self.pdf_choose_compress_button)
         layout.addWidget(source_group)
 
-        preset_group = QGroupBox("压缩档位")
+        preset_group = QGroupBox("压缩程度")
         preset_layout = QHBoxLayout(preset_group)
         preset_layout.setContentsMargins(12, 14, 12, 10)
-        self.pdf_compress_preset_combo = QComboBox()
+        self.pdf_compress_preset_combo = SelectionComboBox()
         for key in ("clear", "standard", "small"):
             self.pdf_compress_preset_combo.addItem(COMPRESSION_PRESETS[key]["label"], key)
         self.pdf_compress_preset_combo.setCurrentIndex(1)
         self.pdf_compress_size_label = QLabel("原始大小：-    预计压缩后：-    预计缩小：-")
         self.pdf_compress_size_label.setProperty("role", "hint")
-        preset_layout.addWidget(QLabel("档位："))
+        preset_layout.addWidget(QLabel("压缩程度："))
         preset_layout.addWidget(self.pdf_compress_preset_combo)
         preset_layout.addWidget(self.pdf_compress_size_label, 1)
         layout.addWidget(preset_group)
 
-        output_group = QGroupBox("输出设置")
+        output_group = QGroupBox("保存设置")
         output_layout = QHBoxLayout(output_group)
         output_layout.setContentsMargins(12, 14, 12, 10)
         self.pdf_compress_output_folder_edit = QLineEdit()
@@ -1729,9 +1542,9 @@ class ExcelMergerWindow(QMainWindow):
         layout.addWidget(output_group)
 
         self.pdf_compress_button = QPushButton("开始压缩")
-        self.pdf_compress_button.setMinimumHeight(48)
+        self.pdf_compress_button.setMinimumHeight(38)
         self.pdf_compress_button.setProperty("variant", "primary")
-        layout.addWidget(self.pdf_compress_button)
+        layout.addWidget(self.pdf_compress_button, 0, Qt.AlignRight)
         self.pdf_compress_status_label = QLabel("尚未选择 PDF")
         self.pdf_compress_status_label.setProperty("role", "status")
         layout.addWidget(self.pdf_compress_status_label)
@@ -1757,6 +1570,7 @@ class ExcelMergerWindow(QMainWindow):
         self.pdf_image_mode_button = QPushButton("图片转 PDF")
         self.pdf_export_mode_button = QPushButton("PDF 转图片")
         for button in (self.pdf_image_mode_button, self.pdf_export_mode_button):
+            button.setProperty("variant", "mode")
             button.setCheckable(True)
             button.setMinimumHeight(34)
             mode_layout.addWidget(button)
@@ -1772,8 +1586,9 @@ class ExcelMergerWindow(QMainWindow):
         image_button_layout = QHBoxLayout()
         self.pdf_add_images_button = QPushButton("添加图片")
         self.pdf_add_image_folder_button = QPushButton("添加文件夹")
-        self.pdf_delete_checked_images_button = QPushButton("删除勾选")
-        self.pdf_clear_images_button = QPushButton("清空图片")
+        self.pdf_delete_checked_images_button = QPushButton("移出列表")
+        self.pdf_delete_checked_images_button.setToolTip("从待处理列表移除，不删除原文件")
+        self.pdf_clear_images_button = QPushButton("清空列表")
         self.pdf_add_images_button.setProperty("variant", "accent")
         self.pdf_add_image_folder_button.setProperty("variant", "accent")
         self.pdf_delete_checked_images_button.setProperty("variant", "danger")
@@ -1800,14 +1615,16 @@ class ExcelMergerWindow(QMainWindow):
         self.pdf_image_output_name_edit.setPlaceholderText(default_output_name("图片合成PDF"))
         self.pdf_choose_image_output_button = QPushButton("选择文件夹")
         image_layout.addWidget(QLabel("保存文件夹："))
-        image_layout.addWidget(self.pdf_image_output_folder_edit)
-        image_layout.addWidget(self.pdf_choose_image_output_button)
-        image_layout.addWidget(QLabel("输出文件名："))
+        image_output_row = QHBoxLayout()
+        image_output_row.addWidget(self.pdf_image_output_folder_edit, 1)
+        image_output_row.addWidget(self.pdf_choose_image_output_button)
+        image_layout.addLayout(image_output_row)
+        image_layout.addWidget(QLabel("保存文件名："))
         image_layout.addWidget(self.pdf_image_output_name_edit)
         self.pdf_images_to_pdf_button = QPushButton("合成 PDF")
         self.pdf_images_to_pdf_button.setMinimumHeight(44)
         self.pdf_images_to_pdf_button.setProperty("variant", "primary")
-        image_layout.addWidget(self.pdf_images_to_pdf_button)
+        image_layout.addWidget(self.pdf_images_to_pdf_button, 0, Qt.AlignRight)
         self.pdf_image_status_label = QLabel("尚未添加图片")
         self.pdf_image_status_label.setProperty("role", "status")
         image_layout.addWidget(self.pdf_image_status_label)
@@ -1821,9 +1638,10 @@ class ExcelMergerWindow(QMainWindow):
         self.pdf_choose_export_source_button.setProperty("variant", "accent")
         self.pdf_add_export_folder_button = QPushButton("添加文件夹")
         self.pdf_add_export_folder_button.setProperty("variant", "accent")
-        self.pdf_delete_export_source_button = QPushButton("删除选中")
+        self.pdf_delete_export_source_button = QPushButton("移出列表")
+        self.pdf_delete_export_source_button.setToolTip("从待处理列表移除，不删除原文件")
         self.pdf_delete_export_source_button.setProperty("variant", "danger")
-        self.pdf_clear_export_sources_button = QPushButton("清空全部")
+        self.pdf_clear_export_sources_button = QPushButton("清空列表")
         export_source_button_layout.addWidget(self.pdf_choose_export_source_button)
         export_source_button_layout.addWidget(self.pdf_add_export_folder_button)
         export_source_button_layout.addWidget(self.pdf_delete_export_source_button)
@@ -1868,7 +1686,7 @@ class ExcelMergerWindow(QMainWindow):
         export_option_layout.addWidget(self.pdf_export_quality_combo)
         export_option_layout.addStretch(1)
         export_layout.addLayout(export_option_layout)
-        export_layout.addWidget(self.pdf_export_button)
+        export_layout.addWidget(self.pdf_export_button, 0, Qt.AlignRight)
         self.pdf_export_status_label = QLabel("尚未选择 PDF")
         self.pdf_export_status_label.setProperty("role", "status")
         export_layout.addWidget(self.pdf_export_status_label)
@@ -1898,116 +1716,6 @@ class ExcelMergerWindow(QMainWindow):
         self.show_pdf_convert_mode(0)
         return tab
 
-    def create_pdf_marks_tab(self):
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(12, 14, 12, 12)
-        layout.setSpacing(11)
-
-        source_group = QGroupBox("选择 PDF")
-        source_layout = QHBoxLayout(source_group)
-        self.pdf_marks_source_edit = QLineEdit()
-        self.pdf_marks_source_edit.setReadOnly(True)
-        self.pdf_marks_source_edit.setPlaceholderText("请选择需要添加水印或页码的 PDF")
-        self.pdf_choose_marks_source_button = QPushButton("选择 PDF")
-        self.pdf_choose_marks_source_button.setProperty("variant", "accent")
-        source_layout.addWidget(self.pdf_marks_source_edit, 1)
-        source_layout.addWidget(self.pdf_choose_marks_source_button)
-        layout.addWidget(source_group)
-
-        watermark_group = QGroupBox("文字水印")
-        watermark_layout = QHBoxLayout(watermark_group)
-        self.pdf_watermark_checkbox = QCheckBox("添加水印")
-        self.pdf_watermark_checkbox.setChecked(True)
-        self.pdf_watermark_text_edit = QLineEdit("内部资料")
-        self.pdf_watermark_text_edit.setPlaceholderText("水印文字")
-        self.pdf_watermark_opacity_spinbox = ClearSpinBox()
-        self.pdf_watermark_opacity_spinbox.setRange(5, 80)
-        self.pdf_watermark_opacity_spinbox.setValue(18)
-        self.pdf_watermark_opacity_spinbox.setSuffix(" %")
-        self.pdf_watermark_angle_spinbox = ClearSpinBox()
-        self.pdf_watermark_angle_spinbox.setRange(-180, 180)
-        self.pdf_watermark_angle_spinbox.setValue(-30)
-        self.pdf_watermark_angle_spinbox.setSuffix("°")
-        self.pdf_watermark_size_spinbox = ClearSpinBox()
-        self.pdf_watermark_size_spinbox.setRange(12, 120)
-        self.pdf_watermark_size_spinbox.setValue(40)
-        self.pdf_watermark_size_spinbox.setSuffix(" 号")
-        self.pdf_watermark_position_combo = SelectionComboBox()
-        for label_text, value in (
-            ("页面中央", "center"),
-            ("左上", "top_left"),
-            ("右上", "top_right"),
-            ("左下", "bottom_left"),
-            ("右下", "bottom_right"),
-        ):
-            self.pdf_watermark_position_combo.addItem(label_text, value)
-        watermark_layout.addWidget(self.pdf_watermark_checkbox)
-        watermark_layout.addWidget(self.pdf_watermark_text_edit, 1)
-        watermark_layout.addWidget(QLabel("透明度"))
-        watermark_layout.addWidget(self.pdf_watermark_opacity_spinbox)
-        watermark_layout.addWidget(QLabel("角度"))
-        watermark_layout.addWidget(self.pdf_watermark_angle_spinbox)
-        watermark_layout.addWidget(QLabel("字号"))
-        watermark_layout.addWidget(self.pdf_watermark_size_spinbox)
-        watermark_layout.addWidget(self.pdf_watermark_position_combo)
-        layout.addWidget(watermark_group)
-
-        number_group = QGroupBox("页码")
-        number_layout = QHBoxLayout(number_group)
-        self.pdf_page_number_checkbox = QCheckBox("添加页码")
-        self.pdf_page_number_start_spinbox = ClearSpinBox()
-        self.pdf_page_number_start_spinbox.setRange(0, 999999)
-        self.pdf_page_number_start_spinbox.setValue(1)
-        self.pdf_page_number_position_combo = SelectionComboBox()
-        for label_text, value in (
-            ("底部居中", "bottom_center"),
-            ("底部左侧", "bottom_left"),
-            ("底部右侧", "bottom_right"),
-            ("顶部居中", "top_center"),
-            ("顶部左侧", "top_left"),
-            ("顶部右侧", "top_right"),
-        ):
-            self.pdf_page_number_position_combo.addItem(label_text, value)
-        number_layout.addWidget(self.pdf_page_number_checkbox)
-        number_layout.addWidget(QLabel("起始页码"))
-        number_layout.addWidget(self.pdf_page_number_start_spinbox)
-        number_layout.addWidget(QLabel("位置"))
-        number_layout.addWidget(self.pdf_page_number_position_combo)
-        number_layout.addStretch(1)
-        layout.addWidget(number_group)
-
-        output_group = QGroupBox("输出设置")
-        output_layout = QHBoxLayout(output_group)
-        self.pdf_marks_output_folder_edit = QLineEdit()
-        self.pdf_marks_output_folder_edit.setReadOnly(True)
-        self.pdf_choose_marks_output_button = QPushButton("选择文件夹")
-        self.pdf_marks_output_name_edit = QLineEdit()
-        self.pdf_marks_output_name_edit.setPlaceholderText(default_output_name("水印页码结果"))
-        output_layout.addWidget(QLabel("文件夹："))
-        output_layout.addWidget(self.pdf_marks_output_folder_edit, 2)
-        output_layout.addWidget(self.pdf_choose_marks_output_button)
-        output_layout.addWidget(QLabel("文件名："))
-        output_layout.addWidget(self.pdf_marks_output_name_edit, 1)
-        layout.addWidget(output_group)
-
-        self.pdf_marks_start_button = QPushButton("生成新 PDF")
-        self.pdf_marks_start_button.setMinimumHeight(46)
-        self.pdf_marks_start_button.setProperty("variant", "primary")
-        self.pdf_marks_status_label = QLabel("尚未选择 PDF")
-        self.pdf_marks_status_label.setProperty("role", "status")
-        layout.addWidget(self.pdf_marks_start_button)
-        layout.addWidget(self.pdf_marks_status_label)
-        layout.addStretch(1)
-
-        self.pdf_choose_marks_source_button.clicked.connect(self.choose_pdf_marks_source)
-        self.pdf_choose_marks_output_button.clicked.connect(self.choose_pdf_marks_output_folder)
-        self.pdf_marks_start_button.clicked.connect(self.create_marked_pdf)
-        self.pdf_watermark_checkbox.toggled.connect(self.update_pdf_marks_controls)
-        self.pdf_page_number_checkbox.toggled.connect(self.update_pdf_marks_controls)
-        self.update_pdf_marks_controls()
-        return tab
-
     def create_pdf_security_tab(self):
         tab = QWidget()
         layout = QVBoxLayout(tab)
@@ -2026,7 +1734,9 @@ class ExcelMergerWindow(QMainWindow):
         layout.addWidget(source_group)
 
         password_group = QGroupBox("密码设置")
-        password_layout = QVBoxLayout(password_group)
+        password_layout = QFormLayout(password_group)
+        password_layout.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
+        password_layout.setVerticalSpacing(12)
         mode_row = QHBoxLayout()
         self.pdf_security_mode_combo = SelectionComboBox()
         self.pdf_security_mode_combo.addItem("设置打开密码", "set")
@@ -2034,7 +1744,7 @@ class ExcelMergerWindow(QMainWindow):
         mode_row.addWidget(QLabel("操作："))
         mode_row.addWidget(self.pdf_security_mode_combo)
         mode_row.addStretch(1)
-        password_layout.addLayout(mode_row)
+        password_layout.addRow(mode_row)
         self.pdf_source_password_edit = QLineEdit()
         self.pdf_source_password_edit.setEchoMode(QLineEdit.Password)
         self.pdf_source_password_edit.setPlaceholderText("原密码；未加密 PDF 可留空")
@@ -2044,20 +1754,18 @@ class ExcelMergerWindow(QMainWindow):
         self.pdf_confirm_password_edit = QLineEdit()
         self.pdf_confirm_password_edit.setEchoMode(QLineEdit.Password)
         self.pdf_confirm_password_edit.setPlaceholderText("再次输入新密码")
-        password_layout.addWidget(QLabel("原密码："))
-        password_layout.addWidget(self.pdf_source_password_edit)
+        password_layout.addRow("原密码：", self.pdf_source_password_edit)
         self.pdf_new_password_label = QLabel("新密码：")
         self.pdf_confirm_password_label = QLabel("确认新密码：")
-        password_layout.addWidget(self.pdf_new_password_label)
-        password_layout.addWidget(self.pdf_new_password_edit)
-        password_layout.addWidget(self.pdf_confirm_password_label)
-        password_layout.addWidget(self.pdf_confirm_password_edit)
+        password_layout.addRow(self.pdf_new_password_label, self.pdf_new_password_edit)
+        password_layout.addRow(self.pdf_confirm_password_label, self.pdf_confirm_password_edit)
         privacy = QLabel("密码只在当前操作中使用，不会保存，也不会写入日志。")
         privacy.setProperty("role", "hint")
-        password_layout.addWidget(privacy)
+        privacy.setWordWrap(True)
+        password_layout.addRow(privacy)
         layout.addWidget(password_group)
 
-        output_group = QGroupBox("输出设置")
+        output_group = QGroupBox("保存设置")
         output_layout = QHBoxLayout(output_group)
         self.pdf_security_output_folder_edit = QLineEdit()
         self.pdf_security_output_folder_edit.setReadOnly(True)
@@ -2071,11 +1779,11 @@ class ExcelMergerWindow(QMainWindow):
         layout.addWidget(output_group)
 
         self.pdf_security_start_button = QPushButton("生成新 PDF")
-        self.pdf_security_start_button.setMinimumHeight(46)
+        self.pdf_security_start_button.setMinimumHeight(38)
         self.pdf_security_start_button.setProperty("variant", "primary")
         self.pdf_security_status_label = QLabel("尚未选择 PDF")
         self.pdf_security_status_label.setProperty("role", "status")
-        layout.addWidget(self.pdf_security_start_button)
+        layout.addWidget(self.pdf_security_start_button, 0, Qt.AlignRight)
         layout.addWidget(self.pdf_security_status_label)
         layout.addStretch(1)
 
@@ -2113,13 +1821,13 @@ class ExcelMergerWindow(QMainWindow):
         self.pdf_searchable_settings_button = QPushButton("设置")
         self.pdf_searchable_inspection_label = QLabel("选择 PDF 后显示需要 OCR 的页面")
         self.pdf_searchable_inspection_label.setProperty("role", "hint")
-        ocr_layout.addWidget(QLabel("OCR 平台："))
+        ocr_layout.addWidget(QLabel("文字识别平台："))
         ocr_layout.addWidget(self.pdf_searchable_provider_combo)
         ocr_layout.addWidget(self.pdf_searchable_settings_button)
         ocr_layout.addWidget(self.pdf_searchable_inspection_label, 1)
         layout.addWidget(ocr_group)
 
-        output_group = QGroupBox("输出设置")
+        output_group = QGroupBox("保存设置")
         output_layout = QHBoxLayout(output_group)
         self.pdf_searchable_output_folder_edit = QLineEdit()
         self.pdf_searchable_output_folder_edit.setReadOnly(True)
@@ -2137,11 +1845,11 @@ class ExcelMergerWindow(QMainWindow):
         hint.setWordWrap(True)
         layout.addWidget(hint)
         self.pdf_searchable_start_button = QPushButton("生成可搜索 PDF")
-        self.pdf_searchable_start_button.setMinimumHeight(46)
+        self.pdf_searchable_start_button.setMinimumHeight(38)
         self.pdf_searchable_start_button.setProperty("variant", "primary")
         self.pdf_searchable_status_label = QLabel("尚未选择 PDF")
         self.pdf_searchable_status_label.setProperty("role", "status")
-        layout.addWidget(self.pdf_searchable_start_button)
+        layout.addWidget(self.pdf_searchable_start_button, 0, Qt.AlignRight)
         layout.addWidget(self.pdf_searchable_status_label)
         layout.addStretch(1)
 
@@ -2201,11 +1909,12 @@ class ExcelMergerWindow(QMainWindow):
         layout.addWidget(hint)
         action_layout = QHBoxLayout()
         self.pdf_compare_start_button = QPushButton("生成文字对比报告")
-        self.pdf_compare_start_button.setMinimumHeight(46)
+        self.pdf_compare_start_button.setMinimumHeight(38)
         self.pdf_compare_start_button.setProperty("variant", "primary")
         self.pdf_compare_open_button = QPushButton("打开报告")
-        self.pdf_compare_open_button.setMinimumHeight(46)
-        action_layout.addWidget(self.pdf_compare_start_button, 1)
+        self.pdf_compare_open_button.setMinimumHeight(38)
+        action_layout.addStretch(1)
+        action_layout.addWidget(self.pdf_compare_start_button)
         action_layout.addWidget(self.pdf_compare_open_button)
         layout.addLayout(action_layout)
         self.pdf_compare_status_label = QLabel("尚未选择两份 PDF")
@@ -2228,7 +1937,7 @@ class ExcelMergerWindow(QMainWindow):
             return
 
         height = max(self.home_page.height(), self.height())
-        logo_size = max(48, min(64, int(height * 0.07)))
+        logo_size = 32
         if not self.home_logo_pixmap.isNull():
             self.home_logo_label.setPixmap(
                 self.home_logo_pixmap.scaled(
@@ -2336,7 +2045,7 @@ class ExcelMergerWindow(QMainWindow):
         if accent_name not in ACCENT_PALETTES:
             return
         self.accent_name = accent_name
-        self.settings.setValue("appearance/accent", self.accent_name)
+        self.settings.setValue("appearance/warm-accent", self.accent_name)
         self.settings.sync()
         self.apply_theme()
 
@@ -2645,6 +2354,7 @@ class ExcelMergerWindow(QMainWindow):
         self.batch_preview_button.setEnabled(bool(self.batch_source_folder))
         self.batch_start_button.setEnabled(bool(self.batch_previews) and has_output)
         self.batch_retry_button.setEnabled(bool(self.batch_failed_files) and has_output)
+        self.batch_retry_button.setVisible(bool(self.batch_failed_files))
         self.batch_open_folder_button.setEnabled(
             has_output and Path(self.batch_output_folder).is_dir()
         )
@@ -2666,7 +2376,7 @@ class ExcelMergerWindow(QMainWindow):
             QMessageBox.warning(
                 self,
                 "OCR 密钥未配置",
-                "请先在软件设置中填写所选 OCR 平台的密钥。",
+                "请先在软件设置中填写所选文字识别平台的密钥。",
             )
             return False
         selected = {str(Path(path).resolve()) for path in files}
@@ -2777,56 +2487,7 @@ class ExcelMergerWindow(QMainWindow):
         if self.batch_output_folder and Path(self.batch_output_folder).is_dir():
             QDesktopServices.openUrl(QUrl.fromLocalFile(self.batch_output_folder))
 
-    def selected_pdf_page_items(self):
-        return [card for card in self.pdf_page_cards if card.is_checked()]
-
-    def pdf_page_refs_from_items(self, items):
-        refs = []
-        for card in items:
-            data = card.data
-            refs.append(
-                PdfPageRef(
-                    data["source_file"],
-                    data["page_index"],
-                    data.get("rotation", 0),
-                )
-            )
-        return refs
-
-    def all_pdf_page_items(self):
-        return list(self.pdf_page_cards)
-
-    def set_pdf_output_defaults(self, source_files):
-        if not source_files:
-            return
-        if not self.pdf_output_folder:
-            self.pdf_output_folder = str(Path(source_files[0]).parent / "output")
-            self.pdf_output_folder_edit.setText(self.pdf_output_folder)
-            self.pdf_output_folder_edit.setToolTip(self.pdf_output_folder)
-        if not self.pdf_page_cards:
-            label = (
-                "PDF合并结果"
-                if len(source_files) > 1
-                else f"{Path(source_files[0]).stem}_页面整理"
-            )
-            self.pdf_output_name_edit.setText(default_output_name(label))
-
     def update_pdf_button_states(self):
-        if not hasattr(self, "pdf_page_cards"):
-            return
-        has_pages = len(self.pdf_page_cards) > 0
-        has_selection = bool(self.selected_pdf_page_items())
-        self.pdf_clear_button.setEnabled(has_pages)
-        self.pdf_check_all_button.setEnabled(has_pages)
-        self.pdf_uncheck_all_button.setEnabled(has_pages)
-        self.pdf_move_previous_button.setEnabled(has_selection)
-        self.pdf_move_next_button.setEnabled(has_selection)
-        self.pdf_rotate_left_button.setEnabled(has_selection)
-        self.pdf_rotate_right_button.setEnabled(has_selection)
-        self.pdf_rotate_180_button.setEnabled(has_selection)
-        self.pdf_delete_pages_button.setEnabled(has_selection)
-        self.pdf_split_selected_button.setEnabled(has_selection)
-        self.pdf_save_pages_button.setEnabled(has_pages and bool(self.pdf_output_folder))
         if hasattr(self, "pdf_compress_button"):
             self.pdf_compress_button.setEnabled(
                 bool(self.pdf_compress_source_file)
@@ -2852,406 +2513,6 @@ class ExcelMergerWindow(QMainWindow):
             self.pdf_clear_export_sources_button.setEnabled(
                 bool(self.pdf_export_source_files)
             )
-
-    def refresh_pdf_page_cards_layout(self):
-        if not hasattr(self, "pdf_page_board"):
-            return
-        if getattr(self, "refreshing_pdf_card_layout", False):
-            return
-        self.refreshing_pdf_card_layout = True
-        while self.pdf_page_board.grid.count():
-            item = self.pdf_page_board.grid.takeAt(0)
-            if item.widget():
-                item.widget().setParent(None)
-        try:
-            viewport_width = max(self.pdf_page_scroll.viewport().width(), PDF_PAGE_CARD_WIDTH)
-            columns = max(
-                1,
-                (viewport_width - 28) // (PDF_PAGE_CARD_WIDTH + PDF_PAGE_CARD_H_SPACING),
-            )
-            row_count = (len(self.pdf_page_cards) + columns - 1) // columns
-            content_height = (
-                16
-                + row_count * PDF_PAGE_CARD_HEIGHT
-                + max(0, row_count - 1) * PDF_PAGE_CARD_V_SPACING
-            )
-            self.pdf_page_board.setMinimumHeight(content_height)
-            for index, card in enumerate(self.pdf_page_cards):
-                row = index // columns
-                column = index % columns
-                self.pdf_page_board.grid.addWidget(card, row, column)
-        finally:
-            self.refreshing_pdf_card_layout = False
-
-    def reorder_pdf_page(self, source_index, insert_index):
-        if source_index < 0 or source_index >= len(self.pdf_page_cards):
-            return
-        insert_index = max(0, min(insert_index, len(self.pdf_page_cards)))
-        card = self.pdf_page_cards.pop(source_index)
-        if source_index < insert_index:
-            insert_index -= 1
-        self.pdf_page_cards.insert(insert_index, card)
-        self.refresh_pdf_page_cards_layout()
-        self.refresh_pdf_page_numbers()
-
-    def refresh_pdf_page_numbers(self):
-        if getattr(self, "updating_pdf_page_numbers", False):
-            return
-        self.updating_pdf_page_numbers = True
-        try:
-            for index, card in enumerate(self.pdf_page_cards, 1):
-                card.update_display(index)
-        finally:
-            self.updating_pdf_page_numbers = False
-        total = len(self.pdf_page_cards)
-        self.pdf_page_limit_label.setText(
-            f"当前 {total:,} / {PDF_PAGE_MAX_COUNT:,} 页；"
-            "处理数量越多，处理速度越慢，请酌情拆分任务"
-        )
-        checked = len(self.selected_pdf_page_items())
-        if total:
-            self.pdf_status_label.setText(
-                f"当前共有 {total} 页，已勾选 {checked} 页。双击页面可放大预览。"
-            )
-        else:
-            self.pdf_status_label.setText("尚未添加 PDF")
-        self.update_pdf_button_states()
-
-    def set_all_pdf_page_checks(self, checked):
-        for card in self.pdf_page_cards:
-            old_state = card.checkbox.blockSignals(True)
-            card.checkbox.setChecked(checked)
-            card.checkbox.blockSignals(old_state)
-            card.setProperty("checked", "true" if checked else "false")
-            card.polish()
-        self.refresh_pdf_page_numbers()
-
-    def move_checked_pdf_pages(self, delta):
-        rows = [
-            self.pdf_page_cards.index(card)
-            for card in self.selected_pdf_page_items()
-        ]
-        if not rows:
-            return
-        row_set = set(rows)
-        if delta < 0:
-            for row in rows:
-                if row <= 0 or row - 1 in row_set:
-                    continue
-                self.pdf_page_cards[row - 1], self.pdf_page_cards[row] = (
-                    self.pdf_page_cards[row],
-                    self.pdf_page_cards[row - 1],
-                )
-                row_set.remove(row)
-                row_set.add(row - 1)
-        else:
-            for row in reversed(rows):
-                if row >= len(self.pdf_page_cards) - 1 or row + 1 in row_set:
-                    continue
-                self.pdf_page_cards[row + 1], self.pdf_page_cards[row] = (
-                    self.pdf_page_cards[row],
-                    self.pdf_page_cards[row + 1],
-                )
-                row_set.remove(row)
-                row_set.add(row + 1)
-        self.refresh_pdf_page_cards_layout()
-        self.refresh_pdf_page_numbers()
-
-    def preview_pdf_page(self, card):
-        data = card.data
-        if not data:
-            return
-        preview_file = Path(self.pdf_thumbnail_tempdir.name) / (
-            f"preview_{id(card)}_{data.get('rotation', 0)}.png"
-        )
-        render_page_thumbnail(
-            data["source_file"],
-            data["page_index"],
-            preview_file,
-            max_width=900,
-        )
-        pixmap = QPixmap(str(preview_file))
-        rotation = data.get("rotation", 0) % 360
-        if rotation and not pixmap.isNull():
-            pixmap = pixmap.transformed(QTransform().rotate(rotation), Qt.SmoothTransformation)
-
-        dialog = QDialog(self)
-        dialog.setWindowTitle(
-            f"{Path(data['source_file']).name} - 第 {data['page_index'] + 1} 页"
-        )
-        dialog_layout = QVBoxLayout(dialog)
-        image_label = QLabel()
-        image_label.setAlignment(Qt.AlignCenter)
-        image_label.setPixmap(pixmap)
-        scroll_area = QScrollArea()
-        scroll_area.setWidget(image_label)
-        scroll_area.setWidgetResizable(True)
-        dialog_layout.addWidget(scroll_area, 1)
-        close_button = QPushButton("关闭")
-        close_button.clicked.connect(dialog.accept)
-        dialog_layout.addWidget(close_button)
-        dialog.resize(960, 760)
-        dialog.exec()
-
-    def add_pdf_paths(self, pdf_files):
-        pdf_files = tuple(os.path.abspath(path) for path in pdf_files if path)
-        if not pdf_files:
-            return False
-
-        def count_pages(progress_callback):
-            counts = []
-            total = len(pdf_files)
-            for index, pdf_file in enumerate(pdf_files, 1):
-                progress_callback(
-                    index - 1,
-                    total,
-                    f"正在统计第 {index} / {total} 个 PDF：{Path(pdf_file).name}",
-                )
-                counts.append((pdf_file, page_count(pdf_file)))
-                progress_callback(index, total, f"已统计 {index} / {total} 个 PDF")
-            return tuple(counts)
-
-        return self.start_background_task(
-            "PDF 工具箱",
-            "正在统计 PDF 页数…",
-            count_pages,
-            lambda counts: self.pdf_page_count_checked(pdf_files, counts),
-            lambda error: QMessageBox.critical(self, "读取 PDF 失败", error),
-            total=len(pdf_files),
-            status_label=self.pdf_status_label,
-        )
-
-    def pdf_page_count_checked(self, pdf_files, counts):
-        added_pages = sum(count for _pdf_file, count in counts)
-        if not self.confirm_large_addition(
-            "PDF 页面",
-            len(self.pdf_page_cards),
-            added_pages,
-            PDF_PAGE_WARNING_COUNT,
-            PDF_PAGE_MAX_COUNT,
-        ):
-            return False
-        self.set_pdf_output_defaults(pdf_files)
-        return self.start_rendering_pdf_pages(counts)
-
-    def start_rendering_pdf_pages(self, counts):
-        start_index = len(self.pdf_page_cards)
-        jobs = [
-            (pdf_file, page_index)
-            for pdf_file, count in counts
-            for page_index in range(count)
-        ]
-
-        def load_pages(progress_callback):
-            total = len(jobs)
-            pages = []
-            for index, (pdf_file, page_index) in enumerate(jobs, 1):
-                progress_callback(
-                    index - 1,
-                    total,
-                    f"正在生成第 {index} / {total} 页缩略图：{Path(pdf_file).name}",
-                )
-                thumbnail = Path(self.pdf_thumbnail_tempdir.name) / (
-                    f"thumb_{start_index + index}_{uuid.uuid4().hex}.png"
-                )
-                pages.append(
-                    {
-                        "source_file": pdf_file,
-                        "page_index": page_index,
-                        "rotation": 0,
-                        "thumbnail": render_page_thumbnail(
-                            pdf_file, page_index, thumbnail
-                        ),
-                    }
-                )
-                progress_callback(index, total, f"已读取 {index} / {total} 页")
-            return pages
-
-        def pages_loaded(pages):
-            for data in pages:
-                card = PdfPageCard(self, data)
-                card.update_display(len(self.pdf_page_cards) + 1)
-                self.pdf_page_cards.append(card)
-            self.refresh_pdf_page_numbers()
-            self.refresh_pdf_page_cards_layout()
-
-        return self.start_background_task(
-            "PDF 工具箱",
-            "正在读取 PDF 并生成页面缩略图…",
-            load_pages,
-            pages_loaded,
-            lambda error: QMessageBox.critical(self, "读取 PDF 失败", error),
-            total=len(jobs),
-            status_label=self.pdf_status_label,
-        )
-
-    def add_pdf_files(self):
-        filenames, _ = QFileDialog.getOpenFileNames(
-            self,
-            "选择一个或多个 PDF",
-            self.dialog_folder("open"),
-            "PDF 文件 (*.pdf)",
-        )
-        if filenames:
-            self.remember_dialog_folder("open", filenames[0])
-        self.add_pdf_paths(filenames)
-
-    def choose_pdf_output_folder(self):
-        folder = QFileDialog.getExistingDirectory(
-            self,
-            "选择 PDF 结果保存文件夹",
-            self.dialog_folder("save", self.pdf_output_folder),
-            QFileDialog.ShowDirsOnly,
-        )
-        if not folder:
-            return
-        self.pdf_output_folder = os.path.abspath(folder)
-        self.remember_dialog_folder("save", self.pdf_output_folder)
-        self.pdf_output_folder_edit.setText(self.pdf_output_folder)
-        self.pdf_output_folder_edit.setToolTip(self.pdf_output_folder)
-        self.update_pdf_button_states()
-
-    def clear_pdf_pages(self):
-        if self.pdf_page_cards and not self.confirm_list_change("是否清空所有 PDF 页面"):
-            return
-        for card in self.pdf_page_cards:
-            card.setParent(None)
-            card.deleteLater()
-        self.pdf_page_cards = []
-        self.refresh_pdf_page_cards_layout()
-        self.refresh_pdf_page_numbers()
-
-    def rotate_selected_pdf_pages(self, degrees):
-        for card in self.selected_pdf_page_items():
-            data = dict(card.data)
-            data["rotation"] = (data.get("rotation", 0) + degrees) % 360
-            card.data = data
-        self.refresh_pdf_page_numbers()
-
-    def delete_selected_pdf_pages(self):
-        selected = self.selected_pdf_page_items()
-        if not selected:
-            return
-        if not self.confirm_list_change(f"是否删除勾选的 {len(selected)} 页"):
-            return
-        for card in selected:
-            self.pdf_page_cards.remove(card)
-            card.setParent(None)
-            card.deleteLater()
-        self.refresh_pdf_page_cards_layout()
-        self.refresh_pdf_page_numbers()
-
-    def choose_pdf_marks_source(self):
-        filename, _ = QFileDialog.getOpenFileName(
-            self,
-            "选择需要添加水印或页码的 PDF",
-            self.dialog_folder("open"),
-            "PDF 文件 (*.pdf)",
-        )
-        if not filename:
-            return
-        self.remember_dialog_folder("open", filename)
-        self.pdf_marks_source_file = os.path.abspath(filename)
-        self.pdf_marks_source_edit.setText(self.pdf_marks_source_file)
-        self.pdf_marks_source_edit.setToolTip(self.pdf_marks_source_file)
-        self.pdf_marks_output_folder = str(Path(filename).parent / "output")
-        self.pdf_marks_output_folder_edit.setText(self.pdf_marks_output_folder)
-        self.pdf_marks_output_name_edit.setText(
-            default_output_name(f"{Path(filename).stem}_水印页码")
-        )
-        self.pdf_marks_status_label.setText("已选择 PDF，确认设置后可生成新文件")
-        self.update_pdf_marks_controls()
-
-    def choose_pdf_marks_output_folder(self):
-        folder = QFileDialog.getExistingDirectory(
-            self,
-            "选择水印和页码结果保存文件夹",
-            self.dialog_folder("save", self.pdf_marks_output_folder),
-            QFileDialog.ShowDirsOnly,
-        )
-        if not folder:
-            return
-        self.pdf_marks_output_folder = os.path.abspath(folder)
-        self.remember_dialog_folder("save", folder)
-        self.pdf_marks_output_folder_edit.setText(self.pdf_marks_output_folder)
-        self.update_pdf_marks_controls()
-
-    def update_pdf_marks_controls(self):
-        watermark_enabled = self.pdf_watermark_checkbox.isChecked()
-        for widget in (
-            self.pdf_watermark_text_edit,
-            self.pdf_watermark_opacity_spinbox,
-            self.pdf_watermark_angle_spinbox,
-            self.pdf_watermark_size_spinbox,
-            self.pdf_watermark_position_combo,
-        ):
-            widget.setEnabled(watermark_enabled)
-        self.pdf_page_number_start_spinbox.setEnabled(
-            self.pdf_page_number_checkbox.isChecked()
-        )
-        self.pdf_page_number_position_combo.setEnabled(
-            self.pdf_page_number_checkbox.isChecked()
-        )
-        self.pdf_marks_start_button.setEnabled(
-            bool(self.pdf_marks_source_file and self.pdf_marks_output_folder)
-            and (watermark_enabled or self.pdf_page_number_checkbox.isChecked())
-        )
-
-    def create_marked_pdf(self):
-        watermark_text = (
-            self.pdf_watermark_text_edit.text().strip()
-            if self.pdf_watermark_checkbox.isChecked()
-            else ""
-        )
-        add_page_numbers = self.pdf_page_number_checkbox.isChecked()
-        if not watermark_text and not add_page_numbers:
-            QMessageBox.warning(self, "尚未完成设置", "请填写水印文字或启用页码。")
-            return
-        try:
-            output_file = output_path(
-                self.pdf_marks_output_folder,
-                self.pdf_marks_output_name_edit.text(),
-                default_output_name("水印页码结果"),
-            )
-        except Exception as error:
-            QMessageBox.critical(self, "无法生成", str(error))
-            return
-
-        source_file = self.pdf_marks_source_file
-        watermark_opacity = self.pdf_watermark_opacity_spinbox.value() / 100
-        watermark_angle = self.pdf_watermark_angle_spinbox.value()
-        watermark_size = self.pdf_watermark_size_spinbox.value()
-        watermark_position = self.pdf_watermark_position_combo.currentData()
-        page_number_start = self.pdf_page_number_start_spinbox.value()
-        page_number_position = self.pdf_page_number_position_combo.currentData()
-
-        def completed(result):
-            self.pdf_marks_result_file = result.output_file
-            self.pdf_marks_status_label.setText(
-                f"已生成：{Path(result.output_file).name}"
-            )
-            self.save_pdf_result_message("PDF 水印与页码完成", result)
-
-        self.start_background_task(
-            "正在生成 PDF",
-            f"正在处理：{Path(source_file).name}",
-            lambda progress: add_pdf_marks(
-                source_file,
-                output_file,
-                watermark_text=watermark_text,
-                watermark_opacity=watermark_opacity,
-                watermark_angle=watermark_angle,
-                watermark_font_size=watermark_size,
-                watermark_position=watermark_position,
-                add_page_numbers=add_page_numbers,
-                page_number_start=page_number_start,
-                page_number_position=page_number_position,
-                progress_callback=progress,
-            ),
-            completed,
-            lambda error: QMessageBox.critical(self, "生成失败", error),
-            status_label=self.pdf_marks_status_label,
-        )
 
     def choose_pdf_security_source(self):
         filename, _ = QFileDialog.getOpenFileName(
@@ -3304,6 +2565,8 @@ class ExcelMergerWindow(QMainWindow):
         )
 
     def process_pdf_security(self):
+        if not self.pdf_workspace.can_export():
+            return
         setting_password = self.pdf_security_mode_combo.currentData() == "set"
         source_password = self.pdf_source_password_edit.text()
         new_password = self.pdf_new_password_edit.text() if setting_password else ""
@@ -3440,6 +2703,8 @@ class ExcelMergerWindow(QMainWindow):
         )
 
     def create_searchable_pdf(self):
+        if not self.pdf_workspace.can_export():
+            return
         inspection = self.pdf_searchable_inspection
         if inspection is None:
             QMessageBox.warning(self, "尚未完成检查", "请先选择 PDF 并等待检查完成。")
@@ -3450,7 +2715,7 @@ class ExcelMergerWindow(QMainWindow):
                 QMessageBox.warning(
                     self,
                     "OCR 密钥未配置",
-                    "检测到扫描页，请先在设置中填写所选 OCR 平台的密钥。",
+                    "检测到扫描页，请先在设置中填写所选文字识别平台的密钥。",
                 )
                 return
             pages = "、".join(map(str, inspection.scanned_pages))
@@ -3549,6 +2814,8 @@ class ExcelMergerWindow(QMainWindow):
         )
 
     def create_pdf_compare_report(self):
+        if not self.pdf_workspace.can_export():
+            return
         name = self.pdf_compare_output_name_edit.text().strip() or default_output_name(
             "PDF文字对比", ".html"
         )
@@ -3604,71 +2871,13 @@ class ExcelMergerWindow(QMainWindow):
         detail += f"\n\n日志文件：\n{result.log_file}"
         message.setInformativeText(detail.strip())
         open_button = message.addButton("打开结果", QMessageBox.ActionRole)
-        ok_button = message.addButton("确 定", QMessageBox.AcceptRole)
+        ok_button = message.addButton("确定", QMessageBox.AcceptRole)
         for button in (ok_button, open_button):
             button.setFixedSize(112, 36)
         message.setDefaultButton(ok_button)
         message.exec()
         if message.clickedButton() == open_button and open_target:
             self.open_output_file(open_target)
-
-    def save_pdf_pages(self):
-        if not self.pdf_page_cards:
-            QMessageBox.warning(self, "没有页面", "请先添加 PDF 页面。")
-            return
-        try:
-            output_file = output_path(
-                self.pdf_output_folder,
-                self.pdf_output_name_edit.text(),
-                default_output_name("PDF合并结果"),
-            )
-            page_refs = self.pdf_page_refs_from_items(self.all_pdf_page_items())
-        except Exception as error:
-            QMessageBox.critical(self, "保存失败", str(error))
-            return
-
-        def saved(result):
-            self.pdf_status_label.setText(f"已保存：{Path(result.output_file).name}")
-            self.save_pdf_result_message("PDF 保存完成", result)
-
-        self.start_background_task(
-            "正在保存 PDF",
-            "正在按当前顺序生成 PDF…",
-            lambda _progress: save_pages(page_refs, output_file, "PDF 页面整理"),
-            saved,
-            lambda error: QMessageBox.critical(self, "保存失败", error),
-            status_label=self.pdf_status_label,
-        )
-
-    def split_selected_pdf_pages(self):
-        selected = self.selected_pdf_page_items()
-        if not selected:
-            return
-        try:
-            output_file = output_path(
-                self.pdf_output_folder,
-                default_output_name("PDF拆分结果"),
-                default_output_name("PDF拆分结果"),
-            )
-            page_refs = self.pdf_page_refs_from_items(selected)
-        except Exception as error:
-            QMessageBox.critical(self, "拆分失败", str(error))
-            return
-
-        def split_saved(result):
-            self.pdf_status_label.setText(f"已拆分：{Path(result.output_file).name}")
-            self.save_pdf_result_message("PDF 拆分完成", result)
-
-        self.start_background_task(
-            "正在拆分 PDF",
-            "正在保存勾选的页面…",
-            lambda _progress: save_pages(
-                page_refs, output_file, "PDF 拆分选中页面"
-            ),
-            split_saved,
-            lambda error: QMessageBox.critical(self, "拆分失败", error),
-            status_label=self.pdf_status_label,
-        )
 
     def choose_pdf_compress_source(self):
         filename, _ = QFileDialog.getOpenFileName(
@@ -3734,6 +2943,8 @@ class ExcelMergerWindow(QMainWindow):
         )
 
     def compress_selected_pdf(self):
+        if not self.pdf_workspace.can_export():
+            return
         try:
             output_file = output_path(
                 self.pdf_compress_output_folder_edit.text(),
@@ -3770,12 +2981,6 @@ class ExcelMergerWindow(QMainWindow):
         self.pdf_convert_stack.setCurrentIndex(index)
         self.pdf_image_mode_button.setChecked(index == 0)
         self.pdf_export_mode_button.setChecked(index == 1)
-        self.pdf_image_mode_button.setProperty("variant", "primary" if index == 0 else "ghost")
-        self.pdf_export_mode_button.setProperty("variant", "primary" if index == 1 else "ghost")
-        self.pdf_image_mode_button.style().unpolish(self.pdf_image_mode_button)
-        self.pdf_image_mode_button.style().polish(self.pdf_image_mode_button)
-        self.pdf_export_mode_button.style().unpolish(self.pdf_export_mode_button)
-        self.pdf_export_mode_button.style().polish(self.pdf_export_mode_button)
 
     def sync_pdf_image_source_files(self):
         self.pdf_image_source_files = [card.image_file for card in self.pdf_image_cards]
@@ -3843,7 +3048,7 @@ class ExcelMergerWindow(QMainWindow):
         self.refresh_pdf_image_cards()
 
     def preview_pdf_image(self, card):
-        pixmap = QPixmap(card.image_file)
+        pixmap = load_image_pixmap(card.image_file)
         if pixmap.isNull():
             QMessageBox.warning(self, "无法预览", "这张图片无法预览。")
             return
@@ -3869,10 +3074,12 @@ class ExcelMergerWindow(QMainWindow):
         existing = {card.image_file for card in self.pdf_image_cards}
         candidates = []
         seen = set(existing)
+        repeated = 0
         skipped_before_check = 0
         for filename in filenames:
             normalized = os.path.abspath(filename)
             if normalized in seen:
+                repeated += 1
                 continue
             seen.add(normalized)
             path = Path(normalized)
@@ -3880,8 +3087,19 @@ class ExcelMergerWindow(QMainWindow):
                 skipped_before_check += 1
                 continue
             candidates.append(normalized)
+
+        def report_addition(added, skipped):
+            detail = f"本次新增 {added} 张图片，列表共 {len(self.pdf_image_cards)} 张。"
+            if repeated:
+                detail += f"忽略 {repeated} 个重复项。"
+            if skipped:
+                detail += f"跳过 {skipped} 个非图片或无法读取文件。"
+            self.pdf_image_status_label.setText(detail)
+            if not added:
+                QMessageBox.information(self, "没有新增图片", detail)
+
         if not candidates:
-            QMessageBox.information(self, "没有图片", "没有找到可用图片。")
+            report_addition(0, skipped_before_check)
             return False
         if not self.confirm_large_addition(
             "图片",
@@ -3903,7 +3121,7 @@ class ExcelMergerWindow(QMainWindow):
                     f"正在准备第 {index} / {total} 张图片：{Path(filename).name}",
                 )
                 thumbnail_file = Path(self.pdf_thumbnail_tempdir.name) / (
-                    f"image_{uuid.uuid4().hex}.jpg"
+                    f"image_{uuid.uuid4().hex}.png"
                 )
                 try:
                     preview = prepare_image_thumbnail(
@@ -3932,13 +3150,7 @@ class ExcelMergerWindow(QMainWindow):
                 self.pdf_image_output_name_edit.setText(default_output_name("图片合成PDF"))
             self.refresh_pdf_image_cards_layout()
             self.refresh_pdf_image_cards()
-            if not prepared:
-                QMessageBox.information(self, "没有图片", "没有找到可用图片。")
-            elif skipped:
-                self.pdf_image_status_label.setText(
-                    f"已添加 {len(self.pdf_image_cards)} 张图片，"
-                    f"跳过 {skipped} 个非图片或无法读取文件。"
-                )
+            report_addition(len(prepared), skipped)
 
         return self.start_background_task(
             "正在添加图片",
@@ -3994,7 +3206,7 @@ class ExcelMergerWindow(QMainWindow):
         selected = self.selected_pdf_image_cards()
         if not selected:
             return
-        if not self.confirm_list_change(f"是否删除勾选的 {len(selected)} 张图片"):
+        if not self.confirm_list_change(f"是否从列表移除勾选的 {len(selected)} 张图片？\n不删除原文件。"):
             return
         for card in selected:
             self.pdf_image_cards.remove(card)
@@ -4016,6 +3228,8 @@ class ExcelMergerWindow(QMainWindow):
             self.update_pdf_button_states()
 
     def convert_images_to_pdf(self):
+        if not self.pdf_workspace.can_export():
+            return
         try:
             output_file = output_path(
                 self.pdf_image_output_folder_edit.text(),
@@ -4102,6 +3316,7 @@ class ExcelMergerWindow(QMainWindow):
         folder = str(Path(self.pdf_export_source_files[0]).parent / "PDF转图片结果")
         self.pdf_export_output_folder_edit.setText(folder)
         self.pdf_export_output_folder_edit.setToolTip(folder)
+        self.update_pdf_button_states()
 
     def add_pdf_export_sources(self, filenames):
         known = set(self.pdf_export_source_files)
@@ -4172,6 +3387,8 @@ class ExcelMergerWindow(QMainWindow):
             self.update_pdf_button_states()
 
     def export_pdf_to_images(self):
+        if not self.pdf_workspace.can_export():
+            return
         source_files = tuple(self.pdf_export_source_files)
         output_folder = self.pdf_export_output_folder_edit.text()
         image_format = self.pdf_export_format_combo.currentText().lower()
@@ -4198,8 +3415,7 @@ class ExcelMergerWindow(QMainWindow):
             )
             detail = (
                 f"成功 PDF：{success_count} 个\n"
-                f"失败 PDF：{failure_count} 个\n"
-                f"生成图片：{image_count} 张"
+                f"失败 PDF：{failure_count} 个"
             )
             if result.failures:
                 failure_names = "、".join(
@@ -4505,7 +3721,7 @@ class ExcelMergerWindow(QMainWindow):
         if not checked_paths:
             return
 
-        if not self.confirm_list_change("是否删除选中的文件"):
+        if not self.confirm_list_change("是否从列表移除选中的文件？\n不删除原文件。"):
             return
 
         first_deleted_row = min(self.files.index(filename) for filename in checked_paths)
@@ -4572,13 +3788,15 @@ class ExcelMergerWindow(QMainWindow):
         labels = {
             "replace": ("查找文字：", "替换为："),
             "delete_text": ("删除文字：", ""),
-            "prefix": ("前面追加：", ""),
-            "suffix": ("后面追加：", ""),
-            "extension": ("新后缀：", ""),
+            "prefix": ("开头添加：", ""),
+            "suffix": ("末尾添加：", ""),
+            "extension": ("新扩展名：", ""),
             "trim_start": ("删除数量：", ""),
             "trim_end": ("删除数量：", ""),
         }
         primary_label, secondary_label = labels.get(rule, labels["replace"])
+        self.rename_rule_primary_edit.setPlaceholderText("例如 pdf；仅修改扩展名，不转换文件格式" if rule == "extension" else "")
+        self.rename_rule_primary_edit.setToolTip("仅修改文件名中的扩展名，不会转换文件内容或格式。" if rule == "extension" else "")
         self.rename_rule_primary_label.setText(primary_label)
         self.rename_rule_secondary_label.setText(secondary_label)
 
@@ -4793,7 +4011,7 @@ class ExcelMergerWindow(QMainWindow):
             QMessageBox.warning(
                 self,
                 "OCR 密钥未配置",
-                "请先在软件设置中填写所选 OCR 平台的密钥。",
+                "请先在软件设置中填写所选文字识别平台的密钥。",
             )
             return
         pdf_files = tuple(
@@ -4984,7 +4202,7 @@ class ExcelMergerWindow(QMainWindow):
         if failures:
             message.setDetailedText("\n".join(failures))
         open_button = message.addButton("打开日志", QMessageBox.ActionRole)
-        ok_button = message.addButton("确 定", QMessageBox.AcceptRole)
+        ok_button = message.addButton("确定", QMessageBox.AcceptRole)
         for button in (ok_button, open_button):
             button.setFixedSize(112, 36)
         message.setDefaultButton(ok_button)
@@ -5170,7 +4388,7 @@ class ExcelMergerWindow(QMainWindow):
                 "\n".join(f"{Path(path).name}：{error}" for path, error in failures)
             )
         open_button = message.addButton("打开文件夹", QMessageBox.ActionRole)
-        ok_button = message.addButton("确 定", QMessageBox.AcceptRole)
+        ok_button = message.addButton("确定", QMessageBox.AcceptRole)
         for button in (ok_button, open_button):
             button.setFixedSize(112, 36)
         message.setDefaultButton(ok_button)
@@ -5428,7 +4646,7 @@ class ExcelMergerWindow(QMainWindow):
             f"处理日志：\n{result.log_file}"
         )
         open_button = message.addButton("打开文字结果", QMessageBox.ActionRole)
-        ok_button = message.addButton("确 定", QMessageBox.AcceptRole)
+        ok_button = message.addButton("确定", QMessageBox.AcceptRole)
         message.setDefaultButton(ok_button)
         message.exec()
         if message.clickedButton() == open_button:
@@ -5612,6 +4830,10 @@ class ExcelMergerWindow(QMainWindow):
             )
             event.ignore()
             return
+        if not self.pdf_workspace.request_close():
+            event.ignore()
+            return
+        self.pdf_workspace.shutdown()
         super().closeEvent(event)
 
     def finish_document_processing(self, result, error_detail=""):
@@ -5655,7 +4877,7 @@ class ExcelMergerWindow(QMainWindow):
         message.setText(f"已识别为：{doc_type_label}")
         message.setInformativeText(f"结果保存位置：\n{self.document_result_file}")
         open_button = message.addButton("打开结果", QMessageBox.ActionRole)
-        ok_button = message.addButton("确 定", QMessageBox.AcceptRole)
+        ok_button = message.addButton("确定", QMessageBox.AcceptRole)
         for button in (ok_button, open_button):
             button.setFixedSize(112, 36)
         message.setDefaultButton(ok_button)
@@ -5924,7 +5146,7 @@ class ExcelMergerWindow(QMainWindow):
     def choose_split_output_folder(self):
         folder = QFileDialog.getExistingDirectory(
             self,
-            "选择输出文件夹",
+            "选择保存文件夹",
             self.dialog_folder("save", self.split_output_folder),
             QFileDialog.ShowDirsOnly,
         )
@@ -5966,7 +5188,7 @@ class ExcelMergerWindow(QMainWindow):
             f"{format_elapsed_seconds(split_result.average_seconds_per_file)}"
         )
         open_button = message.addButton("打开文件夹", QMessageBox.ActionRole)
-        ok_button = message.addButton("确 定", QMessageBox.AcceptRole)
+        ok_button = message.addButton("确定", QMessageBox.AcceptRole)
         for button in (ok_button, open_button):
             button.setFixedSize(112, 36)
         message.setDefaultButton(ok_button)
@@ -5994,8 +5216,8 @@ class ExcelMergerWindow(QMainWindow):
         if not self.split_output_folder:
             QMessageBox.warning(
                 self,
-                "尚未选择输出文件夹",
-                "请先选择输出文件夹。",
+                "尚未选择保存文件夹",
+                "请先选择保存文件夹。",
             )
             return
 
@@ -6057,8 +5279,8 @@ class ExcelMergerWindow(QMainWindow):
         message.setIcon(QMessageBox.Information)
         message.setText("合并完成")
         message.setInformativeText(f"保存位置：\n{self.output_file}")
-        open_button = message.addButton("打 开 文 件", QMessageBox.ActionRole)
-        ok_button = message.addButton("确 定", QMessageBox.AcceptRole)
+        open_button = message.addButton("打开文件", QMessageBox.ActionRole)
+        ok_button = message.addButton("确定", QMessageBox.AcceptRole)
         for button in (ok_button, open_button):
             button.setFixedSize(112, 36)
         message.setDefaultButton(ok_button)

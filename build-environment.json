@@ -1,0 +1,7 @@
+{
+  "candidate": "V1.5.0 release",
+  "build": "2026101601",
+  "engine": "1.28.5",
+  "binding": "1.28.2",
+  "environment_records": "BUILD_RELEASE.md and packaging/rebuild/requirements-mac-portable.txt / requirements-windows-portable.txt"
+}

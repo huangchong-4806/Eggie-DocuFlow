@@ -40,6 +40,8 @@ def export_tables(tables, output_file):
                 cells = []
                 for value in row:
                     cell = WriteOnlyCell(sheet, value=value)
+                    if isinstance(value, str):
+                        cell.data_type = "s"
                     cell.alignment = Alignment(
                         horizontal="center" if row_number == 1 else "left",
                         vertical="center" if row_number == 1 else "top",

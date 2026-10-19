@@ -15,6 +15,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ui.common_widgets import SelectionComboBox
+
 from api_layer.config import (
     PROVIDER_ENV_KEYS,
     PROVIDER_LABELS,
@@ -54,7 +56,8 @@ class SoftwareSettingsDialog(QDialog):
     ):
         super().__init__(parent)
         self.setWindowTitle("软件设置")
-        self.setMinimumWidth(680)
+        self.setMinimumWidth(700)
+        self.resize(760, 590)
         self._test_thread = None
         self._fields = {}
 
@@ -63,8 +66,10 @@ class SoftwareSettingsDialog(QDialog):
         layout.setSpacing(14)
 
         theme_group = QGroupBox("外观")
+        heading = QLabel("设置"); heading.setProperty("role", "title"); layout.insertWidget(0, heading)
         theme_form = QFormLayout(theme_group)
-        self.theme_combo = QComboBox()
+        theme_form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
+        self.theme_combo = SelectionComboBox()
         for key, label in accent_options:
             self.theme_combo.addItem(label, key)
         theme_index = self.theme_combo.findData(selected_accent)
@@ -72,33 +77,35 @@ class SoftwareSettingsDialog(QDialog):
         theme_form.addRow("主题色调：", self.theme_combo)
         layout.addWidget(theme_group)
 
-        service_group = QGroupBox("第三方服务")
+        service_group = QGroupBox("文字识别服务")
         service_layout = QVBoxLayout(service_group)
         service_layout.setSpacing(12)
 
         introduction = QLabel(
-            "在这里统一管理您自己申请的 OCR 密钥。密钥保存在当前 Mac 用户的"
+            "在这里统一管理您自己申请的文字识别服务密钥。密钥保存在当前用户的"
             "个人配置区，不写入项目、日志或处理结果。仅在您确认后，扫描页"
-            "才会发送给所选平台。文档处理和未来的 PDF 比对共用这套设置。"
+            "才会发送给所选平台。需要云端文字识别的功能共用这套设置。"
         )
         introduction.setWordWrap(True)
         introduction.setProperty("role", "hint")
         service_layout.addWidget(introduction)
 
         provider_row = QHBoxLayout()
-        provider_row.addWidget(QLabel("默认 OCR 平台："))
-        self.provider_combo = QComboBox()
+        provider_row.addWidget(QLabel("默认文字识别平台："))
+        self.provider_combo = SelectionComboBox()
         for key, label in PROVIDER_LABELS.items():
             self.provider_combo.addItem(label, key)
         provider_row.addWidget(self.provider_combo, 1)
         service_layout.addLayout(provider_row)
 
-        credential_group = QGroupBox("密钥信息")
+        credential_group = QWidget()
         credential_layout = QVBoxLayout(credential_group)
         self.credential_stack = QStackedWidget()
         for provider in PROVIDER_LABELS:
             page = QWidget()
             form = QFormLayout(page)
+            form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
+            form.setVerticalSpacing(14)
             keys = PROVIDER_ENV_KEYS[provider]
             labels = (
                 ("API Key", "Secret Key")
@@ -108,6 +115,7 @@ class SoftwareSettingsDialog(QDialog):
             provider_fields = []
             for label, key in zip(labels, keys):
                 field = QLineEdit()
+                field.setMinimumWidth(350)
                 field.setEchoMode(QLineEdit.Password)
                 field.setPlaceholderText(f"请填写 {label}")
                 form.addRow(f"{label}：", field)
@@ -134,8 +142,9 @@ class SoftwareSettingsDialog(QDialog):
 
         buttons = QHBoxLayout()
         self.delete_button = QPushButton("删除本机密钥")
+        self.delete_button.setProperty("variant", "danger")
         self.test_button = QPushButton("保存并测试连接")
-        self.save_button = QPushButton("保存当前平台密钥")
+        self.save_button = QPushButton("保存密钥")
         self.save_button.setProperty("variant", "primary")
         buttons.addWidget(self.delete_button)
         buttons.addStretch(1)
@@ -219,14 +228,14 @@ class SoftwareSettingsDialog(QDialog):
         except Exception as error:
             QMessageBox.warning(self, "无法保存", str(error))
             return
-        self.status_label.setText("密钥已安全保存在本机个人配置区。")
+        self.status_label.setText("密钥已安全保存在本机个人配置中。")
 
     def _delete_current_credentials(self):
         provider = self.selected_provider
         answer = QMessageBox.question(
             self,
             "删除本机密钥",
-            f"确定删除 {PROVIDER_LABELS[provider]} 在这台 Mac 上保存的密钥吗？\n"
+            f"确定删除 {PROVIDER_LABELS[provider]} 在本机上保存的密钥吗？\n"
             "这不会删除您在云平台上的账号或密钥。",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No,
@@ -236,7 +245,7 @@ class SoftwareSettingsDialog(QDialog):
         delete_credentials(provider)
         for field in self._fields[provider]:
             field.clear()
-        self.status_label.setText("这台 Mac 上保存的密钥已删除。")
+        self.status_label.setText("本机上保存的密钥已删除。")
 
     def _test_connection(self):
         provider = self.selected_provider

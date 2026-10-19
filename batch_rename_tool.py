@@ -345,6 +345,17 @@ def _log_path(folder):
     return Path(folder) / f"批量改名日志_{timestamp}.txt"
 
 
+def _open_action_log(folder):
+    base = _log_path(folder)
+    for number in range(10000):
+        path = base if number == 0 else base.with_name(f"{base.stem}_{number}{base.suffix}")
+        try:
+            return path, path.open("x", encoding="utf-8")
+        except FileExistsError:
+            continue
+    raise FileExistsError("无法创建不重复的改名日志，请稍后重试。")
+
+
 def _write_action_log(handle, index, preview, status, error, metadata=None):
     handle.write(f"序号：{index}\n")
     handle.write(f"处理时间：{datetime.now().isoformat(timespec='seconds')}\n")
@@ -373,10 +384,10 @@ def apply_renames(
 
     log_folder = Path(log_folder or Path(previews[0].source_path).parent)
     log_folder.mkdir(parents=True, exist_ok=True)
-    log_file = _log_path(log_folder)
+    log_file, log_handle = _open_action_log(log_folder)
     actions = []
 
-    with log_file.open("w", encoding="utf-8") as handle:
+    with log_handle as handle:
         handle.write("批量改名操作日志\n")
         handle.write(f"生成时间：{datetime.now().isoformat(timespec='seconds')}\n")
         handle.write(f"文件数量：{len(previews)}\n")

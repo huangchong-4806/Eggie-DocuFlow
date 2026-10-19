@@ -27,6 +27,21 @@ class BatchRenameToolTests(unittest.TestCase):
         path.write_text(name, encoding="utf-8")
         return path
 
+    def test_two_actions_in_same_second_keep_both_logs(self):
+        from datetime import datetime
+        first = self.write_file('one.txt')
+        second = self.write_file('two.txt')
+        with patch('batch_rename_tool.datetime') as clock:
+            clock.now.return_value = datetime(2026, 10, 12, 12, 0, 0)
+            a = apply_renames(preview_renames([first], RenameOptions(prefix='new_')))
+            original_log = Path(a.log_file).read_bytes()
+            b = apply_renames(preview_renames([second], RenameOptions(prefix='new_')))
+        self.assertNotEqual(a.log_file, b.log_file)
+        self.assertEqual(Path(a.log_file).read_bytes(), original_log)
+        self.assertIn('two.txt', Path(b.log_file).read_text(encoding="utf-8"))
+        self.assertTrue((self.root / 'new_one.txt').exists())
+        self.assertTrue((self.root / 'new_two.txt').exists())
+
     def test_preview_replaces_adds_number_and_changes_extension(self):
         source = self.write_file("订单草稿.txt")
         options = RenameOptions(

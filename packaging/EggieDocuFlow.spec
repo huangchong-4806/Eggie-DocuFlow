@@ -1,6 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 from pathlib import Path
+from PyInstaller.utils.hooks import copy_metadata
 
 
 PROJECT_ROOT = Path(SPECPATH).parent
@@ -8,6 +9,10 @@ APP_BASENAME = "Eggie DocuFlow"
 version_scope = {}
 exec((PROJECT_ROOT / "version.py").read_text(encoding="utf-8"), version_scope)
 APP_VERSION = version_scope["APP_VERSION"]
+LICENSE_METADATA = []
+for package in ("openpyxl", "pdfplumber", "pypdf", "Pillow", "pypdfium2", "PyMuPDF",
+                "PySide6-Essentials", "alibabacloud_ocr_api20210707"):
+    LICENSE_METADATA += copy_metadata(package, recursive=True)
 
 EXCLUDED_BINARY_PATHS = {
     "PySide6/QtNetwork.abi3.so",
@@ -65,6 +70,11 @@ a = Analysis(
     pathex=[str(PROJECT_ROOT)],
     binaries=[],
     datas=[
+        (str(PROJECT_ROOT / "LICENSE"), "."),
+        (str(PROJECT_ROOT / "THIRD_PARTY_NOTICES.md"), "."),
+        (str(PROJECT_ROOT / "release_notes_v1.5.0.md"), "."),
+        (str(PROJECT_ROOT / "BUILD_RELEASE.md"), "."),
+        (str(PROJECT_ROOT / "licenses"), "licenses"),
         (str(PROJECT_ROOT / "assets" / "software_logo.png"), "assets"),
         (str(PROJECT_ROOT / "assets" / "app_icon.png"), "assets"),
         (str(PROJECT_ROOT / "assets" / "app_icon.icns"), "assets"),
@@ -81,7 +91,7 @@ a = Analysis(
             str(PROJECT_ROOT / "assets" / "zh-Hant.lproj" / "InfoPlist.strings"),
             "zh-Hant.lproj",
         ),
-    ],
+    ] + LICENSE_METADATA,
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -136,12 +146,12 @@ app = BUNDLE(
         "CFBundleDisplayName": APP_BASENAME,
         "CFBundleName": APP_BASENAME,
         "CFBundleShortVersionString": APP_VERSION,
-        "CFBundleVersion": "11",
+        "CFBundleVersion": version_scope["BUILD_NUMBER"],
         "CFBundleAllowMixedLocalizations": True,
         "CFBundleDevelopmentRegion": "zh-Hans",
         "CFBundleLocalizations": ["en", "zh-Hans", "zh-Hant"],
         "LSHasLocalizedDisplayName": True,
-        "LSMinimumSystemVersion": "11.0",
+        "LSMinimumSystemVersion": "15.0",
         "CFBundleDocumentTypes": [
             {
                 "CFBundleTypeName": "PDF Document",

@@ -26,6 +26,15 @@ class DocumentRouterTests(unittest.TestCase):
     def tearDown(self):
         self.temporary_directory.cleanup()
 
+    def test_exported_formula_looking_text_remains_literal(self):
+        from exporters.excel_exporter import export_tables
+        output = export_tables([(1, 1, [['说明', '编号'], ['=1+1', '001234567890123456789']])], self.root / 'literal.xlsx')
+        w = load_workbook(output)
+        self.addCleanup(w.close)
+        self.assertEqual(w.active['A2'].data_type, 's')
+        self.assertEqual(w.active['A2'].value, '=1+1')
+        self.assertEqual(w.active['B2'].value, '001234567890123456789')
+
     def test_root_module_remains_the_single_compatible_entry(self):
         self.assertIs(document_router.detect_doc_type, detect_doc_type)
         self.assertIs(document_router.process_document, process_document)

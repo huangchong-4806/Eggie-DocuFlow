@@ -1,5 +1,8 @@
 import os
+import subprocess
+import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -16,7 +19,7 @@ from app import ClearSpinBox, ExcelMergerWindow, PdfImageCard, PdfPageCard
 from batch_processing_tool import BatchPreview
 from ocr_settings_dialog import SoftwareSettingsDialog
 from pdf_toolbox import PdfToolResult
-from version import APP_VERSION
+from version import APP_VERSION, BUILD_TYPE
 
 
 class AppNavigationTests(unittest.TestCase):
@@ -30,6 +33,16 @@ class AppNavigationTests(unittest.TestCase):
     def tearDown(self):
         self.window.close()
         self.window.pdf_thumbnail_tempdir.cleanup()
+
+    def test_split_modes_keep_legacy_controls_and_expose_category_page(self):
+        self.window.show_split_tool()
+        tabs = self.window.split_mode_tabs
+        self.assertEqual(tabs.count(), 2)
+        self.window.split_rows_per_file_spinbox.setValue(123)
+        tabs.setCurrentIndex(1)
+        self.assertIs(tabs.currentWidget(), self.window.category_split_page)
+        tabs.setCurrentIndex(0)
+        self.assertEqual(self.window.split_rows_per_file_spinbox.value(), 123)
 
     def test_theme_module_is_the_canonical_source(self):
         import app
@@ -145,7 +158,7 @@ class AppNavigationTests(unittest.TestCase):
 
         self.assertIs(app.ClearSpinBox, ClearSpinBox)
         self.assertIs(app.SelectionComboBox, SelectionComboBox)
-        self.assertEqual(len(self.window.findChildren(ClearSpinBox)), 11)
+        self.assertGreaterEqual(len(self.window.findChildren(ClearSpinBox)), 12)
         self.assertIsInstance(self.window.pdf_export_format_combo, SelectionComboBox)
         self.assertIsInstance(self.window.pdf_export_quality_combo, SelectionComboBox)
 
@@ -157,7 +170,7 @@ class AppNavigationTests(unittest.TestCase):
         self.assertIs(app.PdfImageCard, PdfImageCard)
         self.assertIs(app.PdfPageBoard, PdfPageBoard)
         self.assertIs(app.PdfImageBoard, PdfImageBoard)
-        self.assertIsInstance(self.window.pdf_page_board, PdfPageBoard)
+        self.assertIsInstance(self.window.pdf_workspace.pdf_page_board, PdfPageBoard)
         self.assertIsInstance(self.window.pdf_image_board, PdfImageBoard)
 
     def test_pdf_widgets_share_only_common_base_behavior(self):
@@ -211,7 +224,7 @@ class AppNavigationTests(unittest.TestCase):
         }
         self.assertNotIn("返回工具首页", button_texts)
         self.assertNotIn("打开 Excel 合并", button_texts)
-        self.assertEqual(len(self.window.findChildren(ClearSpinBox)), 11)
+        self.assertGreaterEqual(len(self.window.findChildren(ClearSpinBox)), 12)
         self.assertEqual(self.window.stack.count(), 9)
         self.assertIn("仅提取文字", button_texts)
         self.assertIn("前往设置", button_texts)
@@ -220,20 +233,22 @@ class AppNavigationTests(unittest.TestCase):
         self.assertNotIn("ocr", self.window.nav_buttons)
 
     def test_pdf_enhancement_tabs_start_in_safe_states(self):
-        self.assertEqual(self.window.pdf_tabs.count(), 7)
+        self.assertEqual(self.window.pdf_tabs.count(), 3)
         self.assertEqual(
-            [self.window.pdf_tabs.tabText(index) for index in range(7)],
+            [self.window.pdf_tabs.tabText(index) for index in range(3)],
+            ["页面编辑", "内容编辑", "独立工具"],
+        )
+        self.assertEqual(
+            [self.window.pdf_more_tabs.tabText(index) for index in range(5)],
             [
-                "页面整理",
                 "PDF 压缩",
                 "图片 / PDF 互转",
-                "水印与页码",
                 "PDF 密码",
                 "可搜索 PDF",
                 "文字对比",
             ],
         )
-        self.assertFalse(self.window.pdf_marks_start_button.isEnabled())
+        self.assertFalse(self.window.pdf_workspace.export_button.isEnabled())
         self.assertFalse(self.window.pdf_security_start_button.isEnabled())
         self.assertFalse(self.window.pdf_searchable_start_button.isEnabled())
         self.assertFalse(self.window.pdf_compare_start_button.isEnabled())
@@ -242,7 +257,7 @@ class AppNavigationTests(unittest.TestCase):
         self.window.pdf_security_mode_combo.setCurrentIndex(1)
         self.assertTrue(self.window.pdf_new_password_edit.isHidden())
 
-    def test_home_cards_remove_badges_and_enlarge_open_buttons(self):
+    def test_home_has_eight_accessible_compact_tool_entries(self):
         home_labels = {
             label.text() for label in self.window.home_page.findChildren(QLabel)
         }
@@ -250,7 +265,7 @@ class AppNavigationTests(unittest.TestCase):
         open_buttons = [
             button
             for button in self.window.home_page.findChildren(QPushButton)
-            if button.text() == "打开"
+            if button.property("variant") == "toolEntry"
         ]
 
         self.assertIsNotNone(self.window.home_logo_label.pixmap())
@@ -260,13 +275,17 @@ class AppNavigationTests(unittest.TestCase):
             label.text() for label in self.window.findChildren(QLabel)
         )
         self.assertEqual(window_text.count(f"版本 {APP_VERSION}"), 1)
+        if BUILD_TYPE == "development":
+            self.assertIn(f"版本 {APP_VERSION}（开发版）", window_text)
+        elif BUILD_TYPE == "release_candidate":
+            self.assertIn(f"版本 {APP_VERSION}（发布候选版）", window_text)
         self.assertTrue(
             {"常用", "清晰", "台账", "识别", "安全", "多功能"}.isdisjoint(home_labels)
         )
         self.assertEqual(len(open_buttons), 8)
         self.assertTrue(
             all(
-                button.minimumWidth() >= 112 and button.minimumHeight() >= 44
+                bool(button.accessibleName()) and button.minimumHeight() >= 90
                 for button in open_buttons
             )
         )
@@ -301,32 +320,19 @@ class AppNavigationTests(unittest.TestCase):
         self.assertIn("扫描合同.pdf：第 2、4 页", question.call_args.args[2])
 
     def test_pdf_organizer_actions_share_one_toolbar(self):
-        toolbar_buttons = (
-            self.window.pdf_add_button,
-            self.window.pdf_clear_button,
-            self.window.pdf_check_all_button,
-            self.window.pdf_uncheck_all_button,
-            self.window.pdf_move_previous_button,
-            self.window.pdf_move_next_button,
-            self.window.pdf_rotate_left_button,
-            self.window.pdf_rotate_right_button,
-            self.window.pdf_rotate_180_button,
-            self.window.pdf_delete_pages_button,
-            self.window.pdf_split_selected_button,
-        )
+        workspace = self.window.pdf_workspace
+        labels = {action.text() for action in workspace.page_toolbar.actions()}
+        self.assertTrue({"全选", "取消全选", "前移", "后移", "左转", "右转", "转 180°", "删除", "提取"} <= labels)
+        self.assertNotIn("另存 PDF", labels)
+        self.assertEqual(workspace.export_button.text(), "另存 PDF")
 
-        self.assertTrue(
-            all(
-                self.window.pdf_organizer_button_layout.indexOf(button) >= 0
-                for button in toolbar_buttons
-            )
-        )
-        self.assertEqual(
-            self.window.pdf_organizer_button_layout.indexOf(
-                self.window.pdf_save_pages_button
-            ),
-            -1,
-        )
+    def test_more_tools_cannot_bypass_pending_redaction_guard(self):
+        from pdf_workspace import RedactionMark
+        self.window.pdf_workspace.state.marks = [RedactionMark("m", "page", ((1, 1, 2, 2),))]
+        with patch.object(self.window.pdf_workspace, "show_error") as error, patch.object(self.window, "start_background_task") as start, patch("app.QMessageBox.critical"):
+            self.window.compress_selected_pdf()
+        error.assert_called_once()
+        start.assert_not_called()
 
     def test_batch_limits_are_visible_before_adding_files(self):
         self.assertEqual(
@@ -334,11 +340,7 @@ class AppNavigationTests(unittest.TestCase):
             "当前 0 / 300 张；处理数量越多，处理速度越慢，"
             "请酌情拆分任务",
         )
-        self.assertEqual(
-            self.window.pdf_page_limit_label.text(),
-            "当前 0 / 1,000 页；处理数量越多，处理速度越慢，"
-            "请酌情拆分任务",
-        )
+        self.assertIn("当前 0 / 1,000 页", self.window.pdf_workspace.page_limit_label.text())
         self.assertEqual(
             self.window.rename_limit_label.text(),
             "当前 0 / 20,000 个文件；处理数量越多，处理速度越慢，"
@@ -410,6 +412,86 @@ class AppNavigationTests(unittest.TestCase):
             self.assertEqual(card.thumbnail_cache.cacheKey(), first_key)
             card.deleteLater()
 
+    def test_first_pdf_export_addition_enables_conversion_for_files_and_folder(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            source = root / "source.pdf"
+            writer = PdfWriter()
+            writer.add_blank_page(width=100, height=100)
+            with source.open("wb") as output:
+                writer.write(output)
+            for mode in ("files", "folder"):
+                with self.subTest(mode=mode):
+                    self.window.pdf_export_source_files = []
+                    self.window.pdf_export_output_folder_edit.clear()
+                    self.window.refresh_pdf_export_source_tree()
+                    self.assertFalse(self.window.pdf_export_button.isEnabled())
+                    with patch.object(self.window, "remember_dialog_folder"), patch.object(
+                            self.window, "dialog_folder", return_value=str(root)), patch(
+                            "app.QFileDialog.getOpenFileNames", return_value=([str(source)], "")), patch(
+                            "app.QFileDialog.getExistingDirectory", return_value=str(root)):
+                        if mode == "files":
+                            self.window.choose_pdf_export_source()
+                        else:
+                            self.window.choose_pdf_export_source_folder()
+                    self.assertTrue(self.window.pdf_export_output_folder_edit.text())
+                    self.assertTrue(self.window.pdf_export_button.isEnabled())
+
+    def test_pdf_export_completion_reports_image_count_once(self):
+        result = PdfToolResult("", "result.log", image_files=("one.png", "two.png", "three.png"),
+                               source_files=("source.pdf",))
+        with patch.object(self.window, "start_background_task") as start:
+            self.window.export_pdf_to_images()
+        completed = start.call_args.args[3]
+        with patch("app.QMessageBox.exec", return_value=0), patch(
+                "app.QMessageBox.setInformativeText") as text:
+            completed(result)
+        detail = text.call_args.args[0]
+        self.assertEqual(detail.count("生成图片：3 张"), 1)
+        self.assertIn("成功 PDF：1 个", detail)
+        self.assertIn("失败 PDF：0 个", detail)
+
+    def test_pdf_images_work_without_external_qt_image_plugins(self):
+        # A fresh process prevents earlier tests from caching the JPEG plugin.
+        script = '''
+import tempfile
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
+from PIL import Image
+from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import QCoreApplication
+from PySide6.QtGui import QImageReader
+from app import ExcelMergerWindow
+from ui.pdf_widgets import PdfImageCard
+from pdf_toolbox import prepare_image_thumbnail
+app = QApplication([])
+QCoreApplication.setLibraryPaths([])
+assert b'jpeg' not in [bytes(fmt) for fmt in QImageReader.supportedImageFormats()]
+with tempfile.TemporaryDirectory() as folder:
+    root = Path(folder)
+    source = root / 'source.png'
+    Image.new('RGBA', (80, 80), (0, 0, 0, 0)).save(source)
+    preview = prepare_image_thumbnail(source, root / 'preview.png')
+    window = ExcelMergerWindow()
+    card = PdfImageCard(window, str(source), preview)
+    card.update_display(1)
+    assert not card.thumbnail_cache.isNull(), 'thumbnail unavailable without JPEG plugin'
+    assert card.thumbnail_cache.toImage().pixelColor(5, 5).red() == 255
+    for extension in ('jpg', 'tiff', 'webp'):
+        original = root / ('original.' + extension)
+        Image.new('RGB', (80, 80), 'blue').save(original)
+        with patch('app.QDialog.exec', return_value=0) as opened, patch('app.QMessageBox.warning') as warning:
+            window.preview_pdf_image(SimpleNamespace(image_file=str(original)))
+        assert opened.called, 'original preview unavailable: ' + extension
+        warning.assert_not_called()
+    window.close()
+    window.pdf_thumbnail_tempdir.cleanup()
+'''
+        result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True,
+                                cwd=Path(__file__).resolve().parents[1], timeout=30)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_pdf_image_addition_runs_in_background_and_updates_visible_count(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
             source = Path(temporary_directory) / "source.png"
@@ -452,6 +534,57 @@ class AppNavigationTests(unittest.TestCase):
             self.assertFalse(started)
             self.assertEqual(self.window.pdf_image_cards, existing)
             self.assertIsNone(self.window.background_task_thread)
+
+    def test_pdf_image_addition_reports_duplicates_separately_from_unusable_files(self):
+        from PIL import Image
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            existing = root / "existing.png"
+            new = root / "new.png"
+            invalid = root / "invalid.txt"
+            corrupt = root / "corrupt.png"
+            Image.new("RGB", (20, 20), "blue").save(existing)
+            Image.new("RGB", (20, 20), "red").save(new)
+            invalid.write_text("not an image")
+            corrupt.write_bytes(b"not an image")
+            cases = (
+                ("all duplicate", [existing], 0, 0),
+                ("duplicate and new", [existing, new], 1, 0),
+                ("duplicate and invalid", [existing, invalid], 0, 1),
+                ("duplicate and corrupt image", [existing, corrupt], 0, 1),
+            )
+            for name, files, added, skipped in cases:
+                with self.subTest(case=name):
+                    for card in self.window.pdf_image_cards:
+                        card.setParent(None)
+                        card.deleteLater()
+                    original_card = PdfImageCard(self.window, str(existing))
+                    self.window.pdf_image_cards = [original_card]
+                    self.window.refresh_pdf_image_cards_layout()
+                    self.window.refresh_pdf_image_cards()
+                    def run_task(title, message, worker, completed, *args, **kwargs):
+                        completed(worker(lambda *progress: None))
+                        return True
+                    with patch("app.QMessageBox.information") as information, patch.object(
+                            self.window, "start_background_task", side_effect=run_task):
+                        self.window.start_adding_pdf_images(files)
+                    self.assertIsNone(self.window.background_task_thread)
+                    self.assertEqual(len(self.window.pdf_image_cards), 1 + added)
+                    self.assertIs(self.window.pdf_image_cards[0], original_card)
+                    status = self.window.pdf_image_status_label.text()
+                    self.assertIn(f"本次新增 {added} 张图片", status)
+                    self.assertIn("忽略 1 个重复项", status)
+                    if skipped:
+                        self.assertIn("跳过 1 个非图片或无法读取文件", status)
+                    else:
+                        self.assertNotIn("无法读取", status)
+                    if not added:
+                        information.assert_called_once()
+                        self.assertIn("没有新增图片", information.call_args.args[1])
+                        self.assertIn("忽略 1 个重复项", information.call_args.args[2])
+                        self.assertNotIn("没有找到可用图片", information.call_args.args[2])
+                    else:
+                        information.assert_not_called()
 
     def test_pdf_page_card_reuses_cached_thumbnail(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -503,17 +636,14 @@ class AppNavigationTests(unittest.TestCase):
             card.deleteLater()
 
     def test_pdf_page_hard_limit_rejects_before_rendering(self):
-        with patch("app.QMessageBox.warning"), patch.object(
-            self.window, "start_rendering_pdf_pages"
-        ) as render:
-            accepted = self.window.pdf_page_count_checked(
-                ("/tmp/large.pdf",),
-                (("/tmp/large.pdf", 1001),),
-            )
-
-        self.assertFalse(accepted)
+        from pdf_workspace import WorkspacePage
+        workspace = self.window.pdf_workspace
+        workspace._jobs[1] = ("open", (("/tmp/large.pdf",), [], False))
+        with patch.object(workspace, "show_error") as error, patch.object(workspace, "request_visible_previews") as render:
+            workspace._completed(1, 0, [WorkspacePage(str(i), "source", i) for i in range(1001)])
+        error.assert_called_once()
         render.assert_not_called()
-        self.assertEqual(self.window.pdf_page_cards, [])
+        self.assertEqual(workspace.state.pages, [])
 
     def test_rename_rule_changes_are_debounced(self):
         with patch.object(self.window, "refresh_rename_file_list") as refresh:
@@ -593,19 +723,29 @@ class AppNavigationTests(unittest.TestCase):
 
     def test_window_refuses_to_close_while_background_task_is_running(self):
         worker = QThread(self.window)
-        worker.run = lambda: QThread.msleep(200)
+        started = threading.Event()
+        release = threading.Event()
+
+        def keep_running_until_close_check_finishes():
+            started.set()
+            release.wait()
+
+        worker.run = keep_running_until_close_check_finishes
         self.window.document_ocr_thread = worker
         worker.start()
-        self.window.show()
-        self.application.processEvents()
-
-        with patch("app.QMessageBox.warning") as warning:
-            closed = self.window.close()
-
-        self.assertFalse(closed)
-        warning.assert_called_once()
-        worker.wait()
-        self.window.document_ocr_thread = None
+        try:
+            self.assertTrue(started.wait(5), "Background test worker did not start")
+            self.window.show()
+            self.application.processEvents()
+            with patch("app.QMessageBox.warning") as warning:
+                closed = self.window.close()
+            self.assertFalse(closed)
+            warning.assert_called_once()
+        finally:
+            release.set()
+            worker.wait()
+            self.window.document_ocr_thread = None
+        self.assertTrue(self.window.close())
 
     def test_global_progress_keeps_the_window_responsive(self):
         timer_fired = []
@@ -739,8 +879,8 @@ class AppNavigationTests(unittest.TestCase):
 
             self.assertEqual(dialog.windowTitle(), "软件设置")
             self.assertIn("外观", group_titles)
-            self.assertIn("第三方服务", group_titles)
-            self.assertIn("保存当前平台密钥", button_texts)
+            self.assertIn("文字识别服务", group_titles)
+            self.assertIn("保存密钥", button_texts)
             self.assertIn("保存并测试连接", button_texts)
             dialog.close()
 
@@ -766,11 +906,7 @@ class AppNavigationTests(unittest.TestCase):
             self.assertEqual(self.window.pdf_export_source_tree.topLevelItemCount(), 2)
             self.assertEqual(self.window.pdf_export_quality_combo.currentData(), 300)
             self.assertEqual(self.window.pdf_export_button.text(), "开始转换")
-            self.assertEqual(self.window.pdf_save_pages_button.text(), "保存结果")
-            self.assertEqual(
-                self.window.pdf_save_pages_button.parent().title(),
-                "输出设置",
-            )
+            self.assertEqual(self.window.pdf_workspace.export_button.text(), "另存 PDF")
             self.assertTrue(self.window.pdf_clear_export_sources_button.isEnabled())
 
     def test_pdf_export_folder_adds_only_direct_pdf_files(self):

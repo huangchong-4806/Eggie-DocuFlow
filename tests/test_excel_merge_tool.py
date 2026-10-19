@@ -432,5 +432,76 @@ class ExcelMergeToolTests(unittest.TestCase):
         self.assertEqual(list(output_folder.iterdir()), [])
 
 
+    def formula_sample(self, name, formula, row=4):
+        path = self.root / name
+        w = Workbook(); s = w.active; s.title = "明细"
+        for values in [("金额", "计算"), (10,), (20,), (30,)]: s.append(values)
+        s.cell(row, 2, formula)
+        w.create_sheet("参数")["A1"] = 123
+        w.save(path); w.close()
+        return path
+
+    def test_unsafe_split_formula_dependencies_leave_no_output(self):
+        formulas = ["=参数!A1", "=A$4", "=A2", "=SUM(A2:A4)",
+                    '=INDIRECT("A4")', '=OFFSET(A4,0,0)', '=NamedAmount',
+                    '=SUM(A:A)', '=ROW()', '=CELL("filename")',
+                    '=SUM(明细:参数!A1)', '=Table1[金额]', "='[other.xlsx]明细'!A1"]
+        for index, formula in enumerate(formulas):
+            with self.subTest(formula=formula):
+                source = self.formula_sample(f"unsafe{index}.xlsx", formula)
+                before = source.read_bytes()
+                folder = self.root / f"out{index}"; folder.mkdir()
+                with self.assertRaisesRegex(ValueError, "公式"):
+                    split_workbook_by_rows(source, folder, 1, 1)
+                self.assertEqual(list(folder.iterdir()), [])
+                self.assertEqual(source.read_bytes(), before)
+
+    def test_unsafe_merge_formula_dependencies_preserve_existing_output(self):
+        first = self.formula_sample("first.xlsx", "=A4")
+        formulas = ["=参数!A1", "=$A$4", "=A1", '=INDIRECT("A4")', '=NamedAmount']
+        for index, formula in enumerate(formulas):
+            with self.subTest(formula=formula):
+                second = self.formula_sample(f"second{index}.xlsx", formula)
+                output = self.root / "existing.xlsx"; output.write_bytes(b"existing output")
+                before = second.read_bytes()
+                with self.assertRaisesRegex(ValueError, "公式"):
+                    build_merged_workbook([first, second], output, skip_rows=1)
+                self.assertEqual(output.read_bytes(), b"existing output")
+                self.assertEqual(second.read_bytes(), before)
+                self.assertEqual(list(self.root.glob('.existing-*.xlsx')), [])
+
+    def test_header_formula_cannot_depend_on_another_split_part(self):
+        source = self.formula_sample("header-formula.xlsx", "=SUM(A2:A4)", row=1)
+        folder = self.root / "header-out"; folder.mkdir()
+        with self.assertRaisesRegex(ValueError, "公式"):
+            split_workbook_by_rows(source, folder, 1, 1)
+        self.assertEqual(list(folder.iterdir()), [])
+
+    def test_compatibility_merge_also_blocks_missing_dependencies(self):
+        source = self.formula_sample("merged-unsafe.xlsx", "=参数!A1")
+        w = load_workbook(source); w.active.merge_cells("C1:D1"); w.save(source); w.close()
+        output = self.root / "result.xlsx"
+        with self.assertRaisesRegex(ValueError, "公式"):
+            build_merged_workbook([source], output)
+        self.assertFalse(output.exists())
+
+    def test_safe_merge_cross_row_range_is_preserved_when_all_rows_move_together(self):
+        first = self.formula_sample("base.xlsx", "=A4")
+        second = self.formula_sample("range.xlsx", "=SUM(A2:A4)")
+        output = self.root / "range-result.xlsx"
+        build_merged_workbook([first, second], output, skip_rows=1)
+        w = load_workbook(output)
+        self.assertEqual(w.active["B7"].value, "=SUM(A5:A7)")
+        w.close()
+
+    def test_safe_split_formula_references_remain_supported(self):
+        source = self.formula_sample("safe.xlsx", '=IF(A4>0,SUM($A4:A4)+$A$1,0)')
+        folder = self.root / "safe-out"; folder.mkdir()
+        result = split_workbook_by_rows(source, folder, 1, 1)
+        w = load_workbook(result.output_files[-1])
+        self.assertEqual(w.active['B2'].value, '=IF(A2>0,SUM($A2:A2)+$A$1,0)')
+        w.close()
+
+
 if __name__ == "__main__":
     unittest.main()

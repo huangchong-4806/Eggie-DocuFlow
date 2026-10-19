@@ -1,26 +1,38 @@
 # Eggie DocuFlow｜免费的 Excel 与 PDF 桌面处理工具
 
-![Version](https://img.shields.io/badge/version-1.4.0-blue)
+![Version](https://img.shields.io/badge/version-1.5.0-blue)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-blue)
 
-Eggie文档处理系统无需安装 Python，下载后即可使用。适合日常办公中的 Excel
-合并、拆分与数据清理、PDF 发票解析、批量处理、文件改名和 PDF 页面整理。
+无需安装Python，下载即可使用。提供Excel合并、按行数或分类拆分、数据清理、PDF编辑、发票解析和批量改名。
 
-- 免费使用，支持 macOS 与 Windows
-- Excel 与 PDF 默认在本机处理；只有用户主动启用 OCR 时，扫描页才会发送给所选服务商
-- Excel 与 PDF 处理保留原文件并生成新结果；文件改名必须先预览再执行
-- macOS 当前仅支持 Apple 芯片和 macOS 11 及以上版本；Windows 支持 64 位 Windows 10/11
+## 下载 V1.5.0
 
-## 直接下载 V1.4.0 / Direct Download
+- [Mac版：Apple芯片，macOS15及以上](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/download/v1.5.0/EggieDocuFlow_V1.5.0_mac_arm64.zip)
+- [Windows版：64位安装包](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/download/v1.5.0/EggieDocuFlow_V1.5.0_Windows_x64_Setup.exe)
+- [更新说明与已知限制](release_notes_v1.5.0.md)
+- [源码、第三方源码材料与校验清单](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/tag/v1.5.0)
 
-- [下载 Mac 版（Apple 芯片，ZIP）](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/download/v1.4.0/EggieDocuFlow_V1.4.0_mac.zip)
-- [下载 Windows 版（64 位安装包）](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/download/v1.4.0/EggieDocuFlow_V1.4.0_Windows_x64_Setup.exe)
+Mac未做Apple开发者签名与公证，Windows未做发布者证书签名，系统可能阻止启动。只从本仓库下载；若提示“已损坏”等异常，请停止使用并反馈。macOS15、其他Mac及普通Intel/AMD Windows电脑未实测；Windows本轮验收环境是Windows11 ARM虚拟机运行x64。
 
-> Mac 版暂未经过 Apple 公证。首次打开被阻止时，请在 Finder 中右键 App，选择“打开”，再确认“打开”。
->
-> 部分 Windows 电脑可能显示“Windows 已保护你的电脑”或“未知发布者”。如果出现，请确认安装包来自本页，再选择“更多信息”→“仍要运行”。
->
-> 请只从本仓库发布页下载安装包，不要下载页面底部由 GitHub 自动生成的 Source code。
+Excel和PDF默认在本机处理并另存结果；文件改名先预览再执行。仅用户主动配置、启用并确认云OCR后，扫描页才会发送给服务商。
+
+## V1.5.0 主要变化
+
+- **Excel分类拆分**：按一列或多列分组，可选“每类一个文件”或“合并到一个文件”。
+- **先预览再拆分**：核对类别、记录数和名称；检测筛选或隐藏行后提示范围，执行前再次确认。分类模式将公式转为源文件已保存结果。
+- **PDF编辑**：插入、删除、排序、旋转、提取、撤销重做、涂黑、文字/图片水印和页码。
+- **界面与数据保护**：简化文字和布局，修复图片预览、同名保护、引用处理及长编号等问题。
+
+本轮未完成密码设置/移除完整原生操作和真实云OCR实测。涂黑无法可靠处理的结构会拒绝输出，但不保证任意PDF均可安全脱敏。PDF独立工具须另选输入；处理编辑结果时先另存新副本。
+
+## 保留 V1.4.0 下载
+
+- [V1.4.0 Mac（Apple芯片）](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/download/v1.4.0/EggieDocuFlow_V1.4.0_mac.zip)
+- [V1.4.0 Windows](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/download/v1.4.0/EggieDocuFlow_V1.4.0_Windows_x64_Setup.exe)
+
+V1.4.0原Mac说明为macOS11及以上；本次未重新验收旧版。需要旧版时请保留设置和原文件，不把回退软件视为撤销处理结果。
+
+开源许可及第三方声明见[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。原MIT授权和署名保留，包含PyMuPDF/MuPDF的组合应用按AGPLv3分发。
 
 ## 功能概览 / Features Overview
 
@@ -82,21 +94,23 @@ The current release focuses on:
 
 如果你只是想直接使用软件，不需要安装 Python，也不需要运行源码。
 
-1. Mac：下载 ZIP，解压后运行 `EggieDocuFlow_V1.4.0_mac.app`
-2. Windows：下载安装包并运行 `EggieDocuFlow_V1.4.0_Windows_x64_Setup.exe`，完成安装后从桌面或开始菜单打开软件
+1. Mac：下载V1.5.0 ZIP，解压后将 `Eggie DocuFlow.app` 放入“应用程序”目录。旧版V1.4.0的应用名为 `EggieDocuFlow_V1.4.0_mac.app`。
+2. Windows：下载安装包并运行 `EggieDocuFlow_V1.5.0_Windows_x64_Setup.exe`，完成安装后从桌面或开始菜单打开软件
 3. 本版本未做 Apple 公证；如果 macOS 阻止打开，请在 Finder 中右键 App，选择“打开”，再确认“打开”
 
 If you only want to use the application, you do not need to install Python or
 run the source code.
 
-1. On macOS, download and extract the ZIP, then launch `EggieDocuFlow_V1.4.0_mac.app`
-2. On Windows, run `EggieDocuFlow_V1.4.0_Windows_x64_Setup.exe`, then launch the app from the desktop or Start menu
+1. On macOS, extract the V1.5.0 ZIP and place `Eggie DocuFlow.app` in Applications.
+2. On Windows, run `EggieDocuFlow_V1.5.0_Windows_x64_Setup.exe`, then launch the app from the desktop or Start menu
 3. This release is not Apple-notarized. If macOS blocks it, right-click the App in Finder, choose **Open**, then confirm **Open**
 
 > Windows 版支持 Windows 10/11 64 位系统；安装程序默认安装到 `C:\Program Files\Eggie DocuFlow`，安装时会请求 Windows 管理员授权，并提供标准卸载入口。
 > The Windows build supports 64-bit Windows 10/11. It installs to `C:\Program Files\Eggie DocuFlow` by default, requests Windows administrator approval during setup, and includes a standard uninstall entry.
 
 ## 软件界面 / Screenshots
+
+以下保留V1.4.0历史截图；V1.5.0布局和文案已有调整，以实际软件为准。
 
 ![Eggie DocuFlow 工作台](docs/ui/v1_4_0_home.png)
 
@@ -126,6 +140,12 @@ run the source code.
 - 普通工作簿使用低内存流式合并，复杂合并单元格自动切换兼容模式 / Use low-memory streaming for standard workbooks and compatibility mode for complex merged cells
 
 ### Excel 拆分 / Excel Split
+
+V1.5.0 分类模式：选择 `.xlsx` 文件、工作表、数据范围及表头行数 → 选择一列或多列作为分类依据 → 预览类别和行数 → 选择“每类一个文件”或“每类一个工作表” → 核对提示后执行。“每类一个工作表”保存在同一个新 Excel 文件中。原有按行数拆分仍可使用。
+
+分类模式默认处理全部数据；发现筛选或隐藏行时可切换为仅可见行。公式只使用文件里已保存的计算结果，不在本软件内重新计算；缺少结果或无法安全处理的复杂内容会阻止执行。请先在 Excel 中计算并保存源文件。输出只生成新文件，不向原工作簿追加结果。
+
+以下为原有按固定行数拆分说明：
 
 - 新增 Excel 拆分工具 / Added a new Excel split tool
 - 支持选择 Excel 文件进行拆分 / Users can select an Excel file to split
@@ -257,10 +277,10 @@ OCR 的注册、密钥、数据流向、费用和法律责任说明请阅读 [OC
 PDF 工具箱：
 
 1. 进入“PDF 工具箱”。 / Open **PDF Toolbox**.
-2. 在“页面整理”中添加 PDF，拖动缩略图调整顺序，可多选页面旋转、拆分或删除。 / Add PDFs in **Page Organizer**, drag thumbnails to reorder, and multi-select pages to rotate, split, or delete.
-3. 在“PDF 压缩”中选择压缩档位，查看预计体积后生成压缩结果。 / Use **PDF Compression** to pick a preset, review the estimated size, and create a compressed copy.
-4. 在“图片 / PDF 互转”中添加图片或文件夹，拖动缩略图排序后合成 PDF，也可以把 PDF 导出为 JPG 或 PNG。 / Use **Image / PDF Conversion** to add images or folders, reorder thumbnails, build PDFs, or export PDF pages as JPG or PNG.
-5. 其他标签页可生成带水印页码、带密码或可搜索的 PDF，以及本机文字对比报告。 / Other tabs create marked, password-protected, searchable PDFs, and local text comparison reports.
+2. V1.5 在“页面编辑”中打开或插入 PDF，调整顺序、多选旋转、提取或删除；在“内容编辑”中添加涂黑标记、水印和页码，核对后另存。 / In V1.5, use **Page Editing** to arrange pages and **Content Editing** for redaction, watermarks and page numbers, then save a new copy.
+3. 在“独立工具 → PDF 压缩”中单独选择文件和压缩档位，查看预计体积后生成压缩结果。 / Choose a file and preset under **Independent Tools → PDF Compression** to create a compressed copy.
+4. 在“独立工具 → 图片 / PDF 互转”中添加图片或文件夹，调整顺序后合成 PDF，也可以把 PDF 导出为 JPG 或 PNG。 / Use **Independent Tools → Image / PDF Conversion** to build a PDF or export its pages as images.
+5. “独立工具”还提供 PDF 密码、可搜索 PDF 和文字对比。处理已编辑的文档时，先另存副本再选择该副本。V1.4 的入口名称仍为“页面整理”。 / Other independent tools handle passwords, searchable PDFs and text comparison. Save edited documents before selecting them here. V1.4 retains its original **Page Organizer** entry.
 
 ## 使用说明与注意事项 / Notes
 
@@ -287,17 +307,21 @@ PDF 工具箱：
 Developers can run the project from source with the commands below. Regular
 users do not need to follow these steps.
 
+准确重建本版请先阅读 [BUILD_RELEASE.md](BUILD_RELEASE.md)，准备定制MuPDF1.28.5引擎。下列pip命令只提供开发环境，默认依赖不等同于发布包。
+
+V1.5.0 源码需要 Python 3.10 或更高版本（本次使用 3.12）。已有旧环境请保留，不要用 Python 3.9 直接安装新版依赖。以下新建 `.venv-pdf`，不会覆盖原 `.venv`。
+
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
+python3.12 -m venv .venv-pdf
+source .venv-pdf/bin/activate
 python -m pip install -r requirements.txt
-scripts/run_macos_python.sh main.py
+PYTHON="$VIRTUAL_ENV/bin/python" scripts/run_macos_python.sh main.py
 ```
 
 ## 测试 / Tests
 
 ```bash
-QT_QPA_PLATFORM=offscreen scripts/run_macos_python.sh -m unittest discover -s tests -v
+QT_QPA_PLATFORM=offscreen PYTHON="$VIRTUAL_ENV/bin/python" scripts/run_macos_python.sh -m unittest discover -s tests -v
 ```
 
 性能基准 / Performance benchmark:
@@ -313,14 +337,14 @@ python scripts/benchmark.py /path/to/excel-folder
 The current release build supports Apple Silicon Macs only.
 
 ```bash
-PYTHON=.venv/bin/python scripts/build_macos.sh
+PYTHON=.venv-pdf/bin/python scripts/build_macos.sh
 ```
 
-构建结果位于 `release/`，正式版文件名为：
+先完成上面的独立环境安装；不要使用旧 `.venv` 打包 V1.5.0。构建脚本会使用 `version.py` 中的版本号命名，当前源码构建结果位于 `release/`：
 
-- `EggieDocuFlow_V1.4.0_mac.zip`
+- `EggieDocuFlow_V1.5.0_mac.zip`
 
-解压 ZIP 后得到 `EggieDocuFlow_V1.4.0_mac.app`。
+此通用脚本会生成 `EggieDocuFlow_V1.5.0_mac.app`；发布包统一使用 `Eggie DocuFlow.app`，两者应用标识相同。准确发布构建需遵循BUILD_RELEASE.md的依赖和核对步骤。
 
 打包脚本保留所有 `qtbase` 系统语言翻译，并移除本工具不使用的 Qt 网络、TLS、
 SVG 和图片插件。
@@ -337,13 +361,19 @@ Windows 正式版应在 Windows 10/11 64 位环境构建，并使用 Inno Setup 
 powershell -ExecutionPolicy Bypass -File scripts\\build_windows.ps1
 ```
 
-构建完成后，`release/` 中会生成：
+构建脚本按 `version.py` 中的版本号命名，当前源码的预期构建结果位于 `release/`：
 
-- `EggieDocuFlow_V1.4.0_Windows_x64_Setup.exe`
+- `EggieDocuFlow_V1.5.0_Windows_x64_Setup.exe`
+
+准确发布构建需遵循BUILD_RELEASE.md，确保定制引擎与随包声明正确。V1.4.0历史下载保留。
 
 安装完成后请在真实 Windows 环境中打开软件，并用 Microsoft Excel 实际打开软件生成的 Excel 文件；出现损坏或修复提示时不得交付该安装包。
 
 ## 版本记录 / Changelog
+
+### V1.5.0
+
+新增Excel分类拆分、PDF编辑和安全处理；优化界面与提示。详见[V1.5.0更新说明](release_notes_v1.5.0.md)。
 
 ### V1.4.0
 
