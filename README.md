@@ -71,8 +71,8 @@ Excel 合并、拆分与数据清理、PDF 发票解析、文档智能处理、P
 - 批量改名工具支持先预览再执行，支持替换、删除、追加、改后缀、删除开头或结尾文字
 - 改名预览出现空白文件名时会弹窗提醒并阻止执行
 - 智能改名可从发票或合同中生成名称建议，并标记内容完全相同的文件
-- PDF 工具箱支持缩略图拖拽排序、多选旋转、拆分、删除、压缩、图片转 PDF 和 PDF 转图片
-- PDF 工具箱新增文字水印、页码、打开密码、可搜索 PDF 和两份 PDF 文字对比
+- PDF 页面与内容编辑支持插入、排序、旋转、提取、撤销与重做，以及涂黑、文字与图片水印和页码
+- PDF 独立工具提供合并、压缩、图片转换、打开密码、可搜索 PDF 和文字对比
 - 文件和文件夹选择会记住上次打开位置
 - 图片转 PDF 会自动过滤非图片或无法读取的文件
 - 支持较大文件的低内存处理
@@ -90,12 +90,18 @@ The current release focuses on:
 - Splitting Excel files by a custom number of data rows or by values in one or more columns
 - Keeping the configured header rows in every split file
 - Saving split output files into an automatically created folder
+- Previewing Excel cleanup for blank rows, text spaces, duplicate data, and date/number display formats
 - Converting PDF invoices into finance-ready Excel files with amount and tax validation
 - Intelligent PDF routing for invoices, contracts, tables, and unknown documents
+- Optional Baidu or Alibaba Cloud OCR using the user's own credentials
+- Reading text-based PDF pages locally and sending scanned pages to cloud OCR only after confirmation
+- Exporting text, page/position JSON, and diagnostic logs without credentials or document body text
+- Folder-based PDF batch processing with per-file previews, continued processing after failures, and retrying failed files
 - Exporting contracts to Word, tables to Excel, and unknown PDFs to text reports
 - Enhanced document layout conversion for formal contracts and table-like PDFs
 - Batch file renaming with preview-first execution
 - Safe warnings when a rename rule would create blank filenames
+- Suggesting filenames from invoices or contracts and identifying files with identical content
 - PDF page and content editing with insert, reorder, rotate, extract, undo/redo, redaction, text/image watermarks and page numbering
 - Independent PDF tools for merge, compression, image conversion, passwords, searchable PDFs and text comparison
 - File and folder dialogs remember the last used location
@@ -597,18 +603,8 @@ Added Excel category splitting, expanded PDF editing and clearer layouts and lab
 - 首个正式版本 / Initial public release
 - 支持文件、文件夹、排序、保存路径和格式保留 / Added file and folder selection, ordering, output paths, and formatting preservation
 
-## 许可证
+## 许可证 / License
 
-本项目采用 MIT License 开源协议。
+原有代码的 MIT 授权与作者署名保留在 [LICENSE](LICENSE)。V1.5.0 的 PDF 工作区集成及包含 PyMuPDF / MuPDF 的组合应用按 [GNU AGPLv3](licenses/AGPL-3.0.txt) 分发，第三方组件遵守各自许可证。完整说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
-你可以自由使用、复制、修改和分发本项目，但请保留原始版权和作者信息。
-
-请勿将本项目重新包装后冒充原创，或用于误导性传播。
-
-## License
-
-This project is licensed under the MIT License.
-
-You are free to use, copy, modify, and distribute this project, but please retain the original copyright and author information.
-
-Please do not repackage this project as your own original work or use it for misleading distribution.
+The original code's MIT grant and author notices are retained in [LICENSE](LICENSE). The V1.5.0 PDF workspace integration and combined application including PyMuPDF / MuPDF are distributed under [GNU AGPLv3](licenses/AGPL-3.0.txt). Third-party components retain their own licenses. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for full details.
