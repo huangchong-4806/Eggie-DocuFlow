@@ -1,0 +1,2959 @@
+{
+  "archive_name": "EggieDocuFlow_V1.5.0_third-party-sources.zip",
+  "archive_bytes": 766285303,
+  "archive_sha256": "667a1b328f8d8442dd2cca8e266da62b871d4471e173b30627d3255747e14633",
+  "zip_entries": 324,
+  "downloads": [
+    {
+      "path": "sources/pdf-engine-evaluation-20261015/mupdf-1.28.5-source.tar.gz",
+      "bytes": 68919385,
+      "sha256": "98a5c10cda20c3992cdf76ff6b2a1149c32bd79cc796d3f703230b1185b7e934",
+      "urls": [
+        "https://mupdf.com/downloads/archive/mupdf-1.28.5-source.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261014-rc1/third-party-sources/aiofiles-24.1.0.tar.gz",
+      "bytes": 30247,
+      "sha256": "22a075c9e5a3810f0c2e48f3008c94d68c65d763b9b03857924c99e57355166c",
+      "urls": [
+        "https://files.pythonhosted.org/packages/0b/03/a88171e277e8caa88a4c77808c20ebb04ba74cc4681bf1e9416c862de237/aiofiles-24.1.0.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261014-rc1/third-party-sources/aiohttp-3.14.3.tar.gz",
+      "bytes": 7971213,
+      "sha256": "9491196535a88924a60afd5b5f434b5b203b6cc616250878dbdb223a8f7844bc",
+      "urls": [
+        "https://files.pythonhosted.org/packages/58/d9/22ce5786ac0c1653ae8b6c23bded02c1686d11f0dbb45b31ce128e0df985/aiohttp-3.14.3.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261014-rc1/third-party-sources/aiosignal-1.4.0.tar.gz",
+      "bytes": 25007,
+      "sha256": "f47eecd9468083c2029cc99945502cb7708b082c232f9aca65da147157b251c7",
+      "urls": [
+        "https://files.pythonhosted.org/packages/61/62/06741b579156360248d1ec624842ad0edf697050bbaf7c3e46394e106ad1/aiosignal-1.4.0.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261014-rc1/third-party-sources/alibabacloud-tea-0.4.3.tar.gz",
+      "bytes": 8785,
+      "sha256": "ec8053d0aa8d43ebe1deb632d5c5404339b39ec9a18a0707d57765838418504a",
+      "urls": [
+        "https://files.pythonhosted.org/packages/9a/7d/b22cb9a0d4f396ee0f3f9d7f26b76b9ed93d4101add7867a2c87ed2534f5/alibabacloud-tea-0.4.3.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261014-rc1/third-party-sources/alibabacloud_credentials-1.0.12.tar.gz",
+      "bytes": 43203,
+      "sha256": "87da41ea3ffb146b44d999c62c160c2b96b0c30275ae35205bcdfe79ba0c4119",
+      "urls": [
+        "https://files.pythonhosted.org/packages/25/19/bc359efb0c12f400a89783f8dc87a7261a955d73acc7b766a736e5597851/alibabacloud_credentials-1.0.12.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261014-rc1/third-party-sources/alibabacloud_credentials_api-1.0.1.tar.gz",
+      "bytes": 2314,
+      "sha256": "8ea0668a6558f6956b8d20b2e561d19a80ea29c22cf56a3004d434b24a981b36",
+      "urls": [
+        "https://files.pythonhosted.org/packages/89/7e/6145e2d132752f0de72701df556304c59dda311405a252a598ad6fd9b4de/alibabacloud_credentials_api-1.0.1.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261014-rc1/third-party-sources/alibabacloud_endpoint_util-0.0.4.tar.gz",
+      "bytes": 2813,
+      "sha256": "a593eb8ddd8168d5dc2216cd33111b144f9189fcd6e9ca20e48f358a739bbf90",
+      "urls": [
+        "https://files.pythonhosted.org/packages/92/7d/8cc92a95c920e344835b005af6ea45a0db98763ad6ad19299d26892e6c8d/alibabacloud_endpoint_util-0.0.4.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261014-rc1/third-party-sources/alibabacloud_gateway_spi-0.0.4.tar.gz",
+      "bytes": 4253,
+      "sha256": "73d6e20d65b54eed26d89c19640d3a7572e18c45ecada627f806f5dbe8ed2130",
+      "urls": [
+        "https://files.pythonhosted.org/packages/cd/67/7cd36a36bf0ec53efd3fe31eaf398713f375b7b1cdcd32c51b6c0fdc09e2/alibabacloud_gateway_spi-0.0.4.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261014-rc1/third-party-sources/alibabacloud_ocr-api20210707-3.1.3.tar.gz",
+      "bytes": 33565,
+      "sha256": "fd5edeca80358f29cbde253422b0ce3d5b1cdc510fd3903bdbbc0b641678056d",
+      "urls": [
+        "https://files.pythonhosted.org/packages/98/c3/700504a299eb6ee4f96fb740c832d884f408a04a8c65fdca07462f667dac/alibabacloud_ocr-api20210707-3.1.3.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261014-rc1/third-party-sources/alibabacloud_openapi_util-0.2.4.tar.gz",
+      "bytes": 7981,
+      "sha256": "87022b9dcb7593a601f7a40ca698227ac3ccb776b58cb7b06b8dc7f510995c34",
+      "urls": [
+        "https://files.pythonhosted.org/packages/f6/51/be5802851a4ed20ac2c6db50ac8354a6e431e93db6e714ca39b50983626f/alibabacloud_openapi_util-0.2.4.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261014-rc1/third-party-sources/alibabacloud_tea_openapi-0.4.6.tar.gz",
+      "bytes": 26742,
+      "sha256": "dafc32401712f5b21c12dc3d05ba887a91ad156d9b49a7662279f9fd90526fb2",
+      "urls": [
+        "https://files.pythonhosted.org/packages/ab/34/1918a2d780676494365c7f945bfab397ecddb988054d78025bd26f438977/alibabacloud_tea_openapi-0.4.6.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261014-rc1/third-party-sources/alibabacloud_tea_util-0.3.15.tar.gz",
+      "bytes": 7548,
+      "sha256": "79f78e596f6be03fb9565e34ac45420f3730e52888376cc9713bd07432a4c6cc",
+      "urls": [
+        "https://files.pythonhosted.org/packages/01/22/d3ce00317d9ba963bcc48234210bd718c42425267ecb05881cbb189b1c76/alibabacloud_tea_util-0.3.15.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261014-rc1/third-party-sources/apscheduler-3.11.3.tar.gz",
+      "bytes": 110312,
+      "sha256": "cd2fcc9330039a81a5893472ad49facf23a6d5604cbe1d918c835c6de7834d5a",
+      "urls": [
+        "https://files.pythonhosted.org/packages/8c/6b/eeff360196bb20b312c9e762a820fd1b2c6d809466c755ef57863478e454/apscheduler-3.11.3.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261014-rc1/third-party-sources/attrs-26.1.0.tar.gz",
+      "bytes": 952055,
+      "sha256": "d03ceb89cb322a8fd706d4fb91940737b6642aa36998fe130a9bc96c985eff32",
+      "urls": [
+        "https://files.pythonhosted.org/packages/9a/8e/82a0fe20a541c03148528be8cac2408564a6c9a0cc7e9171802bc1d26985/attrs-26.1.0.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261014-rc1/third-party-sources/cffi-2.1.1.tar.gz",
+      "bytes": 530807,
+      "sha256": "dd31f52ea1086513bb9df30f8fcee9b8918323ae067a3d5b78bc826a000712be",
+      "urls": [
+        "https://files.pythonhosted.org/packages/9e/ef/008a1939e372c06329a3fce4279c02f328488f3526744906eeec3da7ad5f/cffi-2.1.1.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261014-rc1/third-party-sources/charset_normalizer-3.5.1.tar.gz",
+      "bytes": 171764,
+      "sha256": "6117b84ea48435e5356dc737f5121485c30920ba43375fa7b434fd753df0eac3",
+      "urls": [
+        "https://files.pythonhosted.org/packages/e5/3f/143b048436775b0f76ac3eec145c019e8173ccc2885c8f20319b996d5e83/charset_normalizer-3.5.1.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261014-rc1/third-party-sources/cryptography-50.0.1.tar.gz",
+      "bytes": 880381,
+      "sha256": "5dd9bda1c12b4162f6ff568eeb5e0ff956c28d14406e875cfe8a63a2d414ff20",
+      "urls": [
+        "https://files.pythonhosted.org/packages/bb/ad/5d6702db60b1e40b41ef513b6967ff5848f307d50f8449baf1634f5908f1/cryptography-50.0.1.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261014-rc1/third-party-sources/darabonba_core-1.0.9.tar.gz",
+      "bytes": 28077,
+      "sha256": "1026c965b4c2b48f89995eadad7ab780a03959812c8f8de4670eb44c48e5b179",
+      "urls": [
+        "https://files.pythonhosted.org/packages/49/72/a1ae02a243be50e48aeedcaa089c153227300ed419880b99ac68bc4a259f/darabonba_core-1.0.9.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261014-rc1/third-party-sources/et_xmlfile-2.0.0.tar.gz",
+      "bytes": 17234,
+      "sha256": "dab3f4764309081ce75662649be815c4c9081e88f0837825f90fd28317d4da54",
+      "urls": [
+        "https://files.pythonhosted.org/packages/d3/38/af70d7ab1ae9d4da450eeec1fa3918940a5fafb9055e934af8d6eb0c2313/et_xmlfile-2.0.0.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261014-rc1/third-party-sources/frozenlist-1.8.0.tar.gz",
+      "bytes": 45875,
+      "sha256": "3ede829ed8d842f6cd48fc7081d7a41001a56f1f38603f9d49bf3020d59a31ad",
+      "urls": [
+        "https://files.pythonhosted.org/packages/2d/f5/c831fac6cc817d26fd54c7eaccd04ef7e0288806943f7cc5bbf69f3ac1f0/frozenlist-1.8.0.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261014-rc1/third-party-sources/idna-3.19.tar.gz",
+      "bytes": 215237,
+      "sha256": "5e0811a4383b21dc5838069f801c4fb62113b7447663d2530d2bd6e77b49bf15",
+      "urls": [
+        "https://files.pythonhosted.org/packages/5f/f7/abb373e5757eaec4b922b92f97ec8d6d7e057cf06778247604fbc4e7c3f3/idna-3.19.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261014-rc1/third-party-sources/multidict-6.8.0.tar.gz",
+      "bytes": 122412,
+      "sha256": "5cd4637ce76312ba1e05eb9c5193fec231f64fee0944e135fa1e951242355b37",
+      "urls": [
+        "https://files.pythonhosted.org/packages/14/95/989c1b5ca17b72128661530cd6e351a0a83cda9a4d6c036e9ed976c18931/multidict-6.8.0.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261014-rc1/third-party-sources/openpyxl-3.1.5.tar.gz",
+      "bytes": 186464,
+      "sha256": "cf0e3cf56142039133628b5acffe8ef0c12bc902d2aadd3e0fe5878dc08d1050",
+      "urls": [
+        "https://files.pythonhosted.org/packages/3d/f9/88d94a75de065ea32619465d2f77b29a0469500e99012523b91cc4141cd1/openpyxl-3.1.5.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261014-rc1/third-party-sources/pdfminer_six-20251107.tar.gz",
+      "bytes": 7387104,
+      "sha256": "5fb0c553799c591777f22c0c72b77fc2522d7d10c70654e25f4c5f1fd996e008",
+      "urls": [
+        "https://files.pythonhosted.org/packages/1d/50/5315f381a25dc80a8d2ea7c62d9a28c0137f10ccc263623a0db8b49fcced/pdfminer_six-20251107.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261014-rc1/third-party-sources/pdfplumber-0.11.8.tar.gz",
+      "bytes": 102724,
+      "sha256": "db29b04bc8bb62f39dd444533bcf2e0ba33584bd24f5a54644f3ba30f4f22d31",
+      "urls": [
+        "https://files.pythonhosted.org/packages/09/d8/cb9fda4261ce389656bec0bb0bdde905df109ad97f7ae387747ded070e8c/pdfplumber-0.11.8.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261014-rc1/third-party-sources/pillow-12.2.0.tar.gz",
+      "bytes": 46987819,
+      "sha256": "a830b1a40919539d07806aa58e1b114df53ddd43213d9c8b75847eee6c0182b5",
+      "urls": [
+        "https://files.pythonhosted.org/packages/8c/21/c2bcdd5906101a30244eaffc1b6e6ce71a31bd0742a01eb89e660ebfac2d/pillow-12.2.0.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261014-rc1/third-party-sources/propcache-0.5.2.tar.gz",
+      "bytes": 50208,
+      "sha256": "01c4fc7480cd0598bb4b57022df55b9ca296da7fc5a8760bd8451a7e63a7d427",
+      "urls": [
+        "https://files.pythonhosted.org/packages/ec/44/c87281c333769159c50594f22610f77398a47ccbfbbf23074e744e86f87c/propcache-0.5.2.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261014-rc1/third-party-sources/pycparser-3.0.tar.gz",
+      "bytes": 103492,
+      "sha256": "600f49d217304a5902ac3c37e1281c9fe94e4d0489de643a9504c5cdfdfc6b29",
+      "urls": [
+        "https://files.pythonhosted.org/packages/1b/7d/92392ff7815c21062bea51aa7b87d45576f649f16458d78b7cf94b9ab2e6/pycparser-3.0.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261014-rc1/third-party-sources/pymupdf-1.28.2.tar.gz",
+      "bytes": 87903557,
+      "sha256": "5e0be7908a715aa20333caddd73f1d6f01e4cd0c26e869fa2dd0b7f344da2249",
+      "urls": [
+        "https://files.pythonhosted.org/packages/a3/fb/b6761fa2d5266f2cdb24c3b91f4023070ab7848381417678e7a289a1d52a/pymupdf-1.28.2.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261014-rc1/third-party-sources/pypdf-6.10.0.tar.gz",
+      "bytes": 5314833,
+      "sha256": "4c5a48ba258c37024ec2505f7e8fd858525f5502784a2e1c8d415604af29f6ef",
+      "urls": [
+        "https://files.pythonhosted.org/packages/b8/9f/ca96abf18683ca12602065e4ed2bec9050b672c87d317f1079abc7b6d993/pypdf-6.10.0.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261014-rc1/third-party-sources/pypdfium2-5.10.1.tar.gz",
+      "bytes": 272963,
+      "sha256": "f257d2011eb43c846b7e9f5a802e28646b29732763e4a35dd6ca76f9be580538",
+      "urls": [
+        "https://files.pythonhosted.org/packages/1d/78/d9b45abb97a3686643f7c6472a5f7688f2013a373226121dc76b9debbacf/pypdfium2-5.10.1.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261014-rc1/third-party-sources/pyside-setup-everywhere-src-6.10.3.tar.xz",
+      "bytes": 17900952,
+      "sha256": "2c7462fe0cecb5b8ac0a3d92014b8d0b88bd4d9f8646709dab5286d9416f45bc",
+      "urls": [
+        "https://download.qt.io/official_releases/QtForPython/pyside6/PySide6-6.10.3-src/pyside-setup-everywhere-src-6.10.3.tar.xz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261014-rc1/third-party-sources/qtbase-everywhere-src-6.10.3.tar.xz",
+      "bytes": 50509856,
+      "sha256": "383dc907816338f0cba72088a524c07458dfc69ce684ca9132fcc4fe91c24b0b",
+      "urls": [
+        "https://download.qt.io/archive/qt/6.10/6.10.3/submodules/qtbase-everywhere-src-6.10.3.tar.xz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261014-rc1/third-party-sources/qttranslations-everywhere-src-6.10.3.tar.xz",
+      "bytes": 1680584,
+      "sha256": "52689984b114d4d34516d5d7bfb0c75857b1c3ff529921042144f09ab2de3a83",
+      "urls": [
+        "https://download.qt.io/archive/qt/6.10/6.10.3/submodules/qttranslations-everywhere-src-6.10.3.tar.xz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261014-rc1/third-party-sources/requests-2.34.2.tar.gz",
+      "bytes": 142856,
+      "sha256": "f288924cae4e29463698d6d60bc6a4da69c89185ad1e0bcc4104f584e960b9ed",
+      "urls": [
+        "https://files.pythonhosted.org/packages/ac/c3/e2a2b89f2d3e2179abd6d00ebd70bff6273f37fb3e0cc209f48b39d00cbf/requests-2.34.2.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261014-rc1/third-party-sources/typing_extensions-4.16.0.tar.gz",
+      "bytes": 113555,
+      "sha256": "dc983d19a509c94dba722ee6abd33940f7c05a89e243c47e907eb4db6f1a43e5",
+      "urls": [
+        "https://files.pythonhosted.org/packages/f6/cc/6253133b5bb138fc3306cebfbda2c520f545d36b5be2c7255cc528bb45d6/typing_extensions-4.16.0.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261014-rc1/third-party-sources/tzlocal-5.4.4.tar.gz",
+      "bytes": 31170,
+      "sha256": "8dbb8660838688a7b6ba4fed31d18dedf842afb4d47ca050d6d891c2c15f3be4",
+      "urls": [
+        "https://files.pythonhosted.org/packages/81/5b/879b2f932adfa7a053c360d50bc896c977fa6426109185f7c12ebdd0cb9d/tzlocal-5.4.4.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261014-rc1/third-party-sources/urllib3-2.7.0.tar.gz",
+      "bytes": 433602,
+      "sha256": "231e0ec3b63ceb14667c67be60f2f2c40a518cb38b03af60abc813da26505f4c",
+      "urls": [
+        "https://files.pythonhosted.org/packages/53/0c/06f8b233b8fd13b9e5ee11424ef85419ba0d8ba0b3138bf360be2ff56953/urllib3-2.7.0.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261014-rc1/third-party-sources/websocket_client-1.9.2.tar.gz",
+      "bytes": 84110,
+      "sha256": "0fcb57545848be86992e128218fd96dd87a6769ffdb1a968dff79632b85604d0",
+      "urls": [
+        "https://files.pythonhosted.org/packages/d8/cb/a5abcc2891249f393827c650c6296660ce40374ac22d99ab9aea41f9d2a2/websocket_client-1.9.2.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261014-rc1/third-party-sources/yarl-1.24.5.tar.gz",
+      "bytes": 228679,
+      "sha256": "e81b83143bee16329c23db3c1b2d82b29892fcbcb849186d2f6e98a5abe9a57f",
+      "urls": [
+        "https://files.pythonhosted.org/packages/31/33/ebe9e3d1f86c7a0b51094c0a146392045ca1631d2664889539dec8088a33/yarl-1.24.5.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/cryptography/crates/asn1-0.24.1.crate",
+      "bytes": 50502,
+      "sha256": "c9795210620c0cb3f9a7ce4f882808c38e1ef7b347c90591dceae0886e031fb1",
+      "urls": [
+        "https://static.crates.io/crates/asn1/asn1-0.24.1.crate"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/cryptography/crates/asn1_derive-0.24.1.crate",
+      "bytes": 9534,
+      "sha256": "909e307f1cc32bb8bccbd98f446e6d1bf03fa30f7b53a4337da7181ad30fa11a",
+      "urls": [
+        "https://static.crates.io/crates/asn1_derive/asn1_derive-0.24.1.crate"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/cryptography/crates/base64-0.23.0.crate",
+      "bytes": 93578,
+      "sha256": "b25655df2c3cdd83c5e5b293b88acd880332b2ddadd7c30ac43144fdc0033da9",
+      "urls": [
+        "https://static.crates.io/crates/base64/base64-0.23.0.crate"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/cryptography/crates/bitflags-2.13.1.crate",
+      "bytes": 51395,
+      "sha256": "b588b76d00fde79687d7646a9b5bdf3cc0f655e0bbd080335a95d7e96f3587da",
+      "urls": [
+        "https://static.crates.io/crates/bitflags/bitflags-2.13.1.crate"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/cryptography/crates/cc-1.4.0.crate",
+      "bytes": 97878,
+      "sha256": "5add81bb678e6cb321aff7fa0dc7689ad82b112dbc032cea19f91d6b8e3582b9",
+      "urls": [
+        "https://static.crates.io/crates/cc/cc-1.4.0.crate"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/cryptography/crates/cfg-if-1.0.4.crate",
+      "bytes": 9360,
+      "sha256": "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801",
+      "urls": [
+        "https://static.crates.io/crates/cfg-if/cfg-if-1.0.4.crate"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/cryptography/crates/find-msvc-tools-0.1.9.crate",
+      "bytes": 31493,
+      "sha256": "5baebc0774151f905a1a2cc41989300b1e6fbb29aff0ceffa1064fdd3088d582",
+      "urls": [
+        "https://static.crates.io/crates/find-msvc-tools/find-msvc-tools-0.1.9.crate"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/cryptography/crates/foreign-types-0.3.2.crate",
+      "bytes": 7504,
+      "sha256": "f6f339eb8adc052cd2ca78910fda869aefa38d22d5cb648e6485e4d3fc06f3b1",
+      "urls": [
+        "https://static.crates.io/crates/foreign-types/foreign-types-0.3.2.crate"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/cryptography/crates/foreign-types-shared-0.1.1.crate",
+      "bytes": 5672,
+      "sha256": "00b0228411908ca8685dba7fc2cdd70ec9990a6e753e89b6ac91a84c40fbaf4b",
+      "urls": [
+        "https://static.crates.io/crates/foreign-types-shared/foreign-types-shared-0.1.1.crate"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/cryptography/crates/heck-0.5.0.crate",
+      "bytes": 11517,
+      "sha256": "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea",
+      "urls": [
+        "https://static.crates.io/crates/heck/heck-0.5.0.crate"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/cryptography/crates/itoa-1.0.18.crate",
+      "bytes": 15935,
+      "sha256": "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682",
+      "urls": [
+        "https://static.crates.io/crates/itoa/itoa-1.0.18.crate"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/cryptography/crates/libc-0.2.189.crate",
+      "bytes": 851502,
+      "sha256": "3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2",
+      "urls": [
+        "https://static.crates.io/crates/libc/libc-0.2.189.crate"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/cryptography/crates/once_cell-1.21.4.crate",
+      "bytes": 35010,
+      "sha256": "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50",
+      "urls": [
+        "https://static.crates.io/crates/once_cell/once_cell-1.21.4.crate"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/cryptography/crates/openssl-0.10.81.crate",
+      "bytes": 311187,
+      "sha256": "77823a27f0babb03091cb9ed9ef80af3b39dbc82f97e8fa530374b7dafd87a45",
+      "urls": [
+        "https://static.crates.io/crates/openssl/openssl-0.10.81.crate"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/cryptography/crates/openssl-macros-0.1.1.crate",
+      "bytes": 5601,
+      "sha256": "a948666b637a0f465e8564c73e89d4dde00d72d4d473cc972f390fc3dcee7d9c",
+      "urls": [
+        "https://static.crates.io/crates/openssl-macros/openssl-macros-0.1.1.crate"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/cryptography/crates/openssl-sys-0.9.117.crate",
+      "bytes": 76045,
+      "sha256": "b47e7e6bb2c38cd930d25a23b40fa52e068c10e85f3e03a7f5ba5aaca5713695",
+      "urls": [
+        "https://static.crates.io/crates/openssl-sys/openssl-sys-0.9.117.crate"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/cryptography/crates/pem-4.0.0.crate",
+      "bytes": 18770,
+      "sha256": "d354a98a3d1251555de99e8fdd8afda05573c31b82f59063a7b0a29b5527f120",
+      "urls": [
+        "https://static.crates.io/crates/pem/pem-4.0.0.crate"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/cryptography/crates/pkg-config-0.3.33.crate",
+      "bytes": 21590,
+      "sha256": "19f132c84eca552bf34cab8ec81f1c1dcc229b811638f9d283dceabe58c5569e",
+      "urls": [
+        "https://static.crates.io/crates/pkg-config/pkg-config-0.3.33.crate"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/cryptography/crates/portable-atomic-1.14.0.crate",
+      "bytes": 200703,
+      "sha256": "3d20d5497ef88037a52ff98267d066e7f11fcc5e99bbfbd58a42336193aacec3",
+      "urls": [
+        "https://static.crates.io/crates/portable-atomic/portable-atomic-1.14.0.crate"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/cryptography/crates/proc-macro2-1.0.107.crate",
+      "bytes": 59588,
+      "sha256": "985e7ec9bb745e6ce6535b544d84d6cd6f7ad8bd711c398938ae983b91a766d9",
+      "urls": [
+        "https://static.crates.io/crates/proc-macro2/proc-macro2-1.0.107.crate"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/cryptography/crates/pyo3-0.29.0.crate",
+      "bytes": 1241253,
+      "sha256": "cd274650b21d4bfc26a0a47587962c1edb425f69287324355cd040c3ea66071c",
+      "urls": [
+        "https://static.crates.io/crates/pyo3/pyo3-0.29.0.crate"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/cryptography/crates/pyo3-0.29.2.crate",
+      "bytes": 1255741,
+      "sha256": "4688ddedf473e32662b9b067670129a8afb8c18e351482c70d62ba4a88171e8b",
+      "urls": [
+        "https://static.crates.io/crates/pyo3/pyo3-0.29.2.crate"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/cryptography/crates/pyo3-build-config-0.29.0.crate",
+      "bytes": 39616,
+      "sha256": "c5e2a7d2f0d013342f295c048ad19237add5154a55b1c5a254c0ec93d4109078",
+      "urls": [
+        "https://static.crates.io/crates/pyo3-build-config/pyo3-build-config-0.29.0.crate"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/cryptography/crates/pyo3-build-config-0.29.2.crate",
+      "bytes": 41104,
+      "sha256": "f41027e41b4bd03f6e60f9f417fe24a6341a6bb744edd62b6f709f2a52ea30e9",
+      "urls": [
+        "https://static.crates.io/crates/pyo3-build-config/pyo3-build-config-0.29.2.crate"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/cryptography/crates/pyo3-ffi-0.29.0.crate",
+      "bytes": 88184,
+      "sha256": "ca85c467da1bbc8d866eea5deff9cf29ea5f7785054a17da36e65bda9c05845b",
+      "urls": [
+        "https://static.crates.io/crates/pyo3-ffi/pyo3-ffi-0.29.0.crate"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/cryptography/crates/pyo3-ffi-0.29.2.crate",
+      "bytes": 90029,
+      "sha256": "e591a95526fead067432c3b3a33fc74770b87b1e04e73671090d9c2055a2b327",
+      "urls": [
+        "https://static.crates.io/crates/pyo3-ffi/pyo3-ffi-0.29.2.crate"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/cryptography/crates/pyo3-macros-0.29.0.crate",
+      "bytes": 8915,
+      "sha256": "9ac53762fd065daa3194dd09337a38bd793a188100fd1a9304c4ab312d901771",
+      "urls": [
+        "https://static.crates.io/crates/pyo3-macros/pyo3-macros-0.29.0.crate"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/cryptography/crates/pyo3-macros-0.29.2.crate",
+      "bytes": 9044,
+      "sha256": "73225868fc1cd84eef2c3c230ddb91273bf1de46aeb8a4248da76d32a0924a1c",
+      "urls": [
+        "https://static.crates.io/crates/pyo3-macros/pyo3-macros-0.29.2.crate"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/cryptography/crates/pyo3-macros-backend-0.29.0.crate",
+      "bytes": 91943,
+      "sha256": "4ca3a1557399783172dc5bf39cfca835157732532cba56b71d2292161e53b362",
+      "urls": [
+        "https://static.crates.io/crates/pyo3-macros-backend/pyo3-macros-backend-0.29.0.crate"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/cryptography/crates/pyo3-macros-backend-0.29.2.crate",
+      "bytes": 93749,
+      "sha256": "571575aa3749fa6216757dd47d2a3e7ef360f329a40f0666a9fbd14889024952",
+      "urls": [
+        "https://static.crates.io/crates/pyo3-macros-backend/pyo3-macros-backend-0.29.2.crate"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/cryptography/crates/quote-1.0.47.crate",
+      "bytes": 31622,
+      "sha256": "1fbf4db142a473a8d80c26bbf18454ed458bf8d26c8219c331daecfdbd079001",
+      "urls": [
+        "https://static.crates.io/crates/quote/quote-1.0.47.crate"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/cryptography/crates/self_cell-1.3.0.crate",
+      "bytes": 23869,
+      "sha256": "2ab42ca02749e120097e328d91d415325bdf43b1c72c4c8badf37375fe40a813",
+      "urls": [
+        "https://static.crates.io/crates/self_cell/self_cell-1.3.0.crate"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/cryptography/crates/shlex-2.0.1.crate",
+      "bytes": 19332,
+      "sha256": "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba",
+      "urls": [
+        "https://static.crates.io/crates/shlex/shlex-2.0.1.crate"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/cryptography/crates/syn-2.0.119.crate",
+      "bytes": 307407,
+      "sha256": "872831b642d1a07999a962a351ed35b955ea2cfc8f3862091e2a240a84f17297",
+      "urls": [
+        "https://static.crates.io/crates/syn/syn-2.0.119.crate"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/cryptography/crates/target-lexicon-0.13.5.crate",
+      "bytes": 26928,
+      "sha256": "adb6935a6f5c20170eeceb1a3835a49e12e19d792f6dd344ccc76a985ca5a6ca",
+      "urls": [
+        "https://static.crates.io/crates/target-lexicon/target-lexicon-0.13.5.crate"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/cryptography/crates/unicode-ident-1.0.24.crate",
+      "bytes": 49298,
+      "sha256": "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75",
+      "urls": [
+        "https://static.crates.io/crates/unicode-ident/unicode-ident-1.0.24.crate"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/cryptography/crates/vcpkg-0.2.15.crate",
+      "bytes": 228735,
+      "sha256": "accd4ea62f7bb7a82fe23066fb0957d48ef677f6eeb8215f372f52e48bb32426",
+      "urls": [
+        "https://static.crates.io/crates/vcpkg/vcpkg-0.2.15.crate"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/cryptography/openssl/openssl-4.0.2.tar.gz",
+      "bytes": 55153883,
+      "sha256": "736b467530f916737b7031310ccb21d8218c6229e61e8e160cd1d3458cd543a8",
+      "urls": [
+        "https://github.com/openssl/openssl/releases/download/openssl-4.0.2/openssl-4.0.2.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/cryptography/openssl/openssl-4.0.3.tar.gz",
+      "bytes": 55235667,
+      "sha256": "325b5c806167c13b40b1ffeadfe0248197c00eccc4cf123ec1e28d2d2fd216d9",
+      "urls": [
+        "https://github.com/openssl/openssl/releases/download/openssl-4.0.3/openssl-4.0.3.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/cryptography/rust-std/1.98.0/rust-src-1.98.0.tar.xz",
+      "bytes": 5741336,
+      "sha256": "0e977492aed5ff137815bf9b4b796e8a85b80fb2367ed64e82d5c5839870f2bf",
+      "urls": [
+        "https://static.rust-lang.org/dist/rust-src-1.98.0.tar.xz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/cryptography/rust-std/1.98.1/rust-src-1.98.1.tar.xz",
+      "bytes": 5741168,
+      "sha256": "5c846ebcebcc7e2e0777a4cdaa12051691593f16a7e94edbae5e6241cc62d98c",
+      "urls": [
+        "https://static.rust-lang.org/dist/rust-src-1.98.1.tar.xz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/downloads/aiohappyeyeballs-2.7.1.tar.gz",
+      "bytes": 24757,
+      "sha256": "065665c041c42a5938ed220bdcd7230f22527fbec085e1853d2402c8a3615d9d",
+      "urls": [
+        "https://files.pythonhosted.org/packages/ce/f4/eec0465c2f67b2664688d0240b3212d5196fd89e741df67ddb81f8d35658/aiohappyeyeballs-2.7.1.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/downloads/aiohttp-3.14.5.tar.gz",
+      "bytes": 8078052,
+      "sha256": "5558a7f5a05af9ecf744af91e5baefc436f93c9333e656c27ec253f9a6bbe178",
+      "urls": [
+        "https://files.pythonhosted.org/packages/6c/4c/bdccd81e9ee225b69c60e7766c9a5b05364f118f4d383713b89a682d772d/aiohttp-3.14.5.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/downloads/altgraph-0.17.5.tar.gz",
+      "bytes": 48428,
+      "sha256": "c87b395dd12fabde9c99573a9749d67da8d29ef9de0125c7f536699b4a9bc9e7",
+      "urls": [
+        "https://files.pythonhosted.org/packages/7e/f8/97fdf103f38fed6792a1601dbc16cc8aac56e7459a9fff08c812d8ae177a/altgraph-0.17.5.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/downloads/certifi-2026.7.22.tar.gz",
+      "bytes": 138112,
+      "sha256": "741e2c3b351ddf169a738da9f2c048608ff7f2c5cc02f1ebc6b118bb090d5d55",
+      "urls": [
+        "https://files.pythonhosted.org/packages/a3/c2/24167ea9858356b47a87a50d39908bfdb72ceeefe0041586e704e5376b3a/certifi-2026.7.22.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/downloads/charset_normalizer-3.5.2.tar.gz",
+      "bytes": 172659,
+      "sha256": "39de2a259fc954455c57274dc94c79d5842774e1247a016aff30bc0efed0f4ef",
+      "urls": [
+        "https://files.pythonhosted.org/packages/33/1c/f41d4e74c28ab327ff3acd36053f7ea506c55872d7a90b0fa71aa3ab0c89/charset_normalizer-3.5.2.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/downloads/cryptography-50.0.2.tar.gz",
+      "bytes": 880623,
+      "sha256": "7b46165bb56eb4704e2eaaf86f3c940d19154535d9b0ca7d6d590b04060e00d5",
+      "urls": [
+        "https://files.pythonhosted.org/packages/9d/af/182eb91b0df3fe75c4d9f26fe70684569566745f6ba7e5c9c73a862c5252/cryptography-50.0.2.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/downloads/idna-3.20.tar.gz",
+      "bytes": 216463,
+      "sha256": "a7db850025b95ded1eae8a46181a1a6c56c92c96f0e2b005d9ff8dc0210cab44",
+      "urls": [
+        "https://files.pythonhosted.org/packages/f5/08/8eea9d4b8302028f3abb2c0813953f7aec26d33b7a8960ed760e65ff29fa/idna-3.20.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/downloads/iniconfig-2.3.1.tar.gz",
+      "bytes": 21209,
+      "sha256": "67f4b9c50da0dedf52af349e7749a80a9057a5031199791b906c3bb3ae878960",
+      "urls": [
+        "https://files.pythonhosted.org/packages/01/e1/2069291243c926a2ff1cd706c7f3eeb9b62144bf60f77c9fb9ff2fb26bd3/iniconfig-2.3.1.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/downloads/libclang-18.1.1.tar.gz",
+      "bytes": 39612,
+      "sha256": "a1214966d08d73d971287fc3ead8dfaf82eb07fb197680d8b3859dbbbbf78250",
+      "urls": [
+        "https://files.pythonhosted.org/packages/6e/5c/ca35e19a4f142adffa27e3d652196b7362fa612243e2b916845d801454fc/libclang-18.1.1.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/downloads/macholib-1.16.4.tar.gz",
+      "bytes": 59427,
+      "sha256": "f408c93ab2e995cd2c46e34fe328b130404be143469e41bc366c807448979362",
+      "urls": [
+        "https://files.pythonhosted.org/packages/10/2f/97589876ea967487978071c9042518d28b958d87b17dceb7cdc1d881f963/macholib-1.16.4.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/downloads/multidict-7.1.0.tar.gz",
+      "bytes": 362341,
+      "sha256": "61a4e5d81b8d4e4ad61964b230129e7a2b914793d96289029078fc9009f074ec",
+      "urls": [
+        "https://files.pythonhosted.org/packages/f9/79/84ddb5ba16c4eb2c69c71db76ae3c579fe546e511f7170c7e27eedbab7c1/multidict-7.1.0.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/downloads/packaging-26.3.tar.gz",
+      "bytes": 313412,
+      "sha256": "94edc256424af38762eb31306eed28beb9f0efc50a8837492c9d6fd6004aed79",
+      "urls": [
+        "https://files.pythonhosted.org/packages/7d/fa/3944b40b07da9ce895c0e6303a5ab7d53da063554f534556b134a54d6093/packaging-26.3.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/downloads/pefile-2024.8.26.tar.gz",
+      "bytes": 76008,
+      "sha256": "3ff6c5d8b43e8c37bb6e6dd5085658d658a7a0bdcd20b6a07b1fcfc1c4e9d632",
+      "urls": [
+        "https://files.pythonhosted.org/packages/03/4f/2750f7f6f025a1507cd3b7218691671eecfd0bbebebe8b39aa0fe1d360b8/pefile-2024.8.26.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/downloads/pipcl-13.tar.gz",
+      "bytes": 79063,
+      "sha256": "286aba9785463c83659a565210a82a77896195d3303bff0542e825479b56daf2",
+      "urls": [
+        "https://files.pythonhosted.org/packages/1c/9d/d797318cf82fff625670bbbf88a722d87299c9d8f3fc8372603713ac0af4/pipcl-13.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/downloads/pluggy-1.6.0.tar.gz",
+      "bytes": 69412,
+      "sha256": "7dcc130b76258d33b90f61b658791dede3486c3e6bfb003ee5c9bfb396dd22f3",
+      "urls": [
+        "https://files.pythonhosted.org/packages/f9/e2/3e91f31a7d2b083fe6ef3fa267035b518369d9511ffab804f839851d2779/pluggy-1.6.0.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/downloads/propcache-0.5.4.tar.gz",
+      "bytes": 61545,
+      "sha256": "ff6b113f50bc066a698db5d944d2c6dc7507168dd3341e255a8892fd0715a558",
+      "urls": [
+        "https://files.pythonhosted.org/packages/b3/9a/9fbf4e4ec0c2d7f1c32519fff782ef467859b8faa9fbc5331a96f6395d43/propcache-0.5.4.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/downloads/pycparser-3.11.tar.gz",
+      "bytes": 113796,
+      "sha256": "d875f09c3507d00e1aba0eecc6dcadc1352f30fff09dc6bff2f1c2935e97c2bc",
+      "urls": [
+        "https://files.pythonhosted.org/packages/da/a8/c5fdbeee588bb8ada9458774f43adf1bdd30bd59157055142183e769a024/pycparser-3.11.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/downloads/pygments-2.21.0.tar.gz",
+      "bytes": 5005329,
+      "sha256": "610ca751c9bc2492b38eb9a38a7fbc93edbbb2d7182edaf34e66ae493dee5c8c",
+      "urls": [
+        "https://files.pythonhosted.org/packages/49/2e/ced460408999b33da6b31b0021b0f37d329e202d4169aeb164493778f25b/pygments-2.21.0.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/downloads/pyinstaller-6.20.0.tar.gz",
+      "bytes": 4048728,
+      "sha256": "95c5c7e03d5d61e9dfb8ef259c699cf492bb1041beb6dbe83696608cec07347a",
+      "urls": [
+        "https://files.pythonhosted.org/packages/46/60/d03d52e6690d4e9caf333dcd14550cde634ce6c118b3bc8fa3112c3186fd/pyinstaller-6.20.0.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/downloads/pyinstaller_hooks_contrib-2026.7.tar.gz",
+      "bytes": 175992,
+      "sha256": "5fbcaacb22c4f4aac869a127dce283f67a4b4cfcc37d496f2446603e6d68aefa",
+      "urls": [
+        "https://files.pythonhosted.org/packages/26/60/d881fa1ba8c160c18d8e6f782bb16ec4640c08bc08fc50f704c368ad4f9e/pyinstaller_hooks_contrib-2026.7.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/downloads/pyinstaller_hooks_contrib-2026.8.tar.gz",
+      "bytes": 176955,
+      "sha256": "4d825786ad7a9b7dbcc52d612748a34562fe273461bcfd88f4d549c594bbf8f9",
+      "urls": [
+        "https://files.pythonhosted.org/packages/c9/3b/fab1a12a21bf9223af012e5dd002b7d4265683d21d9fabbd0ccb347316e4/pyinstaller_hooks_contrib-2026.8.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/downloads/pytest-9.1.1.tar.gz",
+      "bytes": 1636369,
+      "sha256": "1088fbde8f2b49d95a549a195707afa7a76a3ce9bcadc26b6d71f0ffda5fe313",
+      "urls": [
+        "https://files.pythonhosted.org/packages/e4/47/b9efed96c114afcfa3c9d3fe98a76a1d14c74a9e266d397cf6eb64be5e01/pytest-9.1.1.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/downloads/pywin32-ctypes-0.2.3.tar.gz",
+      "bytes": 29471,
+      "sha256": "d162dc04946d704503b2edc4d55f3dba5c1d539ead017afa00142c38b9885755",
+      "urls": [
+        "https://files.pythonhosted.org/packages/85/9f/01a1a99704853cb63f253eea009390c88e7131c67e66a0a02099a8c917cb/pywin32-ctypes-0.2.3.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/downloads/setuptools-84.0.0.tar.gz",
+      "bytes": 1168449,
+      "sha256": "f4695c21257f0d9b537ec2692c941d02ee143b7cc1276941349a546573b2ef73",
+      "urls": [
+        "https://files.pythonhosted.org/packages/6d/44/f5da03a8ef95d369145c5bb53050e7877c9f3d312e128605fd9504829143/setuptools-84.0.0.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/downloads/swig-4.3.1.tar.gz",
+      "bytes": 25741,
+      "sha256": "bbb43485d120d3fd2c979f258f81eae78274f83ba3767d5b3fe376ac70504934",
+      "urls": [
+        "https://files.pythonhosted.org/packages/35/d2/f7298d9e970531ea0078332e3f7813ee0133303e365d0940a83438a296d3/swig-4.3.1.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/downloads/tzdata-2026.5.tar.gz",
+      "bytes": 200404,
+      "sha256": "8cc73c0a0bfca7dbfa59235d60b2eff82231dee33f53d206db1acd9173cfc0a7",
+      "urls": [
+        "https://files.pythonhosted.org/packages/d9/68/f1b440335057bfce71b6e50a9d09445aa2ecbd08359a337976627b8409e7/tzdata-2026.5.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/downloads/urllib3-2.8.0.tar.gz",
+      "bytes": 458972,
+      "sha256": "63bf2ead4c879426ebf22ef2a781eeb4aa3b4ae798a0435506f8687fd5bb9b63",
+      "urls": [
+        "https://files.pythonhosted.org/packages/e3/05/b17359e1cefb4f909b5e40b1b90a496d987258916dbbf88e842c729f510e/urllib3-2.8.0.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/downloads/wheel-0.48.0.tar.gz",
+      "bytes": 66471,
+      "sha256": "94800765601e9171bf5d58d066e640662842bcedcbab982b2c90787a2c987322",
+      "urls": [
+        "https://files.pythonhosted.org/packages/d0/20/50ed6bdf27dec98b568a8ae25dc599f35baa3d9709f9e83fd1edb56b9a90/wheel-0.48.0.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/downloads/yarl-1.25.1.tar.gz",
+      "bytes": 246245,
+      "sha256": "03dd38de09bc213e9a8b29761eec33ee1d5318dac0e49d8af36e4d27830e23a7",
+      "urls": [
+        "https://files.pythonhosted.org/packages/75/16/e8be8e2fb175bbf41a0680381a319f1199fae256588241a2ac8677eafb49/yarl-1.25.1.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/native-sources/Python-3.12.10.tar.xz",
+      "bytes": 20520960,
+      "sha256": "07ab697474595e06f06647417d3c7fa97ded07afc1a7e4454c5639919b46eaea",
+      "urls": [
+        "https://www.python.org/ftp/python/3.12.10/Python-3.12.10.tar.xz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/native-sources/Python-3.12.13.tar.xz",
+      "bytes": 20801708,
+      "sha256": "c08bc65a81971c1dd5783182826503369466c7e67374d1646519adf05207b684",
+      "urls": [
+        "https://www.python.org/ftp/python/3.12.13/Python-3.12.13.tar.xz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/pdfium/dependencies/build-613f5c13bccbc15bd7ce8da9acb13ac06459f8cb.tar.gz",
+      "bytes": 1851153,
+      "sha256": "27b898cc47556fa8f2598644873f56f40921ba4470bc292e755874bff47b2509",
+      "urls": [
+        "https://chromium.googlesource.com/chromium/src/build/+archive/613f5c13bccbc15bd7ce8da9acb13ac06459f8cb.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/pdfium/dependencies/buildtools-e06be5db47ae15871b2c40c44d75a9fb91daf194.tar.gz",
+      "bytes": 60628,
+      "sha256": "6c43e5418c5668569779f22c56eef97b306ddaae9879a7313abcc44d526b37d6",
+      "urls": [
+        "https://chromium.googlesource.com/chromium/src/buildtools/+archive/e06be5db47ae15871b2c40c44d75a9fb91daf194.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/pdfium/dependencies/third_party_abseil-cpp-5e42a36a85a252d8cdee6c39661d2bfd9883fd5c.tar.gz",
+      "bytes": 3125155,
+      "sha256": "0778bb418db423e351627f32e7d1e1eb1fff2fa260694d4e22eec9e5bff6df98",
+      "urls": [
+        "https://chromium.googlesource.com/chromium/src/third_party/abseil-cpp/+archive/5e42a36a85a252d8cdee6c39661d2bfd9883fd5c.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/pdfium/dependencies/third_party_depot_tools-ed3a6fdd519a74da32fb73e1d2ce9c405812cf1a.tar.gz",
+      "bytes": 1316113,
+      "sha256": "23b99f357bf4a1b6c445d14c5e86759e876c342297d621c7ddca8a5d28b41d2a",
+      "urls": [
+        "https://chromium.googlesource.com/chromium/tools/depot_tools/+archive/ed3a6fdd519a74da32fb73e1d2ce9c405812cf1a.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/pdfium/dependencies/third_party_fast_float_src-05087a303dad9c98768b33c829d398223a649bc6.tar.gz",
+      "bytes": 126129,
+      "sha256": "37c56faaa0184a226b15155b8b92a3afbb907fd17682d26467d8e027b14e9f8a",
+      "urls": [
+        "https://chromium.googlesource.com/external/github.com/fastfloat/fast_float/+archive/05087a303dad9c98768b33c829d398223a649bc6.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/pdfium/dependencies/third_party_freetype_src-b08a2eb0dd37f4a6c886fa5b0ecf5b3e1d27aac7.tar.gz",
+      "bytes": 2568884,
+      "sha256": "96f0e6ffb6cca650005756b593a443f576f4dc41fc4ca2ebfe71c7d0bbb55045",
+      "urls": [
+        "https://chromium.googlesource.com/chromium/src/third_party/freetype2/+archive/b08a2eb0dd37f4a6c886fa5b0ecf5b3e1d27aac7.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/pdfium/dependencies/third_party_icu-3859e64eed5d34544b27fbcab0ac1685ce83df3c.tar.gz",
+      "bytes": 55544502,
+      "sha256": "118fa810f9082076e5d18824f1a53849b0e1322b76ca0247eb992dc588be03a2",
+      "urls": [],
+      "method": "git_archive_gzip",
+      "repo": "https://chromium.googlesource.com/chromium/deps/icu.git",
+      "commit": "3859e64eed5d34544b27fbcab0ac1685ce83df3c",
+      "gzip_level": 6
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/pdfium/dependencies/third_party_jinja2-c3027d884967773057bf74b957e3fea87e5df4d7.tar.gz",
+      "bytes": 124224,
+      "sha256": "7589b985c623f240febbc25d62be4cb8879727e982a833698c8f1997aff1ec9c",
+      "urls": [
+        "https://chromium.googlesource.com/chromium/src/third_party/jinja2/+archive/c3027d884967773057bf74b957e3fea87e5df4d7.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/pdfium/dependencies/third_party_libcpp_src-5abc7f839700f0f17338434e1c1c6a8c87c00c11.retry.tar.gz",
+      "bytes": 8888084,
+      "sha256": "be53cad18a1ae09abc4912381e8c15ba293143480d2b7798ea2302b769508d2c",
+      "urls": [
+        "https://chromium.googlesource.com/external/github.com/llvm/llvm-project/libcxx/+archive/5abc7f839700f0f17338434e1c1c6a8c87c00c11.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/pdfium/dependencies/third_party_libcppabi_src-8f11bb1d4438d0239d0dfc1bd9456a9f31629dda.tar.gz",
+      "bytes": 806303,
+      "sha256": "8df2d5c3744944d3a5c59330a86661cf7180351761a5f2f29140bad14590966b",
+      "urls": [
+        "https://chromium.googlesource.com/external/github.com/llvm/llvm-project/libcxxabi/+archive/8f11bb1d4438d0239d0dfc1bd9456a9f31629dda.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/pdfium/dependencies/third_party_libjpeg_turbo-640f254ad0fa03f6b1f29f89b7dd9366f2f6e533.tar.gz",
+      "bytes": 2624771,
+      "sha256": "ac7e97f2274fc653cb90fbd7337b1ef6e9cc3f28ba255622d1bc6a4e1b4b65d0",
+      "urls": [
+        "https://chromium.googlesource.com/chromium/deps/libjpeg_turbo/+archive/640f254ad0fa03f6b1f29f89b7dd9366f2f6e533.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/pdfium/dependencies/third_party_libpng-8a5b4ace0c2a8a47d73037610b98096f55f3d18f.tar.gz",
+      "bytes": 350532,
+      "sha256": "7e210a4cca237e84a7b061822d91a57c621316a6f2f544bf8d50363a7d54182c",
+      "urls": [
+        "https://chromium.googlesource.com/chromium/src/third_party/libpng/+archive/8a5b4ace0c2a8a47d73037610b98096f55f3d18f.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/pdfium/dependencies/third_party_llvm-libc_src-9309c117ebae84dd2f9df1ef99de4782162527d5.tar.gz",
+      "bytes": 7783874,
+      "sha256": "d988719bf396c30e5385791b0e9be758c11d5c1e5ab672e99742ede702aa7027",
+      "urls": [
+        "https://chromium.googlesource.com/external/github.com/llvm/llvm-project/libc/+archive/9309c117ebae84dd2f9df1ef99de4782162527d5.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/pdfium/dependencies/third_party_markupsafe-4256084ae14175d38a3ff7d739dca83ae49ccec6.tar.gz",
+      "bytes": 10303,
+      "sha256": "4e2f053213028f13b05203e849a046e6f0bbcddac9bb2d8fe6972ed036f72ec4",
+      "urls": [
+        "https://chromium.googlesource.com/chromium/src/third_party/markupsafe/+archive/4256084ae14175d38a3ff7d739dca83ae49ccec6.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/pdfium/dependencies/third_party_nasm-525a09a813be0f75b646ee93fc2a31c27b87d722.tar.gz",
+      "bytes": 2433296,
+      "sha256": "a17db2332a70cc865a7309a68e3a032f68f25a54271bbe43d12ddc28949d8ddc",
+      "urls": [
+        "https://chromium.googlesource.com/chromium/deps/nasm/+archive/525a09a813be0f75b646ee93fc2a31c27b87d722.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/pdfium/dependencies/third_party_simdutf-f7356eed293f8208c40b3c1b344a50bd70971983.tar.gz",
+      "bytes": 425712,
+      "sha256": "ec819a90bea2fc747733f5e050b67ebede05b7f5514366ec27cba9676d3cde05",
+      "urls": [
+        "https://chromium.googlesource.com/chromium/src/third_party/simdutf/+archive/f7356eed293f8208c40b3c1b344a50bd70971983.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/pdfium/dependencies/third_party_zlib-5c1dfd53066bf58d3d28197f715717dd88762443.tar.gz",
+      "bytes": 1388908,
+      "sha256": "3239ec87aa322a4057861f22d7444db0c59365b6b2d1825c35a526dcdd9e5e7d",
+      "urls": [
+        "https://chromium.googlesource.com/chromium/src/third_party/zlib/+archive/5c1dfd53066bf58d3d28197f715717dd88762443.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/pdfium/dependencies/tools_clang-06dd1f40dcb33340f5fd45b770261f111fb33728.tar.gz",
+      "bytes": 657153,
+      "sha256": "076f55299481c8bdd069ca004456e2e9ccddbc2dca1cb6ade1e78eecd3b2666d",
+      "urls": [
+        "https://chromium.googlesource.com/chromium/src/tools/clang/+archive/06dd1f40dcb33340f5fd45b770261f111fb33728.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/pdfium/dependencies/tools_win-faefd1b6fa9eeb033ad6fe60368ccb9bf908cbd0.tar.gz",
+      "bytes": 180950,
+      "sha256": "1ff4bf4838344a6cb37d84e9864c88bef33cc40bec3c07277fc4f5b1ec736da6",
+      "urls": [
+        "https://chromium.googlesource.com/chromium/src/tools/win/+archive/faefd1b6fa9eeb033ad6fe60368ccb9bf908cbd0.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/pdfium/pdfium-binaries-867b3ecc32163d715e84708c51fae5f031254985.tar.gz",
+      "bytes": 142236,
+      "sha256": "4804a594ff7b4b16705622b1569b2f936ad3e468d23c4cad17f0305f3e6c887f",
+      "urls": [
+        "https://codeload.github.com/bblanchon/pdfium-binaries/tar.gz/867b3ecc32163d715e84708c51fae5f031254985"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/pdfium/pdfium-eee4375737f7647ce69053ae4fc3639c233f2b02.tar.gz",
+      "bytes": 12948733,
+      "sha256": "854c87343e67eca790afca3f816942f8c4a016e6e96387fa39cd4b1019b84fb7",
+      "urls": [
+        "https://pdfium.googlesource.com/pdfium/+archive/eee4375737f7647ce69053ae4fc3639c233f2b02.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/pillow/archives/brotli-1.2.0.tar.gz",
+      "bytes": 646315,
+      "sha256": "816c96e8e8f193b40151dad7e8ff37b1221d019dbcb9c35cd3fadbfe6477dfec",
+      "urls": [
+        "https://raw.githubusercontent.com/python-pillow/pillow-depends/93950a8f9ada1165a4ab8c719326d5017e3f6c72/brotli-1.2.0.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/pillow/archives/dav1d-1.5.3.tar.gz",
+      "bytes": 1713950,
+      "sha256": "cbe212b02faf8c6eed5b6d55ef8a6e363aaab83f15112e960701a9c3df813686",
+      "urls": [
+        "https://code.videolan.org/videolan/dav1d/-/archive/1.5.3/dav1d-1.5.3.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/pillow/archives/freetype-2.14.3.tar.gz",
+      "bytes": 4134916,
+      "sha256": "e61b31ab26358b946e767ed7eb7f4bb2e507da1cfefeb7a8861ace7fd5c899a1",
+      "urls": [
+        "https://raw.githubusercontent.com/python-pillow/pillow-depends/93950a8f9ada1165a4ab8c719326d5017e3f6c72/freetype-2.14.3.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/pillow/archives/harfbuzz-13.2.1.tar.xz",
+      "bytes": 19508960,
+      "sha256": "6695da3eb7e1be0aa3092fe4d81433a33b47f4519259c759d729e3a9a55c1429",
+      "urls": [
+        "https://raw.githubusercontent.com/python-pillow/pillow-depends/963fd49f807a990f02416a5f019d434cf483e076/harfbuzz-13.2.1.tar.xz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/pillow/archives/lcms2-2.18.tar.gz",
+      "bytes": 5599928,
+      "sha256": "ee67be3566f459362c1ee094fde2c159d33fa0390aa4ed5f5af676f9e5004347",
+      "urls": [
+        "https://download.sourceforge.net/lcms/lcms2-2.18.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/pillow/archives/libXau-1.0.12.tar.gz",
+      "bytes": 418722,
+      "sha256": "2402dd938da4d0a332349ab3d3586606175e19cb32cb9fe013c19f1dc922dcee",
+      "urls": [
+        "https://raw.githubusercontent.com/python-pillow/pillow-depends/93950a8f9ada1165a4ab8c719326d5017e3f6c72/libXau-1.0.12.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/pillow/archives/libaom-3.13.2.tar.gz",
+      "bytes": 6325502,
+      "sha256": "12d024602ce1d81ecc21487dd8596fdc0562fa5a85f866aca1b3d42652a00d93",
+      "urls": [
+        "https://aomedia.googlesource.com/aom/+archive/refs/tags/v3.13.2.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/pillow/archives/libavif-1.4.1.tar.gz",
+      "bytes": 14528943,
+      "sha256": "d4aea31a4becb3273ba7968221be2e48148ba05eb8a68d14e671963e17785648",
+      "urls": [
+        "https://raw.githubusercontent.com/python-pillow/pillow-depends/60c722996bcc758a40a73a6cafc8c793d534d68b/libavif-1.4.1.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/pillow/archives/libjpeg-turbo-3.1.4.1.tar.gz",
+      "bytes": 2528617,
+      "sha256": "ecae8008e2cc9ade2f2c1bb9d5e6d4fb73e7c433866a056bd82980741571a022",
+      "urls": [
+        "https://raw.githubusercontent.com/python-pillow/pillow-depends/93950a8f9ada1165a4ab8c719326d5017e3f6c72/libjpeg-turbo-3.1.4.1.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/pillow/archives/libpng-1.6.56-pillow-mirror.tar.gz",
+      "bytes": 1590073,
+      "sha256": "41d74ffe235cb7e8bab40bcad2167f7bb25edbf2231dcfff57ccf4305dc0bfae",
+      "urls": [
+        "https://raw.githubusercontent.com/python-pillow/pillow-depends/3d899457a2849d647ffebefd173a02dbc7391547/libpng-1.6.56.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/pillow/archives/libpng-1.6.56.tar.gz",
+      "bytes": 1577915,
+      "sha256": "8f91e941a07fb1069ebb3855278f82a849e6af14ca05821e14ec3d5348697ea5",
+      "urls": [
+        "https://download.sourceforge.net/libpng/libpng-1.6.56.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/pillow/archives/libpthread-stubs-0.5.tar.gz",
+      "bytes": 74938,
+      "sha256": "593196cc746173d1e25cb54a93a87fd749952df68699aab7e02c085530e87747",
+      "urls": [
+        "https://raw.githubusercontent.com/python-pillow/pillow-depends/93950a8f9ada1165a4ab8c719326d5017e3f6c72/libpthread-stubs-0.5.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/pillow/archives/libwebp-1.6.0.tar.gz",
+      "bytes": 4296070,
+      "sha256": "e4ab7009bf0629fd11982d4c2aa83964cf244cffba7347ecd39019a9e38c4564",
+      "urls": [
+        "https://raw.githubusercontent.com/python-pillow/pillow-depends/93950a8f9ada1165a4ab8c719326d5017e3f6c72/libwebp-1.6.0.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/pillow/archives/libxcb-1.17.0.tar.gz",
+      "bytes": 661593,
+      "sha256": "2c69287424c9e2128cb47ffe92171e10417041ec2963bceafb65cb3fcf8f0b85",
+      "urls": [
+        "https://raw.githubusercontent.com/python-pillow/pillow-depends/93950a8f9ada1165a4ab8c719326d5017e3f6c72/libxcb-1.17.0.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/pillow/archives/libyuv-6067afde563c3946eebd94f146b3824ab7a97a9c.tar.gz",
+      "bytes": 593827,
+      "sha256": "b43c5359461b32b0cdc4abc2c2527a780b8c402cb68855c5f0b731f6d7288644",
+      "urls": [
+        "https://chromium.googlesource.com/libyuv/libyuv/+archive/6067afde563c3946eebd94f146b3824ab7a97a9c.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/pillow/archives/multibuild-64739327166fcad1fa41ad9b23fa910fa244c84f.tar.gz",
+      "bytes": 825575,
+      "sha256": "386b2a516d88257db95f69ab4a91c2c4c69892ceeefe42bebc3b70f4ff20a2dc",
+      "urls": [
+        "https://codeload.github.com/multi-build/multibuild/tar.gz/64739327166fcad1fa41ad9b23fa910fa244c84f"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/pillow/archives/openjpeg-2.5.4.tar.gz",
+      "bytes": 2157028,
+      "sha256": "a695fbe19c0165f295a8531b1e4e855cd94d0875d2f88ec4b61080677e27188a",
+      "urls": [
+        "https://raw.githubusercontent.com/python-pillow/pillow-depends/93950a8f9ada1165a4ab8c719326d5017e3f6c72/openjpeg-2.5.4.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/pillow/archives/pkg-config-0.29.2.tar.gz",
+      "bytes": 2016830,
+      "sha256": "6fc69c01688c9458a57eb9a1664c9aba372ccda420a02bf4429fe610e7e7d591",
+      "urls": [
+        "https://raw.githubusercontent.com/python-pillow/pillow-depends/93950a8f9ada1165a4ab8c719326d5017e3f6c72/pkg-config-0.29.2.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/pillow/archives/tiff-4.7.1.tar.gz",
+      "bytes": 4000609,
+      "sha256": "f698d94f3103da8ca7438d84e0344e453fe0ba3b7486e04c5bf7a9a3fabe9b69",
+      "urls": [
+        "https://raw.githubusercontent.com/python-pillow/pillow-depends/93950a8f9ada1165a4ab8c719326d5017e3f6c72/tiff-4.7.1.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/pillow/archives/xcb-proto-1.17.0.tar.gz",
+      "bytes": 206094,
+      "sha256": "392d3c9690f8c8202a68fdb89c16fd55159ab8d65000a6da213f4a1576e97a16",
+      "urls": [
+        "https://raw.githubusercontent.com/python-pillow/pillow-depends/93950a8f9ada1165a4ab8c719326d5017e3f6c72/xcb-proto-1.17.0.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/pillow/archives/xorgproto-2025.1.tar.gz",
+      "bytes": 1127613,
+      "sha256": "d6f89f65bafb8c9b735e0515882b8a1511e8e864dde5e9513e191629369f2256",
+      "urls": [
+        "https://raw.githubusercontent.com/python-pillow/pillow-depends/93950a8f9ada1165a4ab8c719326d5017e3f6c72/xorgproto-2025.1.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/pillow/archives/xz-5.8.3.tar.gz",
+      "bytes": 2771455,
+      "sha256": "3d3a1b973af218114f4f889bbaa2f4c037deaae0c8e815eec381c3d546b974a0",
+      "urls": [
+        "https://raw.githubusercontent.com/python-pillow/pillow-depends/93950a8f9ada1165a4ab8c719326d5017e3f6c72/xz-5.8.3.tar.gz",
+        "https://github.com/tukaani-project/xz/releases/download/v5.8.3/xz-5.8.3.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/pillow/archives/zlib-ng-2.3.3.tar.gz",
+      "bytes": 2447397,
+      "sha256": "f9c65aa9c852eb8255b636fd9f07ce1c406f061ec19a2e7d508b318ca0c907d1",
+      "urls": [
+        "https://codeload.github.com/zlib-ng/zlib-ng/tar.gz/refs/tags/2.3.3"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/python-native/bzip2-1.0.8-05301997b2f9.tar.gz",
+      "bytes": 819016,
+      "sha256": "ab14accac86cdd92021d50465deeb221b476d6675bd1383d3c7fb83751c2e0a3",
+      "urls": [
+        "https://codeload.github.com/python/cpython-source-deps/tar.gz/05301997b2f9590f49c672cf3dfd3d3dfa7ad521"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/python-native/bzip2-1.0.8.tar.gz",
+      "bytes": 810029,
+      "sha256": "ab5a03176ee106d3f0fa90e381da478ddae405918153cca248e682cd0c4a2269",
+      "urls": [
+        "https://astral-sh.github.io/mirror/files/bzip2-1.0.8.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/python-native/expat-2.8.2.tar.xz",
+      "bytes": 515504,
+      "sha256": "3ad89b8588e6644bd4e49981480d48b21289eebbcd4f0a1a4afb1c29f99b6ab4",
+      "urls": [
+        "https://github.com/libexpat/libexpat/releases/download/R_2_8_2/expat-2.8.2.tar.xz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/python-native/libedit-20240808-3.1.tar.gz",
+      "bytes": 538611,
+      "sha256": "5f0573349d77c4a48967191cdd6634dd7aa5f6398c6a57fe037cc02696d6099f",
+      "urls": [
+        "https://thrysoee.dk/editline/libedit-20240808-3.1.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/python-native/libffi-3.4.4-73b247f34ef3.tar.gz",
+      "bytes": 1376474,
+      "sha256": "a9b2840c1b99a2b57746c50f1f2ab902420628111690ec420e7293ec1f502d7b",
+      "urls": [
+        "https://codeload.github.com/python/cpython-source-deps/tar.gz/73b247f34ef3ae1859b8c2c34d321d34ebc5db15"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/python-native/libffi-3.4.6.tar.gz",
+      "bytes": 1391684,
+      "sha256": "b0dea9df23c863a7a50e825440f3ebffabd65df1497108e5d437747843895a4e",
+      "urls": [
+        "https://github.com/libffi/libffi/releases/download/v3.4.6/libffi-3.4.6.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/python-native/mpdecimal-4.0.0.tar.gz",
+      "bytes": 315325,
+      "sha256": "942445c3245b22730fd41a67a7c5c231d11cb1b9936b9c0f76334fb7d0b4468c",
+      "urls": [
+        "https://astral-sh.github.io/mirror/files/mpdecimal-4.0.0.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/python-native/ncurses-6.5.tar.gz",
+      "bytes": 3688489,
+      "sha256": "136d91bc269a9a5785e5f9e980bc76ab57428f604ce3e5a5a90cebc767971cc6",
+      "urls": [
+        "https://astral-sh.github.io/mirror/files/ncurses-6.5.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/python-native/openssl-3.0.16-bb01d0a37b90.tar.gz",
+      "bytes": 15490591,
+      "sha256": "76f18f21dbc7e0ba747de571f908a9ac16c0173d0c5c9c2816993e09e85dc5ff",
+      "urls": [
+        "https://codeload.github.com/python/cpython-source-deps/tar.gz/bb01d0a37b909f6fe280b1c2015fa1f6005fb4e2"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/python-native/openssl-3.5.7.tar.gz",
+      "bytes": 53153930,
+      "sha256": "a8c0d28a529ca480f9f36cf5792e2cd21984552a3c8e4aa11a24aa31aeac98e8",
+      "urls": [
+        "https://github.com/openssl/openssl/releases/download/openssl-3.5.7/openssl-3.5.7.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/python-native/python-build-standalone-00c8a06113f11220667c3bcf5fab1672ff9e78ef.tar.gz",
+      "bytes": 443196,
+      "sha256": "6571b9cae11c942d67902618a30ff13330b7ff2d091a3a88da4c51579780be99",
+      "urls": [
+        "https://codeload.github.com/astral-sh/python-build-standalone/tar.gz/00c8a06113f11220667c3bcf5fab1672ff9e78ef"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/python-native/sqlite-autoconf-3530100.tar.gz",
+      "bytes": 3275272,
+      "sha256": "83e6b2020a034e9a7ad4a72feea59e1ad52f162e09cbd26735a3ffb98359fc4f",
+      "urls": [
+        "https://www.sqlite.org/2026/sqlite-autoconf-3530100.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/python-native/xz-5.2.5-c6bc0c612605.tar.gz",
+      "bytes": 1745919,
+      "sha256": "115433c946ee069e857fd04cf41b38a4a74ed45d868a3b2e08ccd4a1f04f39d0",
+      "urls": [
+        "https://codeload.github.com/python/cpython-source-deps/tar.gz/c6bc0c612605622aaef101a33a751f9de2ecc193"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/python-native/xz-5.8.3.tar.gz",
+      "bytes": 2771455,
+      "sha256": "3d3a1b973af218114f4f889bbaa2f4c037deaae0c8e815eec381c3d546b974a0",
+      "urls": [
+        "https://raw.githubusercontent.com/python-pillow/pillow-depends/93950a8f9ada1165a4ab8c719326d5017e3f6c72/xz-5.8.3.tar.gz",
+        "https://github.com/tukaani-project/xz/releases/download/v5.8.3/xz-5.8.3.tar.gz"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/python-native/zlib-1.3.1-4dc98e190983.tar.gz",
+      "bytes": 1572582,
+      "sha256": "1fe30e919eb560f495de9ee4bd7ba5216ce13f454affb4ccc32e15efa3878f5e",
+      "urls": [
+        "https://codeload.github.com/python/cpython-source-deps/tar.gz/4dc98e1909830e2bdc2a9cc2236e3c5d5037335b"
+      ],
+      "method": "https"
+    },
+    {
+      "path": "sources/release-candidate-20261015-rc2/source-materials-20261016/python-native/zlib-1.3.2.tar.gz",
+      "bytes": 1502830,
+      "sha256": "bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16",
+      "urls": [
+        "https://github.com/madler/zlib/releases/download/v1.3.2/zlib-1.3.2.tar.gz"
+      ],
+      "method": "https"
+    }
+  ],
+  "segments": [
+    {
+      "seed_offset": 0,
+      "bytes": 1307949
+    },
+    {
+      "source_sha256": "98a5c10cda20c3992cdf76ff6b2a1149c32bd79cc796d3f703230b1185b7e934",
+      "bytes": 68919385
+    },
+    {
+      "seed_offset": 1307949,
+      "bytes": 111
+    },
+    {
+      "source_sha256": "22a075c9e5a3810f0c2e48f3008c94d68c65d763b9b03857924c99e57355166c",
+      "bytes": 30247
+    },
+    {
+      "seed_offset": 1308060,
+      "bytes": 110
+    },
+    {
+      "source_sha256": "9491196535a88924a60afd5b5f434b5b203b6cc616250878dbdb223a8f7844bc",
+      "bytes": 7971213
+    },
+    {
+      "seed_offset": 1308170,
+      "bytes": 111
+    },
+    {
+      "source_sha256": "f47eecd9468083c2029cc99945502cb7708b082c232f9aca65da147157b251c7",
+      "bytes": 25007
+    },
+    {
+      "seed_offset": 1308281,
+      "bytes": 118
+    },
+    {
+      "source_sha256": "ec8053d0aa8d43ebe1deb632d5c5404339b39ec9a18a0707d57765838418504a",
+      "bytes": 8785
+    },
+    {
+      "seed_offset": 1308399,
+      "bytes": 127
+    },
+    {
+      "source_sha256": "87da41ea3ffb146b44d999c62c160c2b96b0c30275ae35205bcdfe79ba0c4119",
+      "bytes": 43203
+    },
+    {
+      "seed_offset": 1308526,
+      "bytes": 130
+    },
+    {
+      "source_sha256": "8ea0668a6558f6956b8d20b2e561d19a80ea29c22cf56a3004d434b24a981b36",
+      "bytes": 2314
+    },
+    {
+      "seed_offset": 1308656,
+      "bytes": 128
+    },
+    {
+      "source_sha256": "a593eb8ddd8168d5dc2216cd33111b144f9189fcd6e9ca20e48f358a739bbf90",
+      "bytes": 2813
+    },
+    {
+      "seed_offset": 1308784,
+      "bytes": 126
+    },
+    {
+      "source_sha256": "73d6e20d65b54eed26d89c19640d3a7572e18c45ecada627f806f5dbe8ed2130",
+      "bytes": 4253
+    },
+    {
+      "seed_offset": 1308910,
+      "bytes": 130
+    },
+    {
+      "source_sha256": "fd5edeca80358f29cbde253422b0ce3d5b1cdc510fd3903bdbbc0b641678056d",
+      "bytes": 33565
+    },
+    {
+      "seed_offset": 1309040,
+      "bytes": 127
+    },
+    {
+      "source_sha256": "87022b9dcb7593a601f7a40ca698227ac3ccb776b58cb7b06b8dc7f510995c34",
+      "bytes": 7981
+    },
+    {
+      "seed_offset": 1309167,
+      "bytes": 126
+    },
+    {
+      "source_sha256": "dafc32401712f5b21c12dc3d05ba887a91ad156d9b49a7662279f9fd90526fb2",
+      "bytes": 26742
+    },
+    {
+      "seed_offset": 1309293,
+      "bytes": 124
+    },
+    {
+      "source_sha256": "79f78e596f6be03fb9565e34ac45420f3730e52888376cc9713bd07432a4c6cc",
+      "bytes": 7548
+    },
+    {
+      "seed_offset": 1309417,
+      "bytes": 114
+    },
+    {
+      "source_sha256": "cd2fcc9330039a81a5893472ad49facf23a6d5604cbe1d918c835c6de7834d5a",
+      "bytes": 110312
+    },
+    {
+      "seed_offset": 1309531,
+      "bytes": 108
+    },
+    {
+      "source_sha256": "d03ceb89cb322a8fd706d4fb91940737b6642aa36998fe130a9bc96c985eff32",
+      "bytes": 952055
+    },
+    {
+      "seed_offset": 1309639,
+      "bytes": 106
+    },
+    {
+      "source_sha256": "dd31f52ea1086513bb9df30f8fcee9b8918323ae067a3d5b78bc826a000712be",
+      "bytes": 530807
+    },
+    {
+      "seed_offset": 1309745,
+      "bytes": 120
+    },
+    {
+      "source_sha256": "6117b84ea48435e5356dc737f5121485c30920ba43375fa7b434fd753df0eac3",
+      "bytes": 171764
+    },
+    {
+      "seed_offset": 1309865,
+      "bytes": 115
+    },
+    {
+      "source_sha256": "5dd9bda1c12b4162f6ff568eeb5e0ff956c28d14406e875cfe8a63a2d414ff20",
+      "bytes": 880381
+    },
+    {
+      "seed_offset": 1309980,
+      "bytes": 116
+    },
+    {
+      "source_sha256": "1026c965b4c2b48f89995eadad7ab780a03959812c8f8de4670eb44c48e5b179",
+      "bytes": 28077
+    },
+    {
+      "seed_offset": 1310096,
+      "bytes": 112
+    },
+    {
+      "source_sha256": "dab3f4764309081ce75662649be815c4c9081e88f0837825f90fd28317d4da54",
+      "bytes": 17234
+    },
+    {
+      "seed_offset": 1310208,
+      "bytes": 112
+    },
+    {
+      "source_sha256": "3ede829ed8d842f6cd48fc7081d7a41001a56f1f38603f9d49bf3020d59a31ad",
+      "bytes": 45875
+    },
+    {
+      "seed_offset": 1310320,
+      "bytes": 105
+    },
+    {
+      "source_sha256": "5e0811a4383b21dc5838069f801c4fb62113b7447663d2530d2bd6e77b49bf15",
+      "bytes": 215237
+    },
+    {
+      "seed_offset": 1310425,
+      "bytes": 111
+    },
+    {
+      "source_sha256": "5cd4637ce76312ba1e05eb9c5193fec231f64fee0944e135fa1e951242355b37",
+      "bytes": 122412
+    },
+    {
+      "seed_offset": 1310536,
+      "bytes": 110
+    },
+    {
+      "source_sha256": "cf0e3cf56142039133628b5acffe8ef0c12bc902d2aadd3e0fe5878dc08d1050",
+      "bytes": 186464
+    },
+    {
+      "seed_offset": 1310646,
+      "bytes": 117
+    },
+    {
+      "source_sha256": "5fb0c553799c591777f22c0c72b77fc2522d7d10c70654e25f4c5f1fd996e008",
+      "bytes": 7387104
+    },
+    {
+      "seed_offset": 1310763,
+      "bytes": 113
+    },
+    {
+      "source_sha256": "db29b04bc8bb62f39dd444533bcf2e0ba33584bd24f5a54644f3ba30f4f22d31",
+      "bytes": 102724
+    },
+    {
+      "seed_offset": 1310876,
+      "bytes": 109
+    },
+    {
+      "source_sha256": "a830b1a40919539d07806aa58e1b114df53ddd43213d9c8b75847eee6c0182b5",
+      "bytes": 46987819
+    },
+    {
+      "seed_offset": 1310985,
+      "bytes": 111
+    },
+    {
+      "source_sha256": "01c4fc7480cd0598bb4b57022df55b9ca296da7fc5a8760bd8451a7e63a7d427",
+      "bytes": 50208
+    },
+    {
+      "seed_offset": 1311096,
+      "bytes": 109
+    },
+    {
+      "source_sha256": "600f49d217304a5902ac3c37e1281c9fe94e4d0489de643a9504c5cdfdfc6b29",
+      "bytes": 103492
+    },
+    {
+      "seed_offset": 1311205,
+      "bytes": 110
+    },
+    {
+      "source_sha256": "5e0be7908a715aa20333caddd73f1d6f01e4cd0c26e869fa2dd0b7f344da2249",
+      "bytes": 87903557
+    },
+    {
+      "seed_offset": 1311315,
+      "bytes": 108
+    },
+    {
+      "source_sha256": "4c5a48ba258c37024ec2505f7e8fd858525f5502784a2e1c8d415604af29f6ef",
+      "bytes": 5314833
+    },
+    {
+      "seed_offset": 1311423,
+      "bytes": 112
+    },
+    {
+      "source_sha256": "f257d2011eb43c846b7e9f5a802e28646b29732763e4a35dd6ca76f9be580538",
+      "bytes": 272963
+    },
+    {
+      "seed_offset": 1311535,
+      "bytes": 130
+    },
+    {
+      "source_sha256": "2c7462fe0cecb5b8ac0a3d92014b8d0b88bd4d9f8646709dab5286d9416f45bc",
+      "bytes": 17900952
+    },
+    {
+      "seed_offset": 1311665,
+      "bytes": 124
+    },
+    {
+      "source_sha256": "383dc907816338f0cba72088a524c07458dfc69ce684ca9132fcc4fe91c24b0b",
+      "bytes": 50509856
+    },
+    {
+      "seed_offset": 1311789,
+      "bytes": 132
+    },
+    {
+      "source_sha256": "52689984b114d4d34516d5d7bfb0c75857b1c3ff529921042144f09ab2de3a83",
+      "bytes": 1680584
+    },
+    {
+      "seed_offset": 1311921,
+      "bytes": 111
+    },
+    {
+      "source_sha256": "f288924cae4e29463698d6d60bc6a4da69c89185ad1e0bcc4104f584e960b9ed",
+      "bytes": 142856
+    },
+    {
+      "seed_offset": 1312032,
+      "bytes": 120
+    },
+    {
+      "source_sha256": "dc983d19a509c94dba722ee6abd33940f7c05a89e243c47e907eb4db6f1a43e5",
+      "bytes": 113555
+    },
+    {
+      "seed_offset": 1312152,
+      "bytes": 109
+    },
+    {
+      "source_sha256": "8dbb8660838688a7b6ba4fed31d18dedf842afb4d47ca050d6d891c2c15f3be4",
+      "bytes": 31170
+    },
+    {
+      "seed_offset": 1312261,
+      "bytes": 109
+    },
+    {
+      "source_sha256": "231e0ec3b63ceb14667c67be60f2f2c40a518cb38b03af60abc813da26505f4c",
+      "bytes": 433602
+    },
+    {
+      "seed_offset": 1312370,
+      "bytes": 118
+    },
+    {
+      "source_sha256": "0fcb57545848be86992e128218fd96dd87a6769ffdb1a968dff79632b85604d0",
+      "bytes": 84110
+    },
+    {
+      "seed_offset": 1312488,
+      "bytes": 107
+    },
+    {
+      "source_sha256": "e81b83143bee16329c23db3c1b2d82b29892fcbcb849186d2f6e98a5abe9a57f",
+      "bytes": 228679
+    },
+    {
+      "seed_offset": 1312595,
+      "bytes": 132
+    },
+    {
+      "source_sha256": "c9795210620c0cb3f9a7ce4f882808c38e1ef7b347c90591dceae0886e031fb1",
+      "bytes": 50502
+    },
+    {
+      "seed_offset": 1312727,
+      "bytes": 139
+    },
+    {
+      "source_sha256": "909e307f1cc32bb8bccbd98f446e6d1bf03fa30f7b53a4337da7181ad30fa11a",
+      "bytes": 9534
+    },
+    {
+      "seed_offset": 1312866,
+      "bytes": 134
+    },
+    {
+      "source_sha256": "b25655df2c3cdd83c5e5b293b88acd880332b2ddadd7c30ac43144fdc0033da9",
+      "bytes": 93578
+    },
+    {
+      "seed_offset": 1313000,
+      "bytes": 136
+    },
+    {
+      "source_sha256": "b588b76d00fde79687d7646a9b5bdf3cc0f655e0bbd080335a95d7e96f3587da",
+      "bytes": 51395
+    },
+    {
+      "seed_offset": 1313136,
+      "bytes": 129
+    },
+    {
+      "source_sha256": "5add81bb678e6cb321aff7fa0dc7689ad82b112dbc032cea19f91d6b8e3582b9",
+      "bytes": 97878
+    },
+    {
+      "seed_offset": 1313265,
+      "bytes": 133
+    },
+    {
+      "source_sha256": "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801",
+      "bytes": 9360
+    },
+    {
+      "seed_offset": 1313398,
+      "bytes": 142
+    },
+    {
+      "source_sha256": "5baebc0774151f905a1a2cc41989300b1e6fbb29aff0ceffa1064fdd3088d582",
+      "bytes": 31493
+    },
+    {
+      "seed_offset": 1313540,
+      "bytes": 140
+    },
+    {
+      "source_sha256": "f6f339eb8adc052cd2ca78910fda869aefa38d22d5cb648e6485e4d3fc06f3b1",
+      "bytes": 7504
+    },
+    {
+      "seed_offset": 1313680,
+      "bytes": 147
+    },
+    {
+      "source_sha256": "00b0228411908ca8685dba7fc2cdd70ec9990a6e753e89b6ac91a84c40fbaf4b",
+      "bytes": 5672
+    },
+    {
+      "seed_offset": 1313827,
+      "bytes": 131
+    },
+    {
+      "source_sha256": "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea",
+      "bytes": 11517
+    },
+    {
+      "seed_offset": 1313958,
+      "bytes": 132
+    },
+    {
+      "source_sha256": "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682",
+      "bytes": 15935
+    },
+    {
+      "seed_offset": 1314090,
+      "bytes": 133
+    },
+    {
+      "source_sha256": "3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2",
+      "bytes": 851502
+    },
+    {
+      "seed_offset": 1314223,
+      "bytes": 137
+    },
+    {
+      "source_sha256": "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50",
+      "bytes": 35010
+    },
+    {
+      "seed_offset": 1314360,
+      "bytes": 136
+    },
+    {
+      "source_sha256": "77823a27f0babb03091cb9ed9ef80af3b39dbc82f97e8fa530374b7dafd87a45",
+      "bytes": 311187
+    },
+    {
+      "seed_offset": 1314496,
+      "bytes": 141
+    },
+    {
+      "source_sha256": "a948666b637a0f465e8564c73e89d4dde00d72d4d473cc972f390fc3dcee7d9c",
+      "bytes": 5601
+    },
+    {
+      "seed_offset": 1314637,
+      "bytes": 140
+    },
+    {
+      "source_sha256": "b47e7e6bb2c38cd930d25a23b40fa52e068c10e85f3e03a7f5ba5aaca5713695",
+      "bytes": 76045
+    },
+    {
+      "seed_offset": 1314777,
+      "bytes": 130
+    },
+    {
+      "source_sha256": "d354a98a3d1251555de99e8fdd8afda05573c31b82f59063a7b0a29b5527f120",
+      "bytes": 18770
+    },
+    {
+      "seed_offset": 1314907,
+      "bytes": 138
+    },
+    {
+      "source_sha256": "19f132c84eca552bf34cab8ec81f1c1dcc229b811638f9d283dceabe58c5569e",
+      "bytes": 21590
+    },
+    {
+      "seed_offset": 1315045,
+      "bytes": 143
+    },
+    {
+      "source_sha256": "3d20d5497ef88037a52ff98267d066e7f11fcc5e99bbfbd58a42336193aacec3",
+      "bytes": 200703
+    },
+    {
+      "seed_offset": 1315188,
+      "bytes": 140
+    },
+    {
+      "source_sha256": "985e7ec9bb745e6ce6535b544d84d6cd6f7ad8bd711c398938ae983b91a766d9",
+      "bytes": 59588
+    },
+    {
+      "seed_offset": 1315328,
+      "bytes": 132
+    },
+    {
+      "source_sha256": "cd274650b21d4bfc26a0a47587962c1edb425f69287324355cd040c3ea66071c",
+      "bytes": 1241253
+    },
+    {
+      "seed_offset": 1315460,
+      "bytes": 132
+    },
+    {
+      "source_sha256": "4688ddedf473e32662b9b067670129a8afb8c18e351482c70d62ba4a88171e8b",
+      "bytes": 1255741
+    },
+    {
+      "seed_offset": 1315592,
+      "bytes": 145
+    },
+    {
+      "source_sha256": "c5e2a7d2f0d013342f295c048ad19237add5154a55b1c5a254c0ec93d4109078",
+      "bytes": 39616
+    },
+    {
+      "seed_offset": 1315737,
+      "bytes": 145
+    },
+    {
+      "source_sha256": "f41027e41b4bd03f6e60f9f417fe24a6341a6bb744edd62b6f709f2a52ea30e9",
+      "bytes": 41104
+    },
+    {
+      "seed_offset": 1315882,
+      "bytes": 136
+    },
+    {
+      "source_sha256": "ca85c467da1bbc8d866eea5deff9cf29ea5f7785054a17da36e65bda9c05845b",
+      "bytes": 88184
+    },
+    {
+      "seed_offset": 1316018,
+      "bytes": 136
+    },
+    {
+      "source_sha256": "e591a95526fead067432c3b3a33fc74770b87b1e04e73671090d9c2055a2b327",
+      "bytes": 90029
+    },
+    {
+      "seed_offset": 1316154,
+      "bytes": 139
+    },
+    {
+      "source_sha256": "9ac53762fd065daa3194dd09337a38bd793a188100fd1a9304c4ab312d901771",
+      "bytes": 8915
+    },
+    {
+      "seed_offset": 1316293,
+      "bytes": 139
+    },
+    {
+      "source_sha256": "73225868fc1cd84eef2c3c230ddb91273bf1de46aeb8a4248da76d32a0924a1c",
+      "bytes": 9044
+    },
+    {
+      "seed_offset": 1316432,
+      "bytes": 147
+    },
+    {
+      "source_sha256": "4ca3a1557399783172dc5bf39cfca835157732532cba56b71d2292161e53b362",
+      "bytes": 91943
+    },
+    {
+      "seed_offset": 1316579,
+      "bytes": 147
+    },
+    {
+      "source_sha256": "571575aa3749fa6216757dd47d2a3e7ef360f329a40f0666a9fbd14889024952",
+      "bytes": 93749
+    },
+    {
+      "seed_offset": 1316726,
+      "bytes": 133
+    },
+    {
+      "source_sha256": "1fbf4db142a473a8d80c26bbf18454ed458bf8d26c8219c331daecfdbd079001",
+      "bytes": 31622
+    },
+    {
+      "seed_offset": 1316859,
+      "bytes": 136
+    },
+    {
+      "source_sha256": "2ab42ca02749e120097e328d91d415325bdf43b1c72c4c8badf37375fe40a813",
+      "bytes": 23869
+    },
+    {
+      "seed_offset": 1316995,
+      "bytes": 132
+    },
+    {
+      "source_sha256": "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba",
+      "bytes": 19332
+    },
+    {
+      "seed_offset": 1317127,
+      "bytes": 132
+    },
+    {
+      "source_sha256": "872831b642d1a07999a962a351ed35b955ea2cfc8f3862091e2a240a84f17297",
+      "bytes": 307407
+    },
+    {
+      "seed_offset": 1317259,
+      "bytes": 142
+    },
+    {
+      "source_sha256": "adb6935a6f5c20170eeceb1a3835a49e12e19d792f6dd344ccc76a985ca5a6ca",
+      "bytes": 26928
+    },
+    {
+      "seed_offset": 1317401,
+      "bytes": 141
+    },
+    {
+      "source_sha256": "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75",
+      "bytes": 49298
+    },
+    {
+      "seed_offset": 1317542,
+      "bytes": 133
+    },
+    {
+      "source_sha256": "accd4ea62f7bb7a82fe23066fb0957d48ef677f6eeb8215f372f52e48bb32426",
+      "bytes": 228735
+    },
+    {
+      "seed_offset": 1317675,
+      "bytes": 136
+    },
+    {
+      "source_sha256": "736b467530f916737b7031310ccb21d8218c6229e61e8e160cd1d3458cd543a8",
+      "bytes": 55153883
+    },
+    {
+      "seed_offset": 1317811,
+      "bytes": 136
+    },
+    {
+      "source_sha256": "325b5c806167c13b40b1ffeadfe0248197c00eccc4cf123ec1e28d2d2fd216d9",
+      "bytes": 55235667
+    },
+    {
+      "seed_offset": 1317947,
+      "bytes": 146
+    },
+    {
+      "source_sha256": "0e977492aed5ff137815bf9b4b796e8a85b80fb2367ed64e82d5c5839870f2bf",
+      "bytes": 5741336
+    },
+    {
+      "seed_offset": 1318093,
+      "bytes": 146
+    },
+    {
+      "source_sha256": "5c846ebcebcc7e2e0777a4cdaa12051691593f16a7e94edbae5e6241cc62d98c",
+      "bytes": 5741168
+    },
+    {
+      "seed_offset": 1318239,
+      "bytes": 134
+    },
+    {
+      "source_sha256": "065665c041c42a5938ed220bdcd7230f22527fbec085e1853d2402c8a3615d9d",
+      "bytes": 24757
+    },
+    {
+      "seed_offset": 1318373,
+      "bytes": 126
+    },
+    {
+      "source_sha256": "5558a7f5a05af9ecf744af91e5baefc436f93c9333e656c27ec253f9a6bbe178",
+      "bytes": 8078052
+    },
+    {
+      "seed_offset": 1318499,
+      "bytes": 127
+    },
+    {
+      "source_sha256": "c87b395dd12fabde9c99573a9749d67da8d29ef9de0125c7f536699b4a9bc9e7",
+      "bytes": 48428
+    },
+    {
+      "seed_offset": 1318626,
+      "bytes": 129
+    },
+    {
+      "source_sha256": "741e2c3b351ddf169a738da9f2c048608ff7f2c5cc02f1ebc6b118bb090d5d55",
+      "bytes": 138112
+    },
+    {
+      "seed_offset": 1318755,
+      "bytes": 136
+    },
+    {
+      "source_sha256": "39de2a259fc954455c57274dc94c79d5842774e1247a016aff30bc0efed0f4ef",
+      "bytes": 172659
+    },
+    {
+      "seed_offset": 1318891,
+      "bytes": 131
+    },
+    {
+      "source_sha256": "7b46165bb56eb4704e2eaaf86f3c940d19154535d9b0ca7d6d590b04060e00d5",
+      "bytes": 880623
+    },
+    {
+      "seed_offset": 1319022,
+      "bytes": 121
+    },
+    {
+      "source_sha256": "a7db850025b95ded1eae8a46181a1a6c56c92c96f0e2b005d9ff8dc0210cab44",
+      "bytes": 216463
+    },
+    {
+      "seed_offset": 1319143,
+      "bytes": 127
+    },
+    {
+      "source_sha256": "67f4b9c50da0dedf52af349e7749a80a9057a5031199791b906c3bb3ae878960",
+      "bytes": 21209
+    },
+    {
+      "seed_offset": 1319270,
+      "bytes": 127
+    },
+    {
+      "source_sha256": "a1214966d08d73d971287fc3ead8dfaf82eb07fb197680d8b3859dbbbbf78250",
+      "bytes": 39612
+    },
+    {
+      "seed_offset": 1319397,
+      "bytes": 127
+    },
+    {
+      "source_sha256": "f408c93ab2e995cd2c46e34fe328b130404be143469e41bc366c807448979362",
+      "bytes": 59427
+    },
+    {
+      "seed_offset": 1319524,
+      "bytes": 127
+    },
+    {
+      "source_sha256": "61a4e5d81b8d4e4ad61964b230129e7a2b914793d96289029078fc9009f074ec",
+      "bytes": 362341
+    },
+    {
+      "seed_offset": 1319651,
+      "bytes": 126
+    },
+    {
+      "source_sha256": "94edc256424af38762eb31306eed28beb9f0efc50a8837492c9d6fd6004aed79",
+      "bytes": 313412
+    },
+    {
+      "seed_offset": 1319777,
+      "bytes": 128
+    },
+    {
+      "source_sha256": "3ff6c5d8b43e8c37bb6e6dd5085658d658a7a0bdcd20b6a07b1fcfc1c4e9d632",
+      "bytes": 76008
+    },
+    {
+      "seed_offset": 1319905,
+      "bytes": 120
+    },
+    {
+      "source_sha256": "286aba9785463c83659a565210a82a77896195d3303bff0542e825479b56daf2",
+      "bytes": 79063
+    },
+    {
+      "seed_offset": 1320025,
+      "bytes": 124
+    },
+    {
+      "source_sha256": "7dcc130b76258d33b90f61b658791dede3486c3e6bfb003ee5c9bfb396dd22f3",
+      "bytes": 69412
+    },
+    {
+      "seed_offset": 1320149,
+      "bytes": 127
+    },
+    {
+      "source_sha256": "ff6b113f50bc066a698db5d944d2c6dc7507168dd3341e255a8892fd0715a558",
+      "bytes": 61545
+    },
+    {
+      "seed_offset": 1320276,
+      "bytes": 126
+    },
+    {
+      "source_sha256": "d875f09c3507d00e1aba0eecc6dcadc1352f30fff09dc6bff2f1c2935e97c2bc",
+      "bytes": 113796
+    },
+    {
+      "seed_offset": 1320402,
+      "bytes": 127
+    },
+    {
+      "source_sha256": "610ca751c9bc2492b38eb9a38a7fbc93edbbb2d7182edaf34e66ae493dee5c8c",
+      "bytes": 5005329
+    },
+    {
+      "seed_offset": 1320529,
+      "bytes": 130
+    },
+    {
+      "source_sha256": "95c5c7e03d5d61e9dfb8ef259c699cf492bb1041beb6dbe83696608cec07347a",
+      "bytes": 4048728
+    },
+    {
+      "seed_offset": 1320659,
+      "bytes": 144
+    },
+    {
+      "source_sha256": "5fbcaacb22c4f4aac869a127dce283f67a4b4cfcc37d496f2446603e6d68aefa",
+      "bytes": 175992
+    },
+    {
+      "seed_offset": 1320803,
+      "bytes": 144
+    },
+    {
+      "source_sha256": "4d825786ad7a9b7dbcc52d612748a34562fe273461bcfd88f4d549c594bbf8f9",
+      "bytes": 176955
+    },
+    {
+      "seed_offset": 1320947,
+      "bytes": 124
+    },
+    {
+      "source_sha256": "1088fbde8f2b49d95a549a195707afa7a76a3ce9bcadc26b6d71f0ffda5fe313",
+      "bytes": 1636369
+    },
+    {
+      "seed_offset": 1321071,
+      "bytes": 132
+    },
+    {
+      "source_sha256": "d162dc04946d704503b2edc4d55f3dba5c1d539ead017afa00142c38b9885755",
+      "bytes": 29471
+    },
+    {
+      "seed_offset": 1321203,
+      "bytes": 129
+    },
+    {
+      "source_sha256": "f4695c21257f0d9b537ec2692c941d02ee143b7cc1276941349a546573b2ef73",
+      "bytes": 1168449
+    },
+    {
+      "seed_offset": 1321332,
+      "bytes": 122
+    },
+    {
+      "source_sha256": "bbb43485d120d3fd2c979f258f81eae78274f83ba3767d5b3fe376ac70504934",
+      "bytes": 25741
+    },
+    {
+      "seed_offset": 1321454,
+      "bytes": 125
+    },
+    {
+      "source_sha256": "8cc73c0a0bfca7dbfa59235d60b2eff82231dee33f53d206db1acd9173cfc0a7",
+      "bytes": 200404
+    },
+    {
+      "seed_offset": 1321579,
+      "bytes": 125
+    },
+    {
+      "source_sha256": "63bf2ead4c879426ebf22ef2a781eeb4aa3b4ae798a0435506f8687fd5bb9b63",
+      "bytes": 458972
+    },
+    {
+      "seed_offset": 1321704,
+      "bytes": 124
+    },
+    {
+      "source_sha256": "94800765601e9171bf5d58d066e640662842bcedcbab982b2c90787a2c987322",
+      "bytes": 66471
+    },
+    {
+      "seed_offset": 1321828,
+      "bytes": 123
+    },
+    {
+      "source_sha256": "03dd38de09bc213e9a8b29761eec33ee1d5318dac0e49d8af36e4d27830e23a7",
+      "bytes": 246245
+    },
+    {
+      "seed_offset": 1321951,
+      "bytes": 131
+    },
+    {
+      "source_sha256": "07ab697474595e06f06647417d3c7fa97ded07afc1a7e4454c5639919b46eaea",
+      "bytes": 20520960
+    },
+    {
+      "seed_offset": 1322082,
+      "bytes": 131
+    },
+    {
+      "source_sha256": "c08bc65a81971c1dd5783182826503369466c7e67374d1646519adf05207b684",
+      "bytes": 20801708
+    },
+    {
+      "seed_offset": 1322213,
+      "bytes": 168
+    },
+    {
+      "source_sha256": "27b898cc47556fa8f2598644873f56f40921ba4470bc292e755874bff47b2509",
+      "bytes": 1851153
+    },
+    {
+      "seed_offset": 1322381,
+      "bytes": 173
+    },
+    {
+      "source_sha256": "6c43e5418c5668569779f22c56eef97b306ddaae9879a7313abcc44d526b37d6",
+      "bytes": 60628
+    },
+    {
+      "seed_offset": 1322554,
+      "bytes": 185
+    },
+    {
+      "source_sha256": "0778bb418db423e351627f32e7d1e1eb1fff2fa260694d4e22eec9e5bff6df98",
+      "bytes": 3125155
+    },
+    {
+      "seed_offset": 1322739,
+      "bytes": 186
+    },
+    {
+      "source_sha256": "23b99f357bf4a1b6c445d14c5e86759e876c342297d621c7ddca8a5d28b41d2a",
+      "bytes": 1316113
+    },
+    {
+      "seed_offset": 1322925,
+      "bytes": 189
+    },
+    {
+      "source_sha256": "37c56faaa0184a226b15155b8b92a3afbb907fd17682d26467d8e027b14e9f8a",
+      "bytes": 126129
+    },
+    {
+      "seed_offset": 1323114,
+      "bytes": 187
+    },
+    {
+      "source_sha256": "96f0e6ffb6cca650005756b593a443f576f4dc41fc4ca2ebfe71c7d0bbb55045",
+      "bytes": 2568884
+    },
+    {
+      "seed_offset": 1323301,
+      "bytes": 178
+    },
+    {
+      "source_sha256": "118fa810f9082076e5d18824f1a53849b0e1322b76ca0247eb992dc588be03a2",
+      "bytes": 55544502
+    },
+    {
+      "seed_offset": 1323479,
+      "bytes": 181
+    },
+    {
+      "source_sha256": "7589b985c623f240febbc25d62be4cb8879727e982a833698c8f1997aff1ec9c",
+      "bytes": 124224
+    },
+    {
+      "seed_offset": 1323660,
+      "bytes": 191
+    },
+    {
+      "source_sha256": "be53cad18a1ae09abc4912381e8c15ba293143480d2b7798ea2302b769508d2c",
+      "bytes": 8888084
+    },
+    {
+      "seed_offset": 1323851,
+      "bytes": 188
+    },
+    {
+      "source_sha256": "8df2d5c3744944d3a5c59330a86661cf7180351761a5f2f29140bad14590966b",
+      "bytes": 806303
+    },
+    {
+      "seed_offset": 1324039,
+      "bytes": 188
+    },
+    {
+      "source_sha256": "ac7e97f2274fc653cb90fbd7337b1ef6e9cc3f28ba255622d1bc6a4e1b4b65d0",
+      "bytes": 2624771
+    },
+    {
+      "seed_offset": 1324227,
+      "bytes": 181
+    },
+    {
+      "source_sha256": "7e210a4cca237e84a7b061822d91a57c621316a6f2f544bf8d50363a7d54182c",
+      "bytes": 350532
+    },
+    {
+      "seed_offset": 1324408,
+      "bytes": 188
+    },
+    {
+      "source_sha256": "d988719bf396c30e5385791b0e9be758c11d5c1e5ab672e99742ede702aa7027",
+      "bytes": 7783874
+    },
+    {
+      "seed_offset": 1324596,
+      "bytes": 185
+    },
+    {
+      "source_sha256": "4e2f053213028f13b05203e849a046e6f0bbcddac9bb2d8fe6972ed036f72ec4",
+      "bytes": 10303
+    },
+    {
+      "seed_offset": 1324781,
+      "bytes": 179
+    },
+    {
+      "source_sha256": "a17db2332a70cc865a7309a68e3a032f68f25a54271bbe43d12ddc28949d8ddc",
+      "bytes": 2433296
+    },
+    {
+      "seed_offset": 1324960,
+      "bytes": 182
+    },
+    {
+      "source_sha256": "ec819a90bea2fc747733f5e050b67ebede05b7f5514366ec27cba9676d3cde05",
+      "bytes": 425712
+    },
+    {
+      "seed_offset": 1325142,
+      "bytes": 179
+    },
+    {
+      "source_sha256": "3239ec87aa322a4057861f22d7444db0c59365b6b2d1825c35a526dcdd9e5e7d",
+      "bytes": 1388908
+    },
+    {
+      "seed_offset": 1325321,
+      "bytes": 174
+    },
+    {
+      "source_sha256": "076f55299481c8bdd069ca004456e2e9ccddbc2dca1cb6ade1e78eecd3b2666d",
+      "bytes": 657153
+    },
+    {
+      "seed_offset": 1325495,
+      "bytes": 172
+    },
+    {
+      "source_sha256": "1ff4bf4838344a6cb37d84e9864c88bef33cc40bec3c07277fc4f5b1ec736da6",
+      "bytes": 180950
+    },
+    {
+      "seed_offset": 1325667,
+      "bytes": 165
+    },
+    {
+      "source_sha256": "4804a594ff7b4b16705622b1569b2f936ad3e468d23c4cad17f0305f3e6c887f",
+      "bytes": 142236
+    },
+    {
+      "seed_offset": 1325832,
+      "bytes": 156
+    },
+    {
+      "source_sha256": "854c87343e67eca790afca3f816942f8c4a016e6e96387fa39cd4b1019b84fb7",
+      "bytes": 12948733
+    },
+    {
+      "seed_offset": 1325988,
+      "bytes": 130
+    },
+    {
+      "source_sha256": "816c96e8e8f193b40151dad7e8ff37b1221d019dbcb9c35cd3fadbfe6477dfec",
+      "bytes": 646315
+    },
+    {
+      "seed_offset": 1326118,
+      "bytes": 129
+    },
+    {
+      "source_sha256": "cbe212b02faf8c6eed5b6d55ef8a6e363aaab83f15112e960701a9c3df813686",
+      "bytes": 1713950
+    },
+    {
+      "seed_offset": 1326247,
+      "bytes": 133
+    },
+    {
+      "source_sha256": "e61b31ab26358b946e767ed7eb7f4bb2e507da1cfefeb7a8861ace7fd5c899a1",
+      "bytes": 4134916
+    },
+    {
+      "seed_offset": 1326380,
+      "bytes": 133
+    },
+    {
+      "source_sha256": "6695da3eb7e1be0aa3092fe4d81433a33b47f4519259c759d729e3a9a55c1429",
+      "bytes": 19508960
+    },
+    {
+      "seed_offset": 1326513,
+      "bytes": 128
+    },
+    {
+      "source_sha256": "ee67be3566f459362c1ee094fde2c159d33fa0390aa4ed5f5af676f9e5004347",
+      "bytes": 5599928
+    },
+    {
+      "seed_offset": 1326641,
+      "bytes": 131
+    },
+    {
+      "source_sha256": "2402dd938da4d0a332349ab3d3586606175e19cb32cb9fe013c19f1dc922dcee",
+      "bytes": 418722
+    },
+    {
+      "seed_offset": 1326772,
+      "bytes": 131
+    },
+    {
+      "source_sha256": "12d024602ce1d81ecc21487dd8596fdc0562fa5a85f866aca1b3d42652a00d93",
+      "bytes": 6325502
+    },
+    {
+      "seed_offset": 1326903,
+      "bytes": 131
+    },
+    {
+      "source_sha256": "d4aea31a4becb3273ba7968221be2e48148ba05eb8a68d14e671963e17785648",
+      "bytes": 14528943
+    },
+    {
+      "seed_offset": 1327034,
+      "bytes": 139
+    },
+    {
+      "source_sha256": "ecae8008e2cc9ade2f2c1bb9d5e6d4fb73e7c433866a056bd82980741571a022",
+      "bytes": 2528617
+    },
+    {
+      "seed_offset": 1327173,
+      "bytes": 145
+    },
+    {
+      "source_sha256": "41d74ffe235cb7e8bab40bcad2167f7bb25edbf2231dcfff57ccf4305dc0bfae",
+      "bytes": 1590073
+    },
+    {
+      "seed_offset": 1327318,
+      "bytes": 131
+    },
+    {
+      "source_sha256": "8f91e941a07fb1069ebb3855278f82a849e6af14ca05821e14ec3d5348697ea5",
+      "bytes": 1577915
+    },
+    {
+      "seed_offset": 1327449,
+      "bytes": 138
+    },
+    {
+      "source_sha256": "593196cc746173d1e25cb54a93a87fd749952df68699aab7e02c085530e87747",
+      "bytes": 74938
+    },
+    {
+      "seed_offset": 1327587,
+      "bytes": 131
+    },
+    {
+      "source_sha256": "e4ab7009bf0629fd11982d4c2aa83964cf244cffba7347ecd39019a9e38c4564",
+      "bytes": 4296070
+    },
+    {
+      "seed_offset": 1327718,
+      "bytes": 131
+    },
+    {
+      "source_sha256": "2c69287424c9e2128cb47ffe92171e10417041ec2963bceafb65cb3fcf8f0b85",
+      "bytes": 661593
+    },
+    {
+      "seed_offset": 1327849,
+      "bytes": 165
+    },
+    {
+      "source_sha256": "b43c5359461b32b0cdc4abc2c2527a780b8c402cb68855c5f0b731f6d7288644",
+      "bytes": 593827
+    },
+    {
+      "seed_offset": 1328014,
+      "bytes": 169
+    },
+    {
+      "source_sha256": "386b2a516d88257db95f69ab4a91c2c4c69892ceeefe42bebc3b70f4ff20a2dc",
+      "bytes": 825575
+    },
+    {
+      "seed_offset": 1328183,
+      "bytes": 132
+    },
+    {
+      "source_sha256": "a695fbe19c0165f295a8531b1e4e855cd94d0875d2f88ec4b61080677e27188a",
+      "bytes": 2157028
+    },
+    {
+      "seed_offset": 1328315,
+      "bytes": 135
+    },
+    {
+      "source_sha256": "6fc69c01688c9458a57eb9a1664c9aba372ccda420a02bf4429fe610e7e7d591",
+      "bytes": 2016830
+    },
+    {
+      "seed_offset": 1328450,
+      "bytes": 128
+    },
+    {
+      "source_sha256": "f698d94f3103da8ca7438d84e0344e453fe0ba3b7486e04c5bf7a9a3fabe9b69",
+      "bytes": 4000609
+    },
+    {
+      "seed_offset": 1328578,
+      "bytes": 134
+    },
+    {
+      "source_sha256": "392d3c9690f8c8202a68fdb89c16fd55159ab8d65000a6da213f4a1576e97a16",
+      "bytes": 206094
+    },
+    {
+      "seed_offset": 1328712,
+      "bytes": 134
+    },
+    {
+      "source_sha256": "d6f89f65bafb8c9b735e0515882b8a1511e8e864dde5e9513e191629369f2256",
+      "bytes": 1127613
+    },
+    {
+      "seed_offset": 1328846,
+      "bytes": 126
+    },
+    {
+      "source_sha256": "3d3a1b973af218114f4f889bbaa2f4c037deaae0c8e815eec381c3d546b974a0",
+      "bytes": 2771455
+    },
+    {
+      "seed_offset": 1328972,
+      "bytes": 131
+    },
+    {
+      "source_sha256": "f9c65aa9c852eb8255b636fd9f07ce1c406f061ec19a2e7d508b318ca0c907d1",
+      "bytes": 2447397
+    },
+    {
+      "seed_offset": 1329103,
+      "bytes": 140
+    },
+    {
+      "source_sha256": "ab14accac86cdd92021d50465deeb221b476d6675bd1383d3c7fb83751c2e0a3",
+      "bytes": 819016
+    },
+    {
+      "seed_offset": 1329243,
+      "bytes": 127
+    },
+    {
+      "source_sha256": "ab5a03176ee106d3f0fa90e381da478ddae405918153cca248e682cd0c4a2269",
+      "bytes": 810029
+    },
+    {
+      "seed_offset": 1329370,
+      "bytes": 127
+    },
+    {
+      "source_sha256": "3ad89b8588e6644bd4e49981480d48b21289eebbcd4f0a1a4afb1c29f99b6ab4",
+      "bytes": 515504
+    },
+    {
+      "seed_offset": 1329497,
+      "bytes": 136
+    },
+    {
+      "source_sha256": "5f0573349d77c4a48967191cdd6634dd7aa5f6398c6a57fe037cc02696d6099f",
+      "bytes": 538611
+    },
+    {
+      "seed_offset": 1329633,
+      "bytes": 141
+    },
+    {
+      "source_sha256": "a9b2840c1b99a2b57746c50f1f2ab902420628111690ec420e7293ec1f502d7b",
+      "bytes": 1376474
+    },
+    {
+      "seed_offset": 1329774,
+      "bytes": 128
+    },
+    {
+      "source_sha256": "b0dea9df23c863a7a50e825440f3ebffabd65df1497108e5d437747843895a4e",
+      "bytes": 1391684
+    },
+    {
+      "seed_offset": 1329902,
+      "bytes": 131
+    },
+    {
+      "source_sha256": "942445c3245b22730fd41a67a7c5c231d11cb1b9936b9c0f76334fb7d0b4468c",
+      "bytes": 315325
+    },
+    {
+      "seed_offset": 1330033,
+      "bytes": 127
+    },
+    {
+      "source_sha256": "136d91bc269a9a5785e5f9e980bc76ab57428f604ce3e5a5a90cebc767971cc6",
+      "bytes": 3688489
+    },
+    {
+      "seed_offset": 1330160,
+      "bytes": 143
+    },
+    {
+      "source_sha256": "76f18f21dbc7e0ba747de571f908a9ac16c0173d0c5c9c2816993e09e85dc5ff",
+      "bytes": 15490591
+    },
+    {
+      "seed_offset": 1330303,
+      "bytes": 129
+    },
+    {
+      "source_sha256": "a8c0d28a529ca480f9f36cf5792e2cd21984552a3c8e4aa11a24aa31aeac98e8",
+      "bytes": 53153930
+    },
+    {
+      "seed_offset": 1330432,
+      "bytes": 180
+    },
+    {
+      "source_sha256": "6571b9cae11c942d67902618a30ff13330b7ff2d091a3a88da4c51579780be99",
+      "bytes": 443196
+    },
+    {
+      "seed_offset": 1330612,
+      "bytes": 139
+    },
+    {
+      "source_sha256": "83e6b2020a034e9a7ad4a72feea59e1ad52f162e09cbd26735a3ffb98359fc4f",
+      "bytes": 3275272
+    },
+    {
+      "seed_offset": 1330751,
+      "bytes": 137
+    },
+    {
+      "source_sha256": "115433c946ee069e857fd04cf41b38a4a74ed45d868a3b2e08ccd4a1f04f39d0",
+      "bytes": 1745919
+    },
+    {
+      "seed_offset": 1330888,
+      "bytes": 124
+    },
+    {
+      "source_sha256": "3d3a1b973af218114f4f889bbaa2f4c037deaae0c8e815eec381c3d546b974a0",
+      "bytes": 2771455
+    },
+    {
+      "seed_offset": 1331012,
+      "bytes": 139
+    },
+    {
+      "source_sha256": "1fe30e919eb560f495de9ee4bd7ba5216ce13f454affb4ccc32e15efa3878f5e",
+      "bytes": 1572582
+    },
+    {
+      "seed_offset": 1331151,
+      "bytes": 126
+    },
+    {
+      "source_sha256": "bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16",
+      "bytes": 1502830
+    },
+    {
+      "seed_offset": 1331277,
+      "bytes": 40968
+    }
+  ],
+  "seed_sha256": "dae893390893a9603bc90064303336d06f7a1e8a2e02aa490964da49550eedb3"
+}

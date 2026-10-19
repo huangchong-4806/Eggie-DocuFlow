@@ -1,0 +1,83 @@
+name: One-time V1.5 source transfer
+
+on:
+  push:
+    branches: [codex/release-v1.5.0-cloud-transfer]
+
+concurrency:
+  group: eggie-v150-cloud-transfer
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  settings:
+    runs-on: ubuntu-latest
+    outputs:
+      mode: ${{ steps.settings.outputs.mode }}
+      artifact_run_id: ${{ steps.settings.outputs.artifact_run_id }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - id: settings
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          config=json.loads(Path('release-transfer/mode.json').read_text())
+          assert config['mode'] in ('assemble','publish')
+          assert isinstance(config['artifact_run_id'],int)
+          with open(os.environ['GITHUB_OUTPUT'],'a') as f:
+              f.write('mode='+config['mode']+'\n')
+              f.write('artifact_run_id='+str(config['artifact_run_id'])+'\n')
+          PY
+
+  assemble:
+    needs: settings
+    if: needs.settings.outputs.mode == 'assemble'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Download pinned sources and verify the original ZIP
+        run: python3 release-transfer/transport.py assemble
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: eggie-v150-verified-materials
+          path: cloud-output/
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
+
+  upload:
+    needs: settings
+    if: needs.settings.outputs.mode == 'publish'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: eggie-v150-verified-materials
+          path: cloud-output/
+          run-id: ${{ needs.settings.outputs.artifact_run_id }}
+          github-token: ${{ github.token }}
+      - name: Verify and upload only the three missing or superseded materials
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 release-transfer/transport.py publish
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: eggie-v150-upload-report
+          path: cloud-output/release-upload-report.json
+          retention-days: 1
+          if-no-files-found: error
