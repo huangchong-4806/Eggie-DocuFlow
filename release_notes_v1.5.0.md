@@ -1,39 +1,46 @@
 # Eggie DocuFlow V1.5.0
 
-2026-10-16 · 构建号2026101601
+## 下载安装 / Download and install
 
-## 新增与改进
+<!-- v1.5-upload-status:start -->
+V1.5.0 下载暂未开放，以下安装包链接会在上传完成并发布后启用。<br>
+V1.5.0 downloads are not yet available. The installer links below will become available after upload and publication.
+<!-- v1.5-upload-status:end -->
 
-- **Excel按分类拆分**：保留按固定行数拆分，新增按一列或多列的完整内容分组。可选“每类一个文件”或“合并到一个文件”，保留指定表头及支持的格式。
-- **拆分前先预览和确认**：查看类别、记录数与结果名；默认处理全部数据，发现筛选或隐藏行时提示是否仅处理可见行。分类模式将公式转为源文件已保存的结果，不重新计算。
-- **PDF页面与内容编辑**：支持插入、删除、排序、旋转、提取、撤销和重做；增加区域/文字涂黑、图片水印及页码设置。另存新副本，保留原文件。
-- **界面与提示优化**：统一主要页面布局和文字，简化输出选项；修复首次添加PDF后转换按钮不可用、图片预览失败、重复图片提示不准确及默认保存位置不合理等问题。
-- **数据保护修复**：加强Excel删除行后的引用检查、文本长编号和等号开头文本的保留、同名文件保护、失败结果清理，以及透明图片转PDF的白底处理。
-- **PDF引擎更新**：使用PyMuPDF接口1.28.2与MuPDF引擎1.28.5；正式包沿用已验收RC2的业务代码，补齐随包声明并更新版本标识。
+- [Mac：Apple 芯片，macOS 15 及以上 / Apple silicon, macOS 15 or later](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/download/v1.5.0/EggieDocuFlow_V1.5.0_mac_arm64.zip)
+- [Windows：Windows 10/11，64 位 / Windows 10/11, 64-bit](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/download/v1.5.0/EggieDocuFlow_V1.5.0_Windows_x64_Setup.exe)
 
-## 下载与系统要求
+无需安装 Python。Mac 下载后解压，将 `Eggie DocuFlow.app` 放入“应用程序”；Windows 运行安装包，按向导完成安装。<br>
+No Python installation is required. On Mac, extract the ZIP and move `Eggie DocuFlow.app` to Applications. On Windows, run the installer and follow the setup wizard.
 
-- Mac：`EggieDocuFlow_V1.5.0_mac_arm64.zip`，Apple芯片，最低macOS15。
-- Windows：`EggieDocuFlow_V1.5.0_Windows_x64_Setup.exe`，面向64位Windows10/11。
-- 同一发布页提供项目源码、第三方源码材料及SHA256校验清单。普通用户只需下载对应安装包。
-- Mac未做Apple开发者签名与公证，Windows未做发布者证书签名，系统可能提示来源未知或阻止启动。只从本仓库发布页下载；出现“已损坏”等提示时停止使用并反馈。
+普通用户只需下载对应的安装包；项目源码、第三方源码材料和校验清单供开发者及文件核对使用。<br>
+Regular users only need the installer for their platform. Project source, third-party source materials and checksums are provided for developers and file verification.
 
-## 使用前请了解
+## 本次更新 / What's new
 
-- 分类拆分仅支持`.xlsx`。空白类别保留，完全空白行跳过；不能安全保留的复杂对象、合并区域或缺少公式结果会提示并阻止处理。含公式的源文件请先用Excel计算并保存。
-- 分类拆分与按行数拆分的公式处理规则不同，以执行前提示为准。两种分类输出方式都生成新结果，不修改原工作簿。
-- PDF涂黑导出后，被移除的内容不能在导出文件中撤销恢复；原文件保留。软件会拒绝无法可靠处理的结构，但不能保证任意PDF都能安全脱敏。
-- PDF独立工具需要单独选择文件；处理编辑后的内容时，先另存，再选择新副本。
-- 云OCR仅在主动配置、启用并确认后上传扫描页，可能产生服务商费用。
+- **Excel 按类别拆分 / Split Excel by category**：按一列或多列分类，选择“每类一个文件”或“每类一个工作表”；后者保存在同一个新 Excel 文件中。原有按固定行数拆分继续保留。<br>
+  Group rows by one or more columns, then save each group as a separate file or as a separate worksheet in one new workbook. Fixed-row splitting remains available.
+- **拆分前预览 / Preview before splitting**：先查看类别、记录数和结果名称；遇到筛选或隐藏行时，可选择处理全部数据或仅可见行。分类拆分将公式转为源文件已保存的计算结果。<br>
+  Review groups, row counts and output names first. Choose all rows or visible rows when filters or hidden rows are detected. Category splitting uses saved formula values.
+- **PDF 页面编辑 / PDF page editing**：支持插入、删除、拖动排序、旋转和提取页面，并可撤销、重做。<br>
+  Insert, delete, reorder, rotate and extract pages, with undo and redo.
+- **PDF 内容处理 / PDF content tools**：支持区域或文字涂黑、文字与图片水印，以及页码样式、位置和页范围设置。<br>
+  Redact selected areas or text, add text or image watermarks, and customize page-number style, position and page ranges.
+- **界面与使用体验 / Interface and usability**：更新首页和工具页布局，简化操作文字；修复图片预览、转换按钮、保存位置，以及 Excel 长编号和引用处理等问题。<br>
+  Updated home and tool layouts, clearer labels, and fixes for image previews, conversion buttons, save locations, long Excel identifiers and cell references.
 
-## 验收范围与已知限制
+## 使用说明 / Usage notes
 
-RC2基线已完成Mac和Windows ARM虚拟机中的安装、升级、回退及关键PDF实际操作；Mac自动测试298项通过，Windows296项通过、2项因平台/权限条件跳过。正式包仅改变版本标识和材料，另行核对包内代码、依赖、版本及启动；不把历史测试写成全部场景保证。
+- 分类拆分支持 `.xlsx`，保留指定表头并生成新文件。含公式的源文件请先在 Excel 中计算并保存；分类拆分使用已保存的计算结果。<br>
+  Category splitting supports `.xlsx`, retains the selected header rows and creates new files. Recalculate and save workbooks containing formulas in Excel first; splitting uses their saved values.
+- PDF 涂黑会从导出副本中移除选中的内容，导出后不能恢复这些内容，请保留原文件。无法可靠处理的结构会提示并停止导出。<br>
+  PDF redaction removes selected content from the exported copy and cannot be reversed in that copy. Keep the original file. Unsupported structures are reported and export is stopped.
+- PDF 独立工具需要单独选择文件；要继续处理编辑结果，请先另存副本，再选择该副本。<br>
+  Independent PDF tools require their own input file. To process an edited document, save a copy first and select that copy.
+- Excel 和 PDF 默认在本机处理。云 OCR 仅在主动配置、启用并确认后上传扫描页，可能产生服务商费用。<br>
+  Excel and PDF processing runs locally by default. Cloud OCR sends scanned pages only after configuration, opt-in and confirmation; provider fees may apply.
 
-macOS15、其他Mac和普通Intel/AMD Windows电脑未实测，本次不再安排。密码设置/移除完整原生流程与真实云OCR未完成本轮实测。非默认PDF引擎组合不属于上游一般支持范围；部分第三方历史构建来源证据及跨电脑重建仍有记录限制，详见随附材料。
+## 历史版本与源码 / Previous release and source
 
-## 升级、回退与源码
-
-保留原始文件和旧安装包。已验证的回退路径为RC2卸载后重装RC1（Windows）或完整替换应用包（Mac），没有验证V1.4.0与V1.5.0之间的直接覆盖降级。需要旧版时先退出新版，保留设置和已生成结果；回退软件不会自动撤销处理结果。
-
-[V1.4.0下载继续保留](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/tag/v1.4.0)。项目许可和第三方声明见[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+[V1.4.0 下载 / V1.4.0 downloads](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/tag/v1.4.0)继续保留。项目许可与第三方声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。<br>
+V1.4.0 downloads remain available. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for project licensing and third-party notices.
