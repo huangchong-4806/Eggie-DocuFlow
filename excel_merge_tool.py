@@ -14,6 +14,7 @@ from zipfile import ZipFile
 
 from openpyxl import Workbook, load_workbook
 from openpyxl.cell import WriteOnlyCell
+from openpyxl.formula import Tokenizer
 from openpyxl.formula.translate import Translator
 from openpyxl.utils import get_column_letter, range_boundaries
 
@@ -304,6 +305,86 @@ def copy_cell_style(source_cell, target_cell, style_cache=None):
         style_cache[style_identifier] = copy(target_cell._style)
 
 
+# Only functions whose result does not depend on workbook position or hidden references.
+_SAFE_FORMULA_FUNCTIONS = frozenset("SUM AVERAGE MIN MAX COUNT COUNTA COUNTBLANK IF IFS IFERROR IFNA AND OR NOT XOR ABS ROUND ROUNDUP ROUNDDOWN INT TRUNC MOD POWER SQRT SIGN SUMIF SUMIFS COUNTIF COUNTIFS AVERAGEIF AVERAGEIFS SUMPRODUCT PRODUCT LEFT RIGHT MID LEN TRIM CLEAN UPPER LOWER CONCAT CONCATENATE TEXT VALUE EXACT SUBSTITUTE REPLACE FIND SEARCH DATE YEAR MONTH DAY TIME HOUR MINUTE SECOND ISBLANK ISNUMBER ISTEXT ISLOGICAL ISERROR ISNA".split())
+
+
+def _validate_formula_mapping(cell, segments):
+    """Permit a formula only when translation preserves every referenced source row.
+
+    Each segment is (first source row, last source row, output row offset).
+    Missing rows, sheet/name references and unknown functions fail closed.
+    """
+    if cell.data_type != "f":
+        return
+
+    def fail():
+        raise ValueError(
+            f"{cell.parent.title}!{cell.coordinate} 的公式无法可靠保留引用。"
+            "请先在 Excel 中整理公式或拆分范围；本次未生成结果。"
+        )
+
+    def mapped(row):
+        for first, last, offset in segments:
+            if first <= row <= last:
+                return row + offset
+        fail()
+
+    if not isinstance(cell.value, str):
+        fail()
+    try:
+        tokens = Tokenizer(cell.value).items
+    except Exception:
+        fail()
+    delta = mapped(cell.row) - cell.row
+    for token in tokens:
+        if token.type == "FUNC" and token.subtype == "OPEN":
+            if token.value[:-1].upper() not in _SAFE_FORMULA_FUNCTIONS:
+                fail()
+        if token.type != "OPERAND" or token.subtype != "RANGE":
+            continue
+        parts = token.value.split(":")
+        if len(parts) not in (1, 2):
+            fail()
+        matches = [re.fullmatch(r"(\$?[A-Za-z]{1,3})(\$?)([1-9][0-9]*)", part) for part in parts]
+        if not all(matches):
+            fail()
+        rows = [int(match[3]) for match in matches]
+        if rows != sorted(rows) or any(row > 1048576 for row in rows):
+            fail()
+        # Endpoints alone are insufficient: a range must not bridge skipped rows.
+        covered = sum(max(0, min(rows[-1], last) - max(rows[0], first) + 1)
+                      for first, last, _ in segments)
+        if covered != rows[-1] - rows[0] + 1:
+            fail()
+        for match, row in zip(matches, rows):
+            if mapped(row) != row + (0 if match[2] else delta):
+                fail()
+    try:
+        Translator(cell.value, origin=cell.coordinate).translate_formula(
+            f"{get_column_letter(cell.column)}{mapped(cell.row)}")
+    except Exception:
+        fail()
+
+
+def _validate_merge_formulas(files, metadata_by_file, skip_rows):
+    target_row = 1
+    for index, (filename, metadata) in enumerate(zip(files, metadata_by_file)):
+        workbook = load_workbook(filename, read_only=True, data_only=False, keep_links=False)
+        try:
+            sheet = workbook.active
+            if sheet.max_row is None or metadata.row_count > sheet.max_row:
+                sheet.reset_dimensions()
+            first = skip_rows + 1 if index else 1
+            segments = ((first, metadata.row_count, target_row - first),)
+            for row in sheet.iter_rows(min_row=first):
+                for cell in row:
+                    _validate_formula_mapping(cell, segments)
+                target_row += 1
+        finally:
+            workbook.close()
+
+
 def _translated_cell_value(source_cell, target_coordinate):
     value = source_cell.value
     if source_cell.data_type != "f" or not isinstance(value, str):
@@ -314,8 +395,10 @@ def _translated_cell_value(source_cell, target_coordinate):
             value,
             origin=source_cell.coordinate,
         ).translate_formula(target_coordinate)
-    except Exception:
-        return value
+    except Exception as error:
+        raise ValueError(
+            f"{source_cell.coordinate} 的公式无法可靠调整引用，本次未生成结果。"
+        ) from error
 
 
 def copy_cell_value(source_cell, target_cell):
@@ -612,6 +695,18 @@ def split_workbook_by_rows(
                     f"合并单元格 {merged_range} 跨越拆分边界，"
                     "请调整每个文件的数据行数或先取消该合并。"
                 )
+
+        # Check every resulting part before creating a result directory.
+        for part_index in range(total_parts):
+            first = data_start_row + part_index * rows_per_file
+            last = min(max_row, first + rows_per_file - 1)
+            segments = ((1, header_rows, 0), (first, last, header_rows + 1 - first))
+            for begin, end, _ in segments:
+                if begin > end:
+                    continue
+                for row in source_sheet.iter_rows(min_row=begin, max_row=end):
+                    for cell in row:
+                        _validate_formula_mapping(cell, segments)
 
         split_output_folder = _create_split_output_folder(
             output_folder,
@@ -926,6 +1021,7 @@ def build_merged_workbook(
         get_workbook_metadata(filename)
         for filename in files
     ]
+    _validate_merge_formulas(files, metadata_by_file, skip_rows)
     requires_compatibility_mode = False
 
     if keep_merged_cells:

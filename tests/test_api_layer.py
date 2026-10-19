@@ -199,7 +199,10 @@ class APILayerTests(unittest.TestCase):
         )
 
         self.assertEqual(config_file, get_config_file())
-        self.assertEqual(config_file.stat().st_mode & 0o777, 0o600)
+        # Windows uses ACLs, not POSIX owner/group permission bits.
+        # The content/save/delete checks below still run on every platform.
+        if os.name != "nt":
+            self.assertEqual(config_file.stat().st_mode & 0o777, 0o600)
         self.assertTrue(is_provider_configured("baidu"))
         self.assertEqual(load_credentials("baidu")["BAIDU_OCR_SECRET_KEY"], secret)
 

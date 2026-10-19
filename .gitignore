@@ -153,6 +153,7 @@ activemq-data/
 .env
 .envrc
 .venv
+.venv-pdf/
 env/
 venv/
 ENV/
@@ -229,3 +230,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Native Excel-calculated formula fixture for category splitting regression tests
+!tests/fixtures/
+!tests/fixtures/category_formula_cache.xlsx

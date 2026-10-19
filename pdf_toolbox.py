@@ -1,7 +1,9 @@
 import copy
 import difflib
+import html
 import shutil
 import tempfile
+from contextlib import ExitStack, closing
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -103,11 +105,18 @@ def prepare_image_thumbnail(image_file, thumbnail_file, size=(132, 180)):
     if not is_supported_image_file(source):
         raise ValueError("图片无法读取或格式不支持。")
     destination.parent.mkdir(parents=True, exist_ok=True)
-    with Image.open(source) as image:
-        preview = ImageOps.exif_transpose(image).convert("RGB")
+    with Image.open(source) as image, closing(ImageOps.exif_transpose(image)) as oriented:
+        preview = Image.new("RGB", oriented.size, "white")
         try:
+            if "A" in oriented.getbands() or "transparency" in oriented.info:
+                with closing(oriented.convert("RGBA")) as rgba, closing(rgba.getchannel("A")) as alpha:
+                    preview.paste(rgba, mask=alpha)
+            else:
+                preview.paste(oriented)
             preview.thumbnail(tuple(size), Image.Resampling.LANCZOS)
-            preview.save(destination, "JPEG", quality=85)
+            # PNG decoding is built into Qt; JPEG requires an optional plugin
+            # intentionally omitted by the macOS package.
+            preview.save(destination, "PNG")
         finally:
             preview.close()
     return str(destination)
@@ -468,8 +477,8 @@ def compare_pdf_text(left_pdf, right_pdf, output_file, progress_callback=None):
         report = difflib.HtmlDiff(tabsize=4, wrapcolumn=100).make_file(
             texts[0],
             texts[1],
-            fromdesc=left.name,
-            todesc=right.name,
+            fromdesc=html.escape(left.name),
+            todesc=html.escape(right.name),
             context=False,
             charset="utf-8",
         )
@@ -510,7 +519,8 @@ def save_pages(page_refs, output_file, title="PDF 页面整理"):
 
     for index, page_ref in enumerate(page_refs, 1):
         source = str(Path(page_ref.source_file).expanduser().resolve())
-        readers.setdefault(source, PdfReader(source))
+        if source not in readers:
+            readers[source] = PdfReader(source)
         page = copy.deepcopy(readers[source].pages[page_ref.page_index])
         rotation = page_ref.rotation % 360
         if rotation:
@@ -521,11 +531,7 @@ def save_pages(page_refs, output_file, title="PDF 页面整理"):
             f"第{index}页：来源={source} 原页码={page_ref.page_index + 1} 旋转={rotation}"
         )
 
-    output_file = Path(output_file).expanduser().resolve()
-    output_file.parent.mkdir(parents=True, exist_ok=True)
-    output_file = available_output_path(output_file)
-    with output_file.open("wb") as handle:
-        writer.write(handle)
+    output_file = Path(_publish_writer(writer, output_file))
 
     lines = [f"页面数量：{len(page_refs)}", f"输出文件：{output_file}", *page_lines]
     log_file = write_log(output_file.parent, title, lines)
@@ -640,22 +646,30 @@ def images_to_pdf(image_files, output_file):
     if not image_files:
         raise ValueError("请先选择图片。")
 
-    converted = []
-    for image_file in image_files:
-        source = Path(image_file).expanduser().resolve()
-        if not is_supported_image_file(source):
-            raise ValueError(f"不支持的图片格式：{source.name}")
-        with Image.open(source) as image:
-            converted.append(ImageOps.exif_transpose(image).convert("RGB"))
+    with ExitStack() as resources:
+        converted = []
+        for image_file in image_files:
+            source = Path(image_file).expanduser().resolve()
+            if not is_supported_image_file(source):
+                raise ValueError(f"不支持的图片格式：{source.name}")
+            with Image.open(source) as image, closing(ImageOps.exif_transpose(image)) as oriented:
+                if "A" in oriented.getbands() or "transparency" in oriented.info:
+                    rgb = resources.enter_context(closing(Image.new("RGB", oriented.size, "white")))
+                    with closing(oriented.convert("RGBA")) as rgba, closing(rgba.getchannel("A")) as alpha:
+                        rgb.paste(rgba, mask=alpha)
+                else:
+                    rgb = resources.enter_context(closing(oriented.convert("RGB")))
+                converted.append(rgb)
 
-    output_file = Path(output_file).expanduser().resolve()
-    output_file.parent.mkdir(parents=True, exist_ok=True)
-    output_file = available_output_path(output_file)
-    try:
-        converted[0].save(output_file, save_all=True, append_images=converted[1:])
-    finally:
-        for image in converted:
-            image.close()
+        output_file = Path(output_file).expanduser().resolve()
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        output_file = available_output_path(output_file)
+        temporary_file = temporary_output(output_file)
+        try:
+            converted[0].save(temporary_file, format="PDF", save_all=True, append_images=converted[1:])
+            output_file = Path(publish_output(temporary_file, output_file))
+        finally:
+            Path(temporary_file).unlink(missing_ok=True)
 
     source_size = sum(Path(image_file).stat().st_size for image_file in image_files)
     log_file = write_log(

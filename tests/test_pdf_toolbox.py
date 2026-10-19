@@ -92,6 +92,26 @@ class PdfToolboxTests(unittest.TestCase):
         self.assertEqual(Path(result.output_file).name, "已有文件_1.pdf")
         self.assertIn(result.output_file, Path(result.log_file).read_text(encoding="utf-8"))
 
+    def test_save_pages_reads_each_source_only_once(self):
+        source = self.make_pdf("source.pdf", 3)
+        with patch("pypdf.PdfReader", wraps=PdfReader) as reader:
+            result = save_pages(
+                [PdfPageRef(str(source), index) for index in range(3)],
+                self.root / "out.pdf",
+            )
+        self.assertEqual(reader.call_count, 1)
+        self.assertEqual(len(PdfReader(result.output_file).pages), 3)
+
+    def test_save_pages_failed_write_leaves_no_partial_result(self):
+        source = self.make_pdf("source.pdf", 1)
+        before = source.read_bytes()
+        target = self.root / "out.pdf"
+        with patch("pypdf.PdfWriter.write", side_effect=OSError("disk full")):
+            with self.assertRaises(OSError):
+                save_pages([PdfPageRef(str(source), 0)], target)
+        self.assertEqual(source.read_bytes(), before)
+        self.assertEqual(set(self.root.iterdir()), {source})
+
     def test_compress_pdf_writes_openable_pdf(self):
         pdf_file = self.make_pdf("compress.pdf", 1)
         for preset in COMPRESSION_PRESETS:
@@ -135,6 +155,56 @@ class PdfToolboxTests(unittest.TestCase):
         self.assertIn("页面呈现方式：", log_text)
         self.assertIn("状态=已生成", log_text)
         self.assertIn("像素=", log_text)
+
+    def test_images_to_pdf_composites_transparency_on_white(self):
+        for mode in ("RGBA", "P"):
+            with self.subTest(mode=mode):
+                source = self.root / f"transparent-{mode}.png"
+                image = Image.new("RGBA", (80, 80), (0, 0, 0, 0))
+                image.paste((255, 0, 0, 255), (30, 30, 50, 50))
+                if mode == "P":
+                    image = image.convert("P")
+                image.save(source)
+                result = images_to_pdf([source], self.root / f"{mode}.pdf")
+                rendered = PdfReader(result.output_file).pages[0].images[0].image
+                self.assertTrue(all(value > 245 for value in rendered.getpixel((5, 5))))
+                self.assertGreater(rendered.getpixel((40, 40))[0], 240)
+                self.assertLess(rendered.getpixel((40, 40))[1], 20)
+
+    def test_images_to_pdf_failed_write_leaves_no_partial_result(self):
+        source = self.root / "source.png"
+        Image.new("RGB", (20, 20), "white").save(source)
+        target = self.root / "result.pdf"
+        target.write_bytes(b"existing result")
+        before = set(self.root.iterdir())
+        def broken_save(image, filename, *args, **kwargs):
+            Path(filename).write_bytes(b"%PDF-partial")
+            raise OSError("synthetic disk failure")
+        with patch.object(Image.Image, "save", broken_save):
+            with self.assertRaisesRegex(OSError, "synthetic disk failure"):
+                images_to_pdf([source], target)
+        self.assertEqual(set(self.root.iterdir()), before)
+        self.assertEqual(target.read_bytes(), b"existing result")
+
+    def test_images_to_pdf_closes_converted_images_when_later_input_fails(self):
+        source = self.root / "source.png"
+        Image.new("RGB", (20, 20), "white").save(source)
+        invalid = self.root / "invalid.png"
+        invalid.write_bytes(b"not an image")
+        converted = []
+        original_convert = Image.Image.convert
+        def track_conversion(image, *args, **kwargs):
+            result = original_convert(image, *args, **kwargs)
+            converted.append(result)
+            return result
+        with patch.object(Image.Image, "convert", track_conversion):
+            with self.assertRaisesRegex(ValueError, "不支持的图片格式"):
+                images_to_pdf([source, invalid], self.root / "result.pdf")
+        self.assertTrue(converted)
+        for image in converted:
+            with self.assertRaises(ValueError):
+                image.getpixel((0, 0))
+        self.assertFalse((self.root / "result.pdf").exists())
 
     def test_single_page_pdf_outputs_directly_with_high_resolution(self):
         pdf_file = self.make_pdf("单页文件.pdf", 1)
@@ -246,6 +316,14 @@ class PdfToolboxTests(unittest.TestCase):
             self.assertLessEqual(image.width, 132)
             self.assertLessEqual(image.height, 180)
 
+    def test_thumbnail_uses_builtin_qt_png_format_and_white_transparency(self):
+        source = self.root / "transparent.png"
+        Image.new("RGBA", (80, 80), (0, 0, 0, 0)).save(source)
+        preview = pdf_toolbox.prepare_image_thumbnail(source, self.root / "preview.png")
+        with Image.open(preview) as image:
+            self.assertEqual(image.format, "PNG")
+            self.assertEqual(image.convert("RGB").getpixel((5, 5)), (255, 255, 255))
+
     def test_pdf_marks_add_watermark_and_page_numbers(self):
         source = self.make_pdf("marks.pdf", 2)
 
@@ -325,6 +403,20 @@ class PdfToolboxTests(unittest.TestCase):
         self.assertIn("表格测试.pdf", report)
         self.assertIn("diff_add", report)
         self.assertIn("仅本机逐行比较", Path(result.log_file).read_text(encoding="utf-8"))
+
+    def test_pdf_text_compare_escapes_filename_html(self):
+        # Mock extraction so the filename case also runs on Windows.
+        def extract(source, target):
+            Path(target).write_text("ordinary text", encoding="utf-8")
+            return "ordinary text", 1
+        with patch("utils.pdf_helper.extract_text", side_effect=extract):
+            result = compare_pdf_text(
+                self.root / "<img src=x onerror=alert(1)>.pdf",
+                self.root / "A&B.pdf", self.root / "report.html")
+        report = Path(result.output_file).read_text(encoding="utf-8")
+        self.assertNotIn("<img src=x onerror=alert(1)>", report)
+        self.assertIn("&lt;img src=x onerror=alert(1)&gt;.pdf", report)
+        self.assertIn("A&amp;B.pdf", report)
 
 
 if __name__ == "__main__":

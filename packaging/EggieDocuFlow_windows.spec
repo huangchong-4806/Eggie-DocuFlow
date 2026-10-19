@@ -1,21 +1,31 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 from pathlib import Path
+from PyInstaller.utils.hooks import copy_metadata
 
 
 PROJECT_ROOT = Path(SPECPATH).parent
 APP_BASENAME = "Eggie DocuFlow"
+LICENSE_METADATA = []
+for package in ("openpyxl", "pdfplumber", "pypdf", "Pillow", "pypdfium2", "PyMuPDF",
+                "PySide6-Essentials", "alibabacloud_ocr_api20210707"):
+    LICENSE_METADATA += copy_metadata(package, recursive=True)
 
 a = Analysis(
     [str(PROJECT_ROOT / "main.py")],
     pathex=[str(PROJECT_ROOT)],
     binaries=[],
     datas=[
+        (str(PROJECT_ROOT / "LICENSE"), "."),
+        (str(PROJECT_ROOT / "THIRD_PARTY_NOTICES.md"), "."),
+        (str(PROJECT_ROOT / "release_notes_v1.5.0.md"), "."),
+        (str(PROJECT_ROOT / "BUILD_RELEASE.md"), "."),
+        (str(PROJECT_ROOT / "licenses"), "licenses"),
         (str(PROJECT_ROOT / "assets" / "software_logo.png"), "assets"),
         (str(PROJECT_ROOT / "assets" / "app_icon.png"), "assets"),
         (str(PROJECT_ROOT / "assets" / "app_icon.ico"), "assets"),
         (str(PROJECT_ROOT / "docs" / "OCR使用说明.pdf"), "docs"),
-    ],
+    ] + LICENSE_METADATA,
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

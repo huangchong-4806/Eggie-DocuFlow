@@ -1,12 +1,14 @@
 import re
-from bisect import bisect_left
+from bisect import bisect_left, bisect_right
+from copy import copy
 from dataclasses import dataclass
 from datetime import date, datetime, time
 from pathlib import Path
 
 from openpyxl import load_workbook
-from openpyxl.formula.translate import Translator
-from openpyxl.utils.cell import coordinate_to_tuple, get_column_letter
+from openpyxl.formula import Tokenizer
+from openpyxl.utils.cell import coordinate_from_string
+from openpyxl.worksheet.views import Selection
 
 from utils.file_helper import available_output_path, publish_output, temporary_output
 
@@ -93,9 +95,12 @@ def _row_values(row, trim_whitespace):
 
 
 def _selected_key(values, columns):
-    if not columns:
-        return values
-    return tuple(values[index - 1] if index <= len(values) else None for index in columns)
+    selected = values if not columns else tuple(
+        values[index - 1] if index <= len(values) else None for index in columns
+    )
+    # Excel logical values are distinct from numbers; 1 and 1.0 remain numeric equals.
+    return tuple(("number" if isinstance(v, (int, float)) and not isinstance(v, bool)
+                  else type(v).__name__, v) for v in selected)
 
 
 def _sheet_preview(source, sheet, options):
@@ -181,6 +186,134 @@ def preview_cleanup(source_file, options):
         workbook.close()
 
 
+def _rewrite_formula(formula, formula_sheet, target_sheet, removed):
+    """Adjust A1 references for row deletion, not for copying a formula."""
+    def fail():
+        raise ValueError('删除行涉及无法安全调整的公式引用，请取消删除空行和重复行，或先在 Excel 中处理。')
+    try:
+        tokens = Tokenizer(formula).items
+    except Exception:
+        fail()
+    for token in tokens:
+        if token.type == 'FUNC' and token.subtype == 'OPEN':
+            if token.value[:-1].upper().split('.')[-1] in {'INDIRECT', 'OFFSET'}:
+                fail()
+        if token.type != 'OPERAND' or token.subtype != 'RANGE':
+            continue
+        raw = token.value
+        prefix, ref = raw.rsplit('!', 1) if '!' in raw else ('', raw)
+        sheet_name = prefix[1:-1].replace("''", "'") if prefix.startswith("'") and prefix.endswith("'") else prefix
+        if '[' in prefix or ':' in prefix:
+            fail()
+        # Unqualified references on other sheets are unaffected.
+        active = sheet_name.casefold() == target_sheet.casefold() if prefix else formula_sheet == target_sheet
+        if not active:
+            continue
+        if re.fullmatch(r'\$?[A-Za-z]{1,3}:\$?[A-Za-z]{1,3}', ref):
+            continue
+        parts = ref.split(':')
+        if len(parts) not in (1, 2):
+            fail()
+        matches = [re.fullmatch(r'(\$?[A-Za-z]{1,3})(\$?)([1-9][0-9]*)', v) for v in parts]
+        if not all(matches):
+            # Whole-row ranges are supported; names/structured references are not guessed.
+            matches = [re.fullmatch(r'()(\$?)([1-9][0-9]*)', v) for v in parts] if len(parts) == 2 else []
+        if not matches or not all(matches):
+            fail()
+        rows = [int(m[3]) for m in matches]
+        if any(r > 1048576 for r in rows) or rows != sorted(rows):
+            fail()
+        start, end = rows[0], rows[-1]
+        if len(rows) == 1:
+            if start in removed:
+                fail()
+            adjusted = [start - bisect_left(removed, start)]
+        else:
+            remaining = end - start + 1 - (bisect_right(removed, end) - bisect_left(removed, start))
+            if not remaining:
+                fail()
+            first = start - bisect_left(removed, start)
+            adjusted = [first, first + remaining - 1]
+        rewritten = ':'.join(f'{m[1]}{m[2]}{r}' for m, r in zip(matches, adjusted))
+        token.value = (prefix + '!' if prefix else '') + rewritten
+    return '=' + ''.join(t.value for t in tokens)
+
+
+def _delete_rows_safely(sheet, remove_rows):
+    if not remove_rows:
+        return
+    workbook = sheet.parent
+    # These structures also contain row references and need Excel's own editor.
+    if workbook.defined_names or any(
+        other.defined_names or other.tables or other.conditional_formatting
+        or other.data_validations.count or other._charts or other._pivots
+        or other.print_area or other.print_title_rows or other.print_title_cols
+        for other in workbook
+    ):
+        raise ValueError('工作簿含命名区域、表格、图表或规则，无法安全调整删除行后的引用。请取消删除空行和重复行，或先在 Excel 中处理。')
+    merged = list(sheet.merged_cells.ranges)
+    for region in merged:
+        if bisect_right(remove_rows, region.max_row) > bisect_left(remove_rows, region.min_row):
+            raise ValueError(f'要删除的行与合并单元格 {region} 交叉，请先在 Excel 中处理合并区域。')
+    # Compute everything before changing structure, including dependent worksheets.
+    updates = []
+    link_updates = []
+    for other in workbook:
+        for row in other:
+            for cell in row:
+                if other is sheet and cell.row in remove_rows:
+                    continue
+                if cell.hyperlink:
+                    link = copy(cell.hyperlink)
+                    if link.location and not link.target:
+                        link.location = _rewrite_formula('='+link.location, other.title, sheet.title, remove_rows)[1:]
+                    if link.target and link.target.startswith('#'):
+                        link.target = '#' + _rewrite_formula('='+link.target[1:], other.title, sheet.title, remove_rows)[1:]
+                    dest_row = cell.row - bisect_left(remove_rows, cell.row) if other is sheet else cell.row
+                    link_updates.append((other, dest_row, cell.column, link))
+                if cell.data_type != 'f':
+                    continue
+                if not isinstance(cell.value, str):
+                    raise ValueError('删除行涉及数组公式，无法安全调整，请先在 Excel 中处理。')
+                formula = _rewrite_formula(cell.value, other.title, sheet.title, remove_rows)
+                dest_row = cell.row - bisect_left(remove_rows, cell.row) if other is sheet else cell.row
+                updates.append((other, dest_row, cell.column, formula))
+    dimensions = [(r, copy(d)) for r, d in sheet.row_dimensions.items() if r not in remove_rows]
+    auto_filter = copy(sheet.auto_filter)
+    if auto_filter.ref:
+        auto_filter.ref = _rewrite_formula('='+auto_filter.ref, sheet.title, sheet.title, remove_rows)[1:]
+        if auto_filter.sortState:
+            auto_filter.sortState = copy(auto_filter.sortState)
+            auto_filter.sortState.ref = _rewrite_formula('='+auto_filter.sortState.ref, sheet.title, sheet.title, remove_rows)[1:]
+            auto_filter.sortState.sortCondition = [copy(condition) for condition in auto_filter.sortState.sortCondition]
+            for condition in auto_filter.sortState.sortCondition:
+                condition.ref = _rewrite_formula('='+condition.ref, sheet.title, sheet.title, remove_rows)[1:]
+    freeze = sheet.freeze_panes
+    if freeze:
+        col, row = coordinate_from_string(freeze)
+        freeze = f'{col}{row - bisect_left(remove_rows, row)}'
+    for region in merged:
+        sheet.unmerge_cells(str(region))
+    for row in reversed(remove_rows):
+        sheet.delete_rows(row, 1)
+    sheet.row_dimensions.clear()
+    for old_row, dimension in dimensions:
+        dimension.index = old_row - bisect_left(remove_rows, old_row)
+        sheet.row_dimensions[dimension.index] = dimension
+    for region in merged:
+        shift = bisect_left(remove_rows, region.min_row)
+        sheet.merge_cells(start_row=region.min_row-shift, end_row=region.max_row-shift,
+                          start_column=region.min_col, end_column=region.max_col)
+    for other, row, col, formula in updates:
+        other.cell(row, col, formula)
+    for other, row, col, link in link_updates:
+        other.cell(row, col).hyperlink = link
+    sheet.auto_filter = auto_filter
+    if freeze:
+        sheet.sheet_view.selection = [Selection()]
+        sheet.freeze_panes = freeze
+
+
 def _apply_cleanup(sheet, options, progress_callback=None):
     total_rows = max(sheet.max_row, 1)
     if options.trim_whitespace or options.normalize_dates or options.normalize_numbers:
@@ -203,12 +336,6 @@ def _apply_cleanup(sheet, options, progress_callback=None):
             if progress_callback and row_number % 200 == 0:
                 progress_callback(row_number, total_rows, f"正在清理第 {row_number} 行")
 
-    formulas = {
-        cell.coordinate: cell.value
-        for row in sheet.iter_rows()
-        for cell in row
-        if isinstance(cell.value, str) and cell.value.startswith("=")
-    }
     remove_rows = []
     seen = set()
     for row in sheet.iter_rows(
@@ -229,20 +356,7 @@ def _apply_cleanup(sheet, options, progress_callback=None):
                 seen.add(key)
 
     remove_rows.sort()
-    for row_number in reversed(remove_rows):
-        sheet.delete_rows(row_number, 1)
-    removed = set(remove_rows)
-    for coordinate, formula in formulas.items():
-        original_row, original_column = coordinate_to_tuple(coordinate)
-        if original_row in removed:
-            continue
-        new_row = original_row - bisect_left(remove_rows, original_row)
-        if new_row != original_row:
-            destination = f"{get_column_letter(original_column)}{new_row}"
-            sheet[destination] = Translator(
-                formula,
-                origin=coordinate,
-            ).translate_formula(destination)
+    _delete_rows_safely(sheet, remove_rows)
     if progress_callback:
         progress_callback(total_rows, total_rows, "数据清理完成，正在保存新文件")
     return len(remove_rows)

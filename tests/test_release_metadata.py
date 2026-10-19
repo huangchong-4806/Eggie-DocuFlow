@@ -1,29 +1,39 @@
 import unittest
 from pathlib import Path
 
-from version import APP_VERSION
+from version import APP_VERSION, BUILD_TYPE, BUILD_DATE
 
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 class ReleaseMetadataTests(unittest.TestCase):
-    def test_v1_4_0_metadata_is_consistent(self):
-        self.assertEqual(APP_VERSION, "1.4.0")
+    def test_open_source_notices_and_bundled_licenses_are_present(self):
+        self.assertIn("Copyright (c) 2026 qq448223855-rgb", (ROOT / "LICENSE").read_text(encoding="utf-8"))
+        self.assertIn("GNU AFFERO GENERAL PUBLIC LICENSE", (ROOT / "licenses/AGPL-3.0.txt").read_text(encoding="utf-8"))
+        self.assertIn("PyMuPDF", (ROOT / "THIRD_PARTY_NOTICES.md").read_text(encoding="utf-8"))
+        for spec_name in ("EggieDocuFlow.spec", "EggieDocuFlow_windows.spec"):
+            spec = (ROOT / "packaging" / spec_name).read_text(encoding="utf-8")
+            self.assertIn("THIRD_PARTY_NOTICES.md", spec)
+            self.assertIn("copy_metadata", spec)
 
-        version_text = (ROOT / "version.py").read_text(encoding="utf-8")
-        self.assertIn('BUILD_DATE = "2026-08-14"', version_text)
+    def test_release_version_is_consistent(self):
+        self.assertEqual(APP_VERSION, "1.5.0")
+        self.assertEqual(BUILD_TYPE, "release")
+        self.assertEqual(BUILD_DATE, "2026-10-16")
+        spec = (ROOT / "packaging" / "EggieDocuFlow.spec").read_text(encoding="utf-8")
+        self.assertIn('"CFBundleVersion": version_scope["BUILD_NUMBER"]', spec)
 
+    def test_release_declares_supported_macos_minimum(self):
+        spec = (ROOT / "packaging" / "EggieDocuFlow.spec").read_text(encoding="utf-8")
+        self.assertIn('"LSMinimumSystemVersion": "15.0"', spec)
+
+    def test_v1_4_0_historical_downloads_are_preserved(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         self.assertIn("EggieDocuFlow_V1.4.0_mac.app", readme)
         self.assertIn("EggieDocuFlow_V1.4.0_mac.zip", readme)
         self.assertIn("EggieDocuFlow_V1.4.0_Windows_x64_Setup.exe", readme)
         self.assertTrue((ROOT / "release_notes_v1.4.0.md").is_file())
-
-        spec = (ROOT / "packaging" / "EggieDocuFlow.spec").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn('"CFBundleVersion": "11"', spec)
 
         windows_spec = (ROOT / "packaging" / "EggieDocuFlow_windows.spec").read_text(
             encoding="utf-8"

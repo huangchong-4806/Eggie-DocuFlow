@@ -1,8 +1,9 @@
 from pathlib import Path
 
-from PySide6.QtCore import QMimeData, QSize, Qt
-from PySide6.QtGui import QDrag, QPixmap, QTransform
-from PySide6.QtWidgets import QApplication, QCheckBox, QGridLayout, QLabel, QVBoxLayout, QWidget
+from PySide6.QtCore import QMimeData, QPointF, QRectF, QSize, Qt, Signal
+from PySide6.QtGui import QBrush, QColor, QDrag, QImage, QPen, QPixmap, QTransform
+from PySide6.QtWidgets import (QApplication, QCheckBox, QGraphicsScene, QGraphicsView,
+                               QGridLayout, QLabel, QVBoxLayout, QWidget)
 
 
 PDF_PAGE_DRAG_MIME = "application/x-eggie-pdf-page-card"
@@ -12,6 +13,24 @@ PDF_PAGE_CARD_HEIGHT = 282
 PDF_PAGE_CARD_H_SPACING = 18
 PDF_PAGE_CARD_V_SPACING = 34
 PDF_PAGE_THUMBNAIL_SIZE = QSize(132, 180)
+
+
+def load_image_pixmap(filename):
+    """Decode locally supported images even when optional Qt codecs are absent."""
+    pixmap = QPixmap(str(filename))
+    if not pixmap.isNull():
+        return pixmap
+    from PIL import Image, ImageOps
+    from contextlib import closing
+    try:
+        with Image.open(filename) as source, closing(ImageOps.exif_transpose(source)) as oriented:
+            with closing(oriented.convert("RGBA")) as rgba:
+                data = rgba.tobytes()
+                image = QImage(data, rgba.width, rgba.height, rgba.width * 4,
+                               QImage.Format_RGBA8888).copy()
+                return QPixmap.fromImage(image)
+    except (OSError, ValueError):
+        return QPixmap()
 
 
 class PdfThumbnailCard(QWidget):
@@ -272,6 +291,212 @@ class PdfImageBoard(DragDropBoard):
     owner_refresh_layout_method = "refresh_pdf_image_cards_layout"
 
 
+class PdfPageCanvas(QGraphicsView):
+    area_selected = Signal(object)
+    text_selected = Signal(object)
+    mark_changed = Signal(str, object)
+    mark_deleted = Signal(str)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setScene(QGraphicsScene(self))
+        self.setObjectName("pdfPageCanvas")
+        self.setAccessibleName("PDF 页面预览与涂黑选区")
+        self.setFocusPolicy(Qt.StrongFocus)
+        self.setMouseTracking(True)
+        self.setBackgroundBrush(QColor("#E7E8E2"))
+        self.setAlignment(Qt.AlignCenter)
+        self.preview = None
+        self.source_transform = QTransform()
+        self.marks = ()
+        self.mode = "area"
+        self.selected_mark = None
+        self._overlays = []
+        self._drag = None
+        self._fit = "page"
+
+    def set_page(self, preview):
+        self.scene().clear()
+        self._overlays = []
+        self._drag = None
+        self.preview = preview
+        if not preview:
+            return
+        pixmap = QPixmap()
+        pixmap.loadFromData(preview["png"], "PNG")
+        item = self.scene().addPixmap(pixmap)
+        item.setTransform(QTransform.fromScale(preview["width_pt"] / pixmap.width(), preview["height_pt"] / pixmap.height()))
+        self.source_transform = QTransform(*preview["source_to_view"])
+        self.page_rect = QRectF(0, 0, preview["width_pt"], preview["height_pt"])
+        self.source_rect = self.source_transform.inverted()[0].mapRect(self.page_rect)
+        self.scene().setSceneRect(self.page_rect)
+        self.set_marks(self.marks)
+        self._apply_fit()
+
+    def set_mode(self, mode):
+        self.mode = mode
+        self._drag = None
+        self.setDragMode(QGraphicsView.ScrollHandDrag if mode == "hand" else QGraphicsView.NoDrag)
+        self.viewport().setCursor(Qt.OpenHandCursor if mode == "hand" else Qt.CrossCursor if mode in ("area", "text") else Qt.ArrowCursor)
+
+    def set_marks(self, marks):
+        self.marks = tuple(marks)
+        self._paint_marks()
+
+    def _paint_marks(self, temporary=()):
+        for item in self._overlays:
+            self.scene().removeItem(item)
+        self._overlays.clear()
+        if not self.preview:
+            return
+        for mark in self.marks:
+            if mark.page_id != self.preview["page_id"] or (self._drag and self._drag.get("mark") == mark.mark_id):
+                continue
+            for rect in mark.rects:
+                if not mark.applied or mark.mark_id == self.selected_mark:
+                    self._add_overlay(rect, selected=mark.mark_id == self.selected_mark, applied=mark.applied)
+        for rect in temporary:
+            self._add_overlay(rect, selected=True)
+
+    def _add_overlay(self, rect, selected=False, applied=False):
+        view_rect = self.source_transform.mapRect(QRectF(rect[0], rect[1], rect[2] - rect[0], rect[3] - rect[1]))
+        color = QColor("#2563eb" if selected else "#db4444")
+        pen = QPen(color, 1.4, Qt.SolidLine if selected else Qt.DashLine)
+        pen.setCosmetic(True)
+        fill = QColor(37, 99, 235, 35) if selected else QColor(239, 68, 68, 35)
+        self._overlays.append(self.scene().addRect(view_rect, pen, QBrush(Qt.NoBrush) if applied else QBrush(fill)))
+        if selected and not applied:
+            size = 6 / max(self.transform().m11(), 0.1)
+            for corner in (view_rect.topLeft(), view_rect.topRight(), view_rect.bottomLeft(), view_rect.bottomRight()):
+                self._overlays.append(self.scene().addRect(QRectF(corner.x() - size / 2, corner.y() - size / 2, size, size), pen, QBrush(Qt.white)))
+
+    def _source_point(self, position):
+        point = self.source_transform.inverted()[0].map(self.mapToScene(position))
+        return QPointF(max(self.source_rect.left(), min(self.source_rect.right(), point.x())),
+                       max(self.source_rect.top(), min(self.source_rect.bottom(), point.y())))
+
+    def _text_rects(self, start, end):
+        chars = self.preview["chars"]
+        def box(char):
+            x0, y0, x1, y1 = char["bbox"]
+            return QRectF(x0, y0, x1 - x0, y1 - y0)
+        first = next((i for i, char in enumerate(chars) if box(char).contains(start)), None)
+        if first is None:
+            return ()
+        last = min(range(len(chars)), key=lambda i: (box(chars[i]).center() - end).manhattanLength())
+        lines = {}
+        for char in chars[min(first, last):max(first, last) + 1]:
+            rect = box(char)
+            key = char["line_id"]
+            lines[key] = lines[key].united(rect) if key in lines else rect
+        return tuple((r.left(), r.top(), r.right(), r.bottom()) for r in lines.values())
+
+    def mousePressEvent(self, event):
+        if not self.preview or event.button() != Qt.LeftButton or self.mode == "hand":
+            return super().mousePressEvent(event)
+        if not self.page_rect.contains(self.mapToScene(event.position().toPoint())):
+            return
+        point = self._source_point(event.position().toPoint())
+        self._drag = {"start": point, "rects": ()}
+        if self.mode == "select":
+            self.selected_mark = None
+            for mark in reversed(self.marks):
+                if mark.page_id != self.preview["page_id"]:
+                    continue
+                for coords in mark.rects:
+                    rect = QRectF(coords[0], coords[1], coords[2] - coords[0], coords[3] - coords[1])
+                    tolerance = 8 / max(self.transform().m11(), 0.1)
+                    if rect.adjusted(-tolerance, -tolerance, tolerance, tolerance).contains(point):
+                        self.selected_mark = mark.mark_id
+                        if not mark.applied and mark.mode == "area":
+                            corners = (rect.topLeft(), rect.topRight(), rect.bottomLeft(), rect.bottomRight())
+                            corner = next((i for i, p in enumerate(corners) if (p - point).manhattanLength() < tolerance * 2), None)
+                            self._drag.update(mark=mark.mark_id, original=rect, corner=corner, rects=(coords,))
+                        break
+                if self.selected_mark:
+                    break
+            if "mark" not in self._drag:
+                self._drag = None
+        self._paint_marks(self._drag["rects"] if self._drag else ())
+        event.accept()
+
+    def mouseMoveEvent(self, event):
+        if not self._drag:
+            return super().mouseMoveEvent(event)
+        point = self._source_point(event.position().toPoint())
+        start = self._drag["start"]
+        if "mark" in self._drag:
+            rect = QRectF(self._drag["original"])
+            corner = self._drag["corner"]
+            if corner is None:
+                rect.translate(point - start)
+                rect.translate(max(self.source_rect.left() - rect.left(), min(0, self.source_rect.right() - rect.right())),
+                               max(self.source_rect.top() - rect.top(), min(0, self.source_rect.bottom() - rect.bottom())))
+            else:
+                (rect.setTopLeft, rect.setTopRight, rect.setBottomLeft, rect.setBottomRight)[corner](point)
+                rect = rect.normalized()
+            self._drag["rects"] = ((rect.left(), rect.top(), rect.right(), rect.bottom()),)
+        elif self.mode == "text":
+            self._drag["rects"] = self._text_rects(start, point)
+        else:
+            rect = QRectF(start, point).normalized()
+            self._drag["rects"] = ((rect.left(), rect.top(), rect.right(), rect.bottom()),)
+        self._paint_marks(self._drag["rects"])
+        event.accept()
+
+    def mouseReleaseEvent(self, event):
+        if not self._drag or event.button() != Qt.LeftButton:
+            return super().mouseReleaseEvent(event)
+        self.mouseMoveEvent(event)
+        drag, self._drag = self._drag, None
+        rects = tuple(r for r in drag["rects"] if r[2] - r[0] >= 1 and r[3] - r[1] >= 1)
+        if rects:
+            if "mark" in drag:
+                self.mark_changed.emit(drag["mark"], rects)
+            elif self.mode == "text":
+                self.text_selected.emit(rects)
+            elif self.mode == "area":
+                self.area_selected.emit(rects)
+        self._paint_marks()
+        event.accept()
+
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key_Escape:
+            self._drag = None
+            self._paint_marks()
+        elif event.key() in (Qt.Key_Delete, Qt.Key_Backspace) and self.selected_mark:
+            self.mark_deleted.emit(self.selected_mark)
+        else:
+            super().keyPressEvent(event)
+
+    def fit_page(self):
+        self._fit = "page"
+        self._apply_fit()
+
+    def fit_width(self):
+        self._fit = "width"
+        self._apply_fit()
+
+    def zoom(self, factor):
+        if self.preview:
+            self._fit = None
+            current = self.transform().m11()
+            self.scale(max(0.1, min(8, current * factor)) / current, max(0.1, min(8, current * factor)) / current)
+
+    def _apply_fit(self):
+        if not self.preview or not self._fit:
+            return
+        if self._fit == "page":
+            self.fitInView(self.page_rect.adjusted(-12, -12, 12, 12), Qt.KeepAspectRatio)
+        else:
+            scale = max(0.1, (self.viewport().width() - 28) / self.page_rect.width())
+            self.setTransform(QTransform.fromScale(scale, scale))
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._apply_fit()
+
+
 __all__ = [
     "DragDropBoard",
     "PdfImageBoard",
@@ -279,4 +504,5 @@ __all__ = [
     "PdfPageBoard",
     "PdfPageCard",
     "PdfThumbnailCard",
+    "PdfPageCanvas",
 ]
