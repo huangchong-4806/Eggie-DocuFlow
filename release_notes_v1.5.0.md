@@ -2,11 +2,6 @@
 
 ## 下载安装 / Download and install
 
-<!-- v1.5-upload-status:start -->
-V1.5.0 下载暂未开放，以下安装包链接会在上传完成并发布后启用。<br>
-V1.5.0 downloads are not yet available. The installer links below will become available after upload and publication.
-<!-- v1.5-upload-status:end -->
-
 - [Mac：Apple 芯片，macOS 15 及以上 / Apple silicon, macOS 15 or later](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/download/v1.5.0/EggieDocuFlow_V1.5.0_mac_arm64.zip)
 - [Windows：Windows 10/11，64 位 / Windows 10/11, 64-bit](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/download/v1.5.0/EggieDocuFlow_V1.5.0_Windows_x64_Setup.exe)
 
