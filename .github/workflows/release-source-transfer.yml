@@ -27,7 +27,7 @@ jobs:
           import json, os
           from pathlib import Path
           config=json.loads(Path('release-transfer/mode.json').read_text())
-          assert config['mode'] in ('assemble','publish')
+          assert config['mode'] in ('assemble','publish','verify')
           assert isinstance(config['artifact_run_id'],int)
           with open(os.environ['GITHUB_OUTPUT'],'a') as f:
               f.write('mode='+config['mode']+'\n')
@@ -79,5 +79,27 @@ jobs:
         with:
           name: eggie-v150-upload-report
           path: cloud-output/release-upload-report.json
+          retention-days: 1
+          if-no-files-found: error
+
+  verify-public:
+    needs: settings
+    if: needs.settings.outputs.mode == 'verify'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Independently download and hash all five public assets
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 release-transfer/verify-public.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: eggie-v150-public-verification
+          path: public-download-verification.json
           retention-days: 1
           if-no-files-found: error
