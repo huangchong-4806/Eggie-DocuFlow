@@ -12,6 +12,9 @@ A free desktop toolkit for Excel, PDF and file workflows. Merge, split and clean
 - [下载 Windows 版 / Download for Windows](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/download/v1.5.0/EggieDocuFlow_V1.5.0_Windows_x64_Setup.exe)
 - [源码与校验清单 / Source and checksums](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/tag/v1.5.0)
 
+**普通用户只需下载对应系统的安装包，无需下载或安装项目源码、第三方源码包及 GitHub 的 Source code 归档；不下载源码包也不影响软件使用。校验清单可按需下载。**<br>
+**For normal use, download only the installer for your operating system. Project source, third-party source packages and GitHub's Source code archives are not required to install or use the app. Checksums are optional.**
+
 - **Mac**：Apple 芯片，macOS 15 及以上。 / Apple silicon, macOS 15 or later.
 - **Windows**：Windows 10/11，64 位。 / Windows 10/11, 64-bit.
 - 无需安装 Python。 / No Python installation required.

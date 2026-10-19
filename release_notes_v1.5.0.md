@@ -8,8 +8,19 @@
 无需安装 Python。Mac 下载后解压，将 `Eggie DocuFlow.app` 放入“应用程序”；Windows 运行安装包，按向导完成安装。<br>
 No Python installation is required. On Mac, extract the ZIP and move `Eggie DocuFlow.app` to Applications. On Windows, run the installer and follow the setup wizard.
 
-普通用户只需下载对应的安装包；项目源码、第三方源码材料和校验清单供开发者及文件核对使用。<br>
-Regular users only need the installer for their platform. Project source, third-party source materials and checksums are provided for developers and file verification.
+**普通用户只需下载上方对应系统的安装包。无需下载或安装任何源码包，不下载源码包也不影响软件使用。**<br>
+**For normal use, download only the installer for your operating system above. You do not need to download or install any source packages to use the app.**
+
+### 其他附件说明 / Other downloads
+
+- `EggieDocuFlow_V1.5.0_project-source.zip`：本软件的源代码，供开发者查阅、修改和重新构建。<br>
+  Application source code for developers to inspect, modify and rebuild.
+- `EggieDocuFlow_V1.5.0_third-party-sources.zip`：软件所用开源组件的源码和构建材料，随版本提供，供开发者查阅与重新构建。**普通用户无需下载或安装此包。**<br>
+  Source code and build materials for the open-source components used by the app, provided with this release for developer reference and rebuilding. **This package is not required to install or use the app.**
+- `SHA256SUMS.txt`：可选的文件校验清单，用于核对下载文件是否完整。<br>
+  Optional checksums for verifying downloaded files.
+- GitHub 自动提供的 `Source code (zip)` 和 `Source code (tar.gz)` 也是源码归档，普通用户无需下载。<br>
+  GitHub's automatic `Source code (zip)` and `Source code (tar.gz)` downloads are also source archives and are not needed for normal use.
 
 ## 本次更新 / What's new
 
