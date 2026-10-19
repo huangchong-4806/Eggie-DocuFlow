@@ -1,7 +1,8 @@
 """One-time release transport. Never builds or executes downloaded source code."""
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import argparse, gzip, hashlib, http.client, io, json, os, shutil, subprocess, tempfile, urllib.parse, urllib.request, zipfile
+import argparse, base64, gzip, hashlib, http.client, io, json, os, shutil, subprocess, tarfile, tempfile, urllib.parse, urllib.request, zipfile
+from functools import lru_cache
 
 ROOT = Path(__file__).resolve().parent
 REPO = 'huangchong-4806/Eggie-DocuFlow'
@@ -29,6 +30,50 @@ def validate(path,size,digest):
 
 def run(*args,**kwargs):
     return subprocess.run(args,check=True,timeout=600,**kwargs)
+
+def metadata_bytes(name):
+    parts=sorted((ROOT/'metadata-parts').glob(name+'.*'))
+    if not parts:raise ValueError('Missing metadata segments: '+name)
+    return b''.join(p.read_bytes() for p in parts)
+
+@lru_cache(maxsize=1)
+def tar_metadata():
+    return json.loads(gzip.decompress(metadata_bytes('tar-metadata.json.gz')))
+
+@lru_cache(maxsize=1)
+def tar_seeds():
+    return gzip.decompress(metadata_bytes('tar-seeds.bin.gz'))
+
+def restore_tar_metadata(item,downloaded):
+    meta=tar_metadata()[item['sha256']]
+    with gzip.open(downloaded,'rb') as f:
+        raw=f.read(meta['tar_bytes']*2+1)
+    if len(raw)>meta['tar_bytes']*2:raise ValueError('Upstream tar exceeds bound')
+    seed=memoryview(tar_seeds())[meta['seed_start']:meta['seed_start']+meta['seed_bytes']]
+    normalized=downloaded.with_suffix('.normalized')
+    h=hashlib.sha256();total=0
+    with tarfile.open(fileobj=io.BytesIO(raw),mode='r:') as tar:
+        members={}
+        for member in tar:
+            if member.name in members or member.sparse:raise ValueError('Duplicate or sparse tar entry')
+            members[member.name]=member
+        actual={n:[m.type.decode(),m.size,m.linkname] for n,m in members.items()}
+        if actual!=meta['members']:raise ValueError('Upstream member set or structure changed')
+        with normalized.open('wb') as dst:
+            with gzip.GzipFile(filename='',mode='wb',fileobj=dst,mtime=0,compresslevel=6) as packed:
+                for segment in meta['segments']:
+                    if 'seed_offset' in segment:
+                        block=seed[segment['seed_offset']:segment['seed_offset']+segment['bytes']]
+                    else:
+                        member=members[segment['name']]
+                        if not member.isfile():raise ValueError('Expected regular tar entry')
+                        with tar.extractfile(member) as src:block=src.read(segment['bytes']+1)
+                    if len(block)!=segment['bytes']:raise ValueError('Tar segment size mismatch')
+                    packed.write(block);h.update(block);total+=len(block)
+    if total!=meta['tar_bytes'] or h.hexdigest()!=meta['tar_sha256']:raise ValueError('Original tar reconstruction mismatch')
+    validate(normalized,item['bytes'],item['sha256'])
+    normalized.replace(downloaded)
+    print('ORIGINAL_TAR_BYTES_RESTORED '+item['path'],flush=True)
 
 def download(item,cache):
     target=cache/item['sha256']
@@ -60,9 +105,14 @@ def download(item,cache):
                         block=response.read(1024*1024)
                         if not block:break
                         size+=len(block)
-                        if size>item['bytes']:raise ValueError('Upstream file too large')
+                        limit=item['bytes']*2+1048576 if item['sha256'] in tar_metadata() else item['bytes']
+                        if size>limit:raise ValueError('Upstream file too large')
                         dst.write(block)
-                validate(target,item['bytes'],item['sha256']);break
+                try:validate(target,item['bytes'],item['sha256'])
+                except ValueError:
+                    if item['sha256'] not in tar_metadata():raise
+                    restore_tar_metadata(item,target)
+                break
             except Exception as e:
                 errors.append(type(e).__name__+': '+str(e)[:300])
         else:raise RuntimeError(item['path']+'; '+'; '.join(errors))
@@ -166,7 +216,8 @@ def main():
     recipe=json.loads((ROOT/'recipe.json').read_text());cache=Path('cloud-cache');cache.mkdir(exist_ok=True)
     failures=[]
     with ThreadPoolExecutor(max_workers=6) as pool:
-        futures={pool.submit(download,item,cache):item for item in recipe['downloads']}
+        unique={item['sha256']:item for item in recipe['downloads']}
+        futures={pool.submit(download,item,cache):item for item in unique.values()}
         for future in as_completed(futures):
             try:future.result()
             except Exception as e:
