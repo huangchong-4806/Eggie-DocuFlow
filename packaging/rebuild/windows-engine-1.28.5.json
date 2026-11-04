@@ -1,0 +1,432 @@
+{
+ "source_wheel_sha256": "ebd244918798502d7b4504c90410d1711a4d7675a32584ca30f1bab419ecbffe",
+ "reference_wheel_sha256": "c6b1570cde310f9f24ba2c9f4e9ef490ea402e4be0371b0d23e6c6c7760e59b1",
+ "wrappers": {
+  "pymupdf/_build.py": {
+   "before": "6561ced4e8b28638d0ca36a028d4f91d1ac2ca309750930283f125aa0b04cae2",
+   "after": "b321932408796415e8c7b342b5fb03f2191de84575130b0f604b155b9e959b1d",
+   "changes": [
+    [
+     0,
+     3,
+     [
+      "pymupdf_git_branch = None\n",
+      "pymupdf_git_comment = None\n",
+      "pymupdf_git_diff = None\n"
+     ]
+    ],
+    [
+     4,
+     6,
+     [
+      "pymupdf_git_sha = None\n",
+      "mupdf_location = 'mupdf-1.28.5-source'\n"
+     ]
+    ],
+    [
+     8,
+     10,
+     [
+      "swig_version = '4.3.1'\n",
+      "swig_version_tuple = (4, 3, 1)\n"
+     ]
+    ]
+   ]
+  },
+  "pymupdf/extra.py": {
+   "before": "1888affc6f914edef4730c87bcb19849d5f10c9f65334fd329e728565a9980a3",
+   "after": "9ac27ea09bb3d21c88de4c4e03ddcfab5bf4642132875b839d32d7c70ec363c3",
+   "changes": [
+    [
+     1,
+     2,
+     [
+      "# Version 4.3.1\r\n"
+     ]
+    ],
+    [
+     8,
+     9,
+     [
+      "if __package__ or \".\" in __name__:\r\n"
+     ]
+    ]
+   ]
+  },
+  "pymupdf/mupdf.py": {
+   "before": "527bb3b4be763143666049efe255092d847a9a13e15a943fef63135bc6653186",
+   "after": "7ece1b9c54bbf279d9d9363b3599fb9efafffd78a46fdf22b5354b5fc918af8d",
+   "changes": [
+    [
+     1,
+     2,
+     [
+      "# Version 4.3.1\r\n"
+     ]
+    ],
+    [
+     8,
+     9,
+     [
+      "if __package__ or \".\" in __name__:\r\n"
+     ]
+    ],
+    [
+     1843,
+     1843,
+     [
+      "class fz_md5(object):\r\n",
+      "    r\"\"\"\r\n",
+      "    Structure definition is public to enable stack\r\n",
+      "    based allocation. Do not access the members directly.\r\n",
+      "    \"\"\"\r\n",
+      "\r\n",
+      "    thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc=\"The membership flag\")\r\n",
+      "    __repr__ = _swig_repr\r\n",
+      "    lo = property(_mupdf.fz_md5_lo_get, _mupdf.fz_md5_lo_set)\r\n",
+      "    hi = property(_mupdf.fz_md5_hi_get, _mupdf.fz_md5_hi_set)\r\n",
+      "    a = property(_mupdf.fz_md5_a_get, _mupdf.fz_md5_a_set)\r\n",
+      "    b = property(_mupdf.fz_md5_b_get, _mupdf.fz_md5_b_set)\r\n",
+      "    c = property(_mupdf.fz_md5_c_get, _mupdf.fz_md5_c_set)\r\n",
+      "    d = property(_mupdf.fz_md5_d_get, _mupdf.fz_md5_d_set)\r\n",
+      "    buffer = property(_mupdf.fz_md5_buffer_get, _mupdf.fz_md5_buffer_set)\r\n",
+      "\r\n",
+      "    def __init__(self):\r\n",
+      "        _mupdf.fz_md5_swiginit(self, _mupdf.new_fz_md5())\r\n",
+      "    __swig_destroy__ = _mupdf.delete_fz_md5\r\n",
+      "\r\n",
+      "# Register fz_md5 in _mupdf:\r\n",
+      "_mupdf.fz_md5_swigregister(fz_md5)\r\n",
+      "fz_invalid_quad = cvar.fz_invalid_quad\r\n",
+      "fz_infinite_quad = cvar.fz_infinite_quad\r\n",
+      "\r\n",
+      "class fz_sha256(object):\r\n",
+      "    r\"\"\"\r\n",
+      "    Structure definition is public to enable stack\r\n",
+      "    based allocation. Do not access the members directly.\r\n",
+      "    \"\"\"\r\n",
+      "\r\n",
+      "    thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc=\"The membership flag\")\r\n",
+      "    __repr__ = _swig_repr\r\n",
+      "    state = property(_mupdf.fz_sha256_state_get, _mupdf.fz_sha256_state_set)\r\n",
+      "    count = property(_mupdf.fz_sha256_count_get, _mupdf.fz_sha256_count_set)\r\n",
+      "\r\n",
+      "    def __init__(self):\r\n",
+      "        _mupdf.fz_sha256_swiginit(self, _mupdf.new_fz_sha256())\r\n",
+      "    __swig_destroy__ = _mupdf.delete_fz_sha256\r\n",
+      "\r\n",
+      "# Register fz_sha256 in _mupdf:\r\n",
+      "_mupdf.fz_sha256_swigregister(fz_sha256)\r\n",
+      "class fz_sha512(object):\r\n",
+      "    r\"\"\"\r\n",
+      "    Structure definition is public to enable stack\r\n",
+      "    based allocation. Do not access the members directly.\r\n",
+      "    \"\"\"\r\n",
+      "\r\n",
+      "    thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc=\"The membership flag\")\r\n",
+      "    __repr__ = _swig_repr\r\n",
+      "    state = property(_mupdf.fz_sha512_state_get, _mupdf.fz_sha512_state_set)\r\n",
+      "    count = property(_mupdf.fz_sha512_count_get, _mupdf.fz_sha512_count_set)\r\n",
+      "\r\n",
+      "    def __init__(self):\r\n",
+      "        _mupdf.fz_sha512_swiginit(self, _mupdf.new_fz_sha512())\r\n",
+      "    __swig_destroy__ = _mupdf.delete_fz_sha512\r\n",
+      "\r\n",
+      "# Register fz_sha512 in _mupdf:\r\n",
+      "_mupdf.fz_sha512_swigregister(fz_sha512)\r\n",
+      "class fz_arc4(object):\r\n",
+      "    r\"\"\"\r\n",
+      "    Structure definition is public to enable stack\r\n",
+      "    based allocation. Do not access the members directly.\r\n",
+      "    \"\"\"\r\n",
+      "\r\n",
+      "    thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc=\"The membership flag\")\r\n",
+      "    __repr__ = _swig_repr\r\n",
+      "    x = property(_mupdf.fz_arc4_x_get, _mupdf.fz_arc4_x_set)\r\n",
+      "    y = property(_mupdf.fz_arc4_y_get, _mupdf.fz_arc4_y_set)\r\n",
+      "    state = property(_mupdf.fz_arc4_state_get, _mupdf.fz_arc4_state_set)\r\n",
+      "\r\n",
+      "    def __init__(self):\r\n",
+      "        _mupdf.fz_arc4_swiginit(self, _mupdf.new_fz_arc4())\r\n",
+      "    __swig_destroy__ = _mupdf.delete_fz_arc4\r\n",
+      "\r\n",
+      "# Register fz_arc4 in _mupdf:\r\n",
+      "_mupdf.fz_arc4_swigregister(fz_arc4)\r\n",
+      "class fz_aes(object):\r\n",
+      "    r\"\"\"\r\n",
+      "    Structure definitions are public to enable stack\r\n",
+      "    based allocation. Do not access the members directly.\r\n",
+      "    \"\"\"\r\n",
+      "\r\n",
+      "    thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc=\"The membership flag\")\r\n",
+      "    __repr__ = _swig_repr\r\n",
+      "    nr = property(_mupdf.fz_aes_nr_get, _mupdf.fz_aes_nr_set)\r\n",
+      "    rk = property(_mupdf.fz_aes_rk_get, _mupdf.fz_aes_rk_set)\r\n",
+      "    buf = property(_mupdf.fz_aes_buf_get, _mupdf.fz_aes_buf_set)\r\n",
+      "\r\n",
+      "    def __init__(self):\r\n",
+      "        _mupdf.fz_aes_swiginit(self, _mupdf.new_fz_aes())\r\n",
+      "    __swig_destroy__ = _mupdf.delete_fz_aes\r\n",
+      "\r\n",
+      "# Register fz_aes in _mupdf:\r\n",
+      "_mupdf.fz_aes_swigregister(fz_aes)\r\n",
+      "FZ_AES_DECRYPT = _mupdf.FZ_AES_DECRYPT\r\n",
+      "FZ_AES_ENCRYPT = _mupdf.FZ_AES_ENCRYPT\r\n",
+      "class fz_chacha20(object):\r\n",
+      "    thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc=\"The membership flag\")\r\n",
+      "    __repr__ = _swig_repr\r\n",
+      "    s = property(_mupdf.fz_chacha20_s_get, _mupdf.fz_chacha20_s_set)\r\n",
+      "\r\n",
+      "    def __init__(self):\r\n",
+      "        _mupdf.fz_chacha20_swiginit(self, _mupdf.new_fz_chacha20())\r\n",
+      "    __swig_destroy__ = _mupdf.delete_fz_chacha20\r\n",
+      "\r\n",
+      "# Register fz_chacha20 in _mupdf:\r\n",
+      "_mupdf.fz_chacha20_swigregister(fz_chacha20)\r\n"
+     ]
+    ],
+    [
+     1860,
+     1863,
+     []
+    ],
+    [
+     2007,
+     2008,
+     [
+      "    seed = property(_mupdf.fz_context_seed_get, _mupdf.fz_context_seed_set)\r\n"
+     ]
+    ],
+    [
+     2148,
+     2242,
+     []
+    ],
+    [
+     5934,
+     5934,
+     [
+      "    clip_text_bbox = property(_mupdf.pdf_text_object_state_clip_text_bbox_get, _mupdf.pdf_text_object_state_clip_text_bbox_set)\r\n"
+     ]
+    ],
+    [
+     7134,
+     7134,
+     [
+      "def ll_fz_chacha20_encrypt(seed, dst, src, size):\r\n",
+      "    r\"\"\"Low-level wrapper for `::fz_chacha20_encrypt()`.\"\"\"\r\n",
+      "    return _mupdf.ll_fz_chacha20_encrypt(seed, dst, src, size)\r\n",
+      "\r\n",
+      "def ll_fz_chacha20_init(stm, key, nonce, counter):\r\n",
+      "    r\"\"\"Low-level wrapper for `::fz_chacha20_init()`.\"\"\"\r\n",
+      "    return _mupdf.ll_fz_chacha20_init(stm, key, nonce, counter)\r\n",
+      "\r\n"
+     ]
+    ],
+    [
+     10674,
+     10674,
+     [
+      "def ll_fz_isalpha(c):\r\n",
+      "    r\"\"\"Low-level wrapper for `::fz_isalpha()`.\"\"\"\r\n",
+      "    return _mupdf.ll_fz_isalpha(c)\r\n",
+      "\r\n"
+     ]
+    ],
+    [
+     16233,
+     16233,
+     [
+      "def ll_fz_release_stext_block_run_resources(block):\r\n",
+      "    r\"\"\"Low-level wrapper for `::fz_release_stext_block_run_resources()`.\"\"\"\r\n",
+      "    return _mupdf.ll_fz_release_stext_block_run_resources(block)\r\n",
+      "\r\n"
+     ]
+    ],
+    [
+     17576,
+     17576,
+     [
+      "def ll_fz_strcasecmp_ascii(a, b):\r\n",
+      "    r\"\"\"\r\n",
+      "    Low-level wrapper for `::fz_strcasecmp_ascii()`.\r\n",
+      "    Case insensitive (Ascii) string comparison.\r\n",
+      "\r\n",
+      "    This will accept UTF8 strings, and not corrupt them,\r\n",
+      "    but won't do the case insensitive folding on non-ascii\r\n",
+      "    characters, so will be slightly faster if you know you\r\n",
+      "    are only comparing ascii chars.\r\n",
+      "    \"\"\"\r\n",
+      "    return _mupdf.ll_fz_strcasecmp_ascii(a, b)\r\n",
+      "\r\n"
+     ]
+    ],
+    [
+     17949,
+     17950,
+     [
+      "    Unicode aware tolower and toupper and isalpha functions.\r\n"
+     ]
+    ],
+    [
+     18252,
+     18252,
+     [
+      "\r\n",
+      "def ll_fz_unconst(cp):\r\n",
+      "    r\"\"\"Low-level wrapper for `::fz_unconst()`.\"\"\"\r\n",
+      "    return _mupdf.ll_fz_unconst(cp)\r\n"
+     ]
+    ],
+    [
+     24882,
+     24882,
+     [
+      "class FzChacha20(object):\r\n",
+      "    r\"\"\"Wrapper class for struct `fz_chacha20`. Not copyable or assignable.\"\"\"\r\n",
+      "\r\n",
+      "    thisown = property(lambda x: x.this.own(), lambda x, v: x.this.own(v), doc=\"The membership flag\")\r\n",
+      "    __repr__ = _swig_repr\r\n",
+      "\r\n",
+      "    def fz_chacha20_encrypt(self, dst, src, size):\r\n",
+      "        r\"\"\"Class-aware wrapper for `::fz_chacha20_encrypt()`.\"\"\"\r\n",
+      "        return _mupdf.FzChacha20_fz_chacha20_encrypt(self, dst, src, size)\r\n",
+      "\r\n",
+      "    def fz_chacha20_init(self, key, nonce, counter):\r\n",
+      "        r\"\"\"Class-aware wrapper for `::fz_chacha20_init()`.\"\"\"\r\n",
+      "        return _mupdf.FzChacha20_fz_chacha20_init(self, key, nonce, counter)\r\n",
+      "\r\n",
+      "    def __init__(self, *args):\r\n",
+      "        r\"\"\"\r\n",
+      "        *Overload 1:*\r\n",
+      "        Default constructor, sets `m_internal` to null.\r\n",
+      "\r\n",
+      "        |\r\n",
+      "\r\n",
+      "        *Overload 2:*\r\n",
+      "        Constructor using raw copy of pre-existing `::fz_chacha20`.\r\n",
+      "        \"\"\"\r\n",
+      "        _mupdf.FzChacha20_swiginit(self, _mupdf.new_FzChacha20(*args))\r\n",
+      "    __swig_destroy__ = _mupdf.delete_FzChacha20\r\n",
+      "\r\n",
+      "    def m_internal_value(self):\r\n",
+      "        r\"\"\"Return numerical value of .m_internal; helps with Python debugging.\"\"\"\r\n",
+      "        return _mupdf.FzChacha20_m_internal_value(self)\r\n",
+      "\r\n",
+      "    def __nonzero__(self):\r\n",
+      "        return _mupdf.FzChacha20___nonzero__(self)\r\n",
+      "    __bool__ = __nonzero__\r\n",
+      "\r\n",
+      "\r\n",
+      "    m_internal = property(_mupdf.FzChacha20_m_internal_get, _mupdf.FzChacha20_m_internal_set, doc=r\"\"\"Pointer to wrapped data.\"\"\")\r\n",
+      "    s_num_instances = property(_mupdf.FzChacha20_s_num_instances_get, _mupdf.FzChacha20_s_num_instances_set)\r\n",
+      "\r\n",
+      "# Register FzChacha20 in _mupdf:\r\n",
+      "_mupdf.FzChacha20_swigregister(FzChacha20)\r\n"
+     ]
+    ],
+    [
+     36395,
+     36395,
+     [
+      "    def fz_release_stext_block_run_resources(self):\r\n",
+      "        r\"\"\"Class-aware wrapper for `::fz_release_stext_block_run_resources()`.\"\"\"\r\n",
+      "        return _mupdf.FzStextBlock_fz_release_stext_block_run_resources(self)\r\n",
+      "\r\n"
+     ]
+    ],
+    [
+     46819,
+     46819,
+     [
+      "    def fz_release_stext_block_run_resources(self):\r\n",
+      "        r\"\"\"Class-aware wrapper for `::fz_release_stext_block_run_resources()`.\"\"\"\r\n",
+      "        return _mupdf.FzStextPageIterator_fz_release_stext_block_run_resources(self)\r\n",
+      "\r\n"
+     ]
+    ],
+    [
+     47587,
+     47587,
+     [
+      "\r\n",
+      "def fz_chacha20_encrypt(seed, dst, src, size):\r\n",
+      "    r\"\"\"Class-aware wrapper for `::fz_chacha20_encrypt()`.\"\"\"\r\n",
+      "    return _mupdf.fz_chacha20_encrypt(seed, dst, src, size)\r\n",
+      "\r\n",
+      "def fz_chacha20_init(stm, key, nonce, counter):\r\n",
+      "    r\"\"\"Class-aware wrapper for `::fz_chacha20_init()`.\"\"\"\r\n",
+      "    return _mupdf.fz_chacha20_init(stm, key, nonce, counter)\r\n"
+     ]
+    ],
+    [
+     50547,
+     50547,
+     [
+      "def fz_isalpha(c):\r\n",
+      "    r\"\"\"Class-aware wrapper for `::fz_isalpha()`.\"\"\"\r\n",
+      "    return _mupdf.fz_isalpha(c)\r\n",
+      "\r\n"
+     ]
+    ],
+    [
+     55093,
+     55093,
+     [
+      "def fz_release_stext_block_run_resources(block):\r\n",
+      "    r\"\"\"Class-aware wrapper for `::fz_release_stext_block_run_resources()`.\"\"\"\r\n",
+      "    return _mupdf.fz_release_stext_block_run_resources(block)\r\n",
+      "\r\n"
+     ]
+    ],
+    [
+     56316,
+     56316,
+     [
+      "def fz_strcasecmp_ascii(a, b):\r\n",
+      "    r\"\"\"\r\n",
+      "    Class-aware wrapper for `::fz_strcasecmp_ascii()`.\r\n",
+      "    \tCase insensitive (Ascii) string comparison.\r\n",
+      "\r\n",
+      "    \tThis will accept UTF8 strings, and not corrupt them,\r\n",
+      "    \tbut won't do the case insensitive folding on non-ascii\r\n",
+      "    \tcharacters, so will be slightly faster if you know you\r\n",
+      "    \tare only comparing ascii chars.\r\n",
+      "    \"\"\"\r\n",
+      "    return _mupdf.fz_strcasecmp_ascii(a, b)\r\n",
+      "\r\n"
+     ]
+    ],
+    [
+     56689,
+     56690,
+     [
+      "    \tUnicode aware tolower and toupper and isalpha functions.\r\n"
+     ]
+    ],
+    [
+     56980,
+     56980,
+     [
+      "\r\n",
+      "def fz_unconst(cp):\r\n",
+      "    r\"\"\"Class-aware wrapper for `::fz_unconst()`.\"\"\"\r\n",
+      "    return _mupdf.fz_unconst(cp)\r\n"
+     ]
+    ],
+    [
+     68465,
+     68466,
+     [
+      "Py_LIMITED_API = '0x030c0000'\r\n"
+     ]
+    ]
+   ]
+  }
+ },
+ "native": {
+  "pymupdf/_extra.pyd": "34368e5eb362c96aadbf9af3e4ae63155bc91f7bb04c1ee41ffd6408a6412778",
+  "pymupdf/_mupdf.pyd": "6f6334ba6d1d9e9847f84bce09cbace73bc0180b62e9b8a83584871bc43f101f",
+  "pymupdf/mupdfcpp64.dll": "4f5a0934c93e62db4ef26e1c985c1e5f514a8a5dd88227f6a2b2b09dcf11b8e2"
+ }
+}

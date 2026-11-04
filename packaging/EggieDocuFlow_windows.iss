@@ -34,6 +34,9 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
+[InstallDelete]
+#include "retired_2026110401.iss"
+
 [Files]
 Source: "{#MyAppSourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
@@ -43,3 +46,14 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,Eggie DocuFlow}"; Flags: nowait postinstall skipifsilent
+
+[Code]
+function OriginalFile(Name, ExpectedHash: String): Boolean;
+var
+  Filename: String;
+begin
+  Filename := ExpandConstant('{app}') + '\' + Name;
+  Result := FileExists(Filename);
+  if Result then
+    Result := CompareText(GetSHA256OfFile(Filename), ExpectedHash) = 0;
+end;

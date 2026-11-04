@@ -8,6 +8,8 @@ A free desktop toolkit for Excel, PDF and file workflows. Merge, split and clean
 
 ## 下载 V1.5.1 / Download V1.5.1
 
+**安全更新 · 构建 2026110402。已下载早先 V1.5.1 的用户请重新下载安装。** 安装后可在侧栏底部核对构建号。 / If you downloaded the original V1.5.1, download and install this build again.
+
 - [下载 Mac 版 / Download for Mac](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/download/v1.5.1/EggieDocuFlow_V1.5.1_mac_arm64.zip)
 - [下载 Windows 版 / Download for Windows](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/download/v1.5.1/EggieDocuFlow_V1.5.1_Windows_x64_Setup.exe)
 - [源码与校验清单 / Source and checksums](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/tag/v1.5.1)
@@ -382,8 +384,8 @@ users do not need to follow these steps.
 准确重建本版请先阅读 [BUILD_RELEASE.md](BUILD_RELEASE.md)，准备定制MuPDF1.28.5引擎。下列pip命令只提供开发环境，默认依赖不等同于发布包。<br>
 For a release-equivalent build, follow [BUILD_RELEASE.md](BUILD_RELEASE.md), including the custom MuPDF 1.28.5 engine. The pip commands below set up a development environment; default dependencies do not reproduce the release package.
 
-V1.5.1 源码需要 Python 3.10 或更高版本（本次使用 3.12）。已有旧环境请保留，不要用 Python 3.9 直接安装新版依赖。以下新建 `.venv-pdf`，不会覆盖原 `.venv`。<br>
-V1.5.1 source requires Python 3.10 or later; this release was built with 3.12. Keep existing environments and do not install the new dependencies with Python 3.9. The commands below create a separate `.venv-pdf` environment.
+V1.5.1 源码需要 Python 3.11 或更高版本（本次使用 3.12）。已有旧环境请保留，不要用 Python 3.9 直接安装新版依赖。以下新建 `.venv-pdf`，不会覆盖原 `.venv`。<br>
+V1.5.1 source requires Python 3.11 or later; this release was built with 3.12. Keep existing environments and do not install the new dependencies with Python 3.9. The commands below create a separate `.venv-pdf` environment.
 
 ```bash
 python3.12 -m venv .venv-pdf

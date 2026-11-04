@@ -21,6 +21,10 @@ from version import APP_VERSION
 
 def main():
     multiprocessing.freeze_support()
+    if sys.argv[1:] == ["--check-install"]:
+        from core.install_check import check_install
+        check_install()
+        return
     if "--version" in sys.argv[1:]:
         print(APP_VERSION)
         return
