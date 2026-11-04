@@ -3,7 +3,11 @@ $ErrorActionPreference = 'Stop'
 $ProjectRoot = [System.IO.Directory]::GetParent($PSScriptRoot).FullName
 $Python = if ($env:PYTHON) { $env:PYTHON } else { 'python' }
 $SharedReleaseDir = [System.IO.Path]::Combine($ProjectRoot, 'release')
-$LocalBuildRoot = [System.IO.Path]::Combine($env:LOCALAPPDATA, 'EggieDocuFlowBuild')
+$BuildId = [guid]::NewGuid().ToString('N')
+$LocalBuildRoot = [System.IO.Path]::Combine($env:LOCALAPPDATA, 'EggieDocuFlowBuild', $BuildId)
+$PreviousCache = $env:PYINSTALLER_CONFIG_DIR
+$CreatedBuildRoot = $false
+$StagedInstaller = $null
 $DistDir = [System.IO.Path]::Combine($LocalBuildRoot, 'dist')
 $BuildDir = [System.IO.Path]::Combine($LocalBuildRoot, 'build')
 $LocalReleaseDir = [System.IO.Path]::Combine($LocalBuildRoot, 'release')
@@ -40,7 +44,9 @@ try {
         throw 'The application version could not be read.'
     }
 
-    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $LocalBuildRoot
+    New-Item -ItemType Directory -Path $LocalBuildRoot -ErrorAction Stop | Out-Null
+    $CreatedBuildRoot = $true
+    $env:PYINSTALLER_CONFIG_DIR = Join-Path $LocalBuildRoot 'pyinstaller-cache'
     New-Item -ItemType Directory -Force $LocalReleaseDir | Out-Null
 
     & $Python -m PyInstaller --noconfirm --clean --distpath $DistDir --workpath $BuildDir $SpecFile
@@ -73,12 +79,29 @@ try {
 
     New-Item -ItemType Directory -Force $SharedReleaseDir | Out-Null
     $InstallerPath = [System.IO.Path]::Combine($SharedReleaseDir, [System.IO.Path]::GetFileName($LocalInstallerPath))
-    Copy-Item -Force $LocalInstallerPath $InstallerPath
-    if (-not (Test-Path $InstallerPath)) {
-        throw "Installer could not be copied to: ${InstallerPath}"
+    $StagedInstaller = Join-Path $SharedReleaseDir ".$BuildId.tmp"
+    if ((Get-Item -LiteralPath $LocalInstallerPath).Length -eq 0) {
+        throw 'The generated installer is empty.'
+    }
+    $ExpectedHash = (Get-FileHash -LiteralPath $LocalInstallerPath -Algorithm SHA256).Hash
+    Copy-Item -LiteralPath $LocalInstallerPath -Destination $StagedInstaller
+    if ((Get-FileHash -LiteralPath $StagedInstaller -Algorithm SHA256).Hash -ne $ExpectedHash) {
+        throw 'Installer copy failed its SHA-256 check.'
+    }
+    # Publish by same-directory rename, including on Windows PowerShell 5.1.
+    & $Python -c 'import os, sys; os.replace(sys.argv[1], sys.argv[2])' $StagedInstaller $InstallerPath
+    if ($LASTEXITCODE -ne 0) {
+        throw "Cannot replace the installer at $InstallerPath. Check permissions and close any program using it."
     }
 
     Write-Host "Installer created: ${InstallerPath}"
 } finally {
+    $env:PYINSTALLER_CONFIG_DIR = $PreviousCache
+    if ($StagedInstaller -and (Test-Path -LiteralPath $StagedInstaller)) {
+        Remove-Item -LiteralPath $StagedInstaller -Force -ErrorAction Continue
+    }
+    if ($CreatedBuildRoot) {
+        Remove-Item -LiteralPath $LocalBuildRoot -Recurse -Force -ErrorAction Continue
+    }
     Pop-Location
 }
