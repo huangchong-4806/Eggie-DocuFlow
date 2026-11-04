@@ -19,6 +19,14 @@
 3. 设置`PYMUPDF_SETUP_MUPDF_BUILD`为MuPDF源码绝对路径。Windows另设置`PYMUPDF_SETUP_DEVENV`为devenv.com路径和`PYMUPDF_SETUP_MUPDF_VS_UPGRADE=1`。
 4. 执行`python -m pip wheel --no-build-isolation --no-deps --no-index <PyMuPDF源码目录> -w <新wheel目录>`，再安装生成的wheel。先导入PySide6.QtCore，再核对pymupdf.VersionBind为1.28.2、VersionFitz为1.28.5。
 5. 运行项目测试，再用PyInstaller及`packaging/EggieDocuFlow.spec`或`packaging/EggieDocuFlow_windows.spec`打包，明确给定新的distpath/workpath。Mac使用本机临时签名，未做Apple开发者签名和公证。
+   对齐 V1.5.1 的 Windows 原生运行库时，先用上一版 [V1.5.0 校验清单](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/download/v1.5.0/SHA256SUMS.txt) 验证安装器，在隔离环境安装至参考目录。运行下方命令对比两套应用中的全部 DLL 和 PYD。缺少文件、同名内容不同或出现清单外的新增库时应停止。正式构建仅排除了 Windows Server 构建机额外收集的 45 个库，保留的 89 个均与参考安装器字节一致。
+
+   ```powershell
+   python packaging/rebuild/check_windows_runtime.py --reference $ReferenceApp --candidate $BuiltApp
+   # 确认参考目录和本次构建目录后，仅在可重建的 PyInstaller 输出副本执行
+   python packaging/rebuild/check_windows_runtime.py --reference $ReferenceApp --candidate $BuiltApp --apply
+   ```
+
 6. Windows安装器用`packaging/EggieDocuFlow_windows.iss`生成，四个变量必须完整：EGGIE_APP_VERSION=1.5.1、EGGIE_APP_SOURCE_DIR、EGGIE_APP_OUTPUT_DIR、EGGIE_CHINESE_LANGUAGE_FILE。后三项分别指向本次应用目录、新安装包目录和packaging/ChineseSimplified.isl。
 7. 核对冻结代码、依赖版本、随包许可证及成品启动。重新编译的哈希可能因工具链、时间和签名而不同，版本号相同不代表同一成品。
 
@@ -27,3 +35,5 @@
 Mac实验MuPDF wheel文件名的macOS11标记与实际二进制最低macOS15不一致，该实验wheel不单独发布。Qt测试插件须取自相应环境，不复用原构建机临时路径。
 
 第三方材料按实际成品、官方归档及固定配方核对；PDFium历史检出和cryptography原始OpenSSL构建任务仍缺部分直接记录。未声称完成所有库的逐字节重建、完整离线重建或跨电脑重建。其他电脑和最低系统实测已移出本轮范围，状态仍为未实测。
+
+V1.5.1 的仓库测试与安装器验证分开执行。常规 CI 使用开发依赖；正式包另行核对定制引擎、实际安装结果及 [五项公开下载](https://github.com/huangchong-4806/Eggie-DocuFlow/actions/runs/41757197056)。对应源码请取 v1.5.1 标签或该发布页的项目源码包。当前主分支包含发布后的文档和维护工具。

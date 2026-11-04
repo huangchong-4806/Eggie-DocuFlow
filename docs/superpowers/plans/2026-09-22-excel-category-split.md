@@ -254,10 +254,10 @@ self.assertEqual(export_fn.call_count, 1)
 - 性能测试（3 列普通数据，单文件多工作表）：1,000 行／10 类合计 0.11 秒；10,000 行／100 类 1.01 秒；100,000 行／1,000 类 12.23 秒。进程内存高水位依次约 46.3／83.3／501.3 MB；是该测试进程的累计峰值，不代表任意复杂表性能。临时压力样本已自动清理。
 - 工程保护：处理区域最多 2,000,000 个单元格，超限要求缩小区域；这不是无限规模承诺。
 - Microsoft Excel 实际打开通过：下列 3 个输出均未出现损坏、修复或恢复提示；A 类 2 条、B 类 1 条，多工作表结果共 2 表／3 条。已实际切换 B 表，核对金额 25.00、0.00、24.00、文本 001、FALSE 和等号开头文字，表头蓝色及冻结表头存在。
-  - `/Users/huang/Documents/eggieflow/test_files/category_split_acceptance/category_formula_cache_分类拆分结果/category_formula_cache_A供应商.xlsx`
-  - `/Users/huang/Documents/eggieflow/test_files/category_split_acceptance/category_formula_cache_分类拆分结果/category_formula_cache_B供应商.xlsx`
-  - `/Users/huang/Documents/eggieflow/test_files/category_split_acceptance/category_formula_cache_分类拆分结果_1/category_formula_cache_分类结果.xlsx`
-- 原生公式缓存测试源 `/Users/huang/Documents/eggieflow/tests/fixtures/category_formula_cache.xlsx` 由 Microsoft Excel 计算保存并实际打开检查；其中错误结果工作表的除零公式是故意设置的拦截用例。未拆解或重新拼装 Excel 内部结构。`.gitignore` 仅对这一回归样本增加例外。
+  - `test_files/category_split_acceptance/category_formula_cache_分类拆分结果/category_formula_cache_A供应商.xlsx`
+  - `test_files/category_split_acceptance/category_formula_cache_分类拆分结果/category_formula_cache_B供应商.xlsx`
+  - `test_files/category_split_acceptance/category_formula_cache_分类拆分结果_1/category_formula_cache_分类结果.xlsx`
+- 原生公式缓存测试源 `tests/fixtures/category_formula_cache.xlsx` 由 Microsoft Excel 计算保存并实际打开检查；其中错误结果工作表的除零公式是故意设置的拦截用例。未拆解或重新拼装 Excel 内部结构。`.gitignore` 仅对这一回归样本增加例外。
 - 页面交互已通过 QTest 自动点击测试；桌面工具连接 Python 开发版持续超时，因此完整真实桌面鼠标流程与视觉验收仍未完成，不能用自动化测试代替。Excel 原生打开已通过访达路径完成。
 - Windows 和安装包未验收；未提交 Git、推送、打包或发布。源码开发完成不代表跨平台发布完成。
 - 本次改动限定分类模块、页面、拆分入口、对应测试、测试样本和需求／计划文件。既有 PDF 未提交改动保留；原行数拆分算法未改。改前文件保存在 `docs/superpowers/backups/excel-category-code-20260922-105838/`，可按文件恢复本任务范围。
@@ -276,14 +276,14 @@ self.assertEqual(export_fn.call_count, 1)
 - User authorized isolated Apple Silicon Mac beta build and acceptance; no commit, push or release. Existing workspace and old packages preserved. Snapshot: release/internal-test-20261012/source. Only snapshot branding/date/bundle metadata and corresponding assertions changed.
 - Snapshot tests initially failed because PDF test fixtures were absent and branding assertion expected old text. Copied original fixtures and updated branding assertion; all 250 tests passed in 12.453 seconds. No functional code changes. Existing signed Qt test runner required.
 - PyInstaller build passed. Initial signing had resource-fork error; clean temporary staging and ad-hoc signing passed codesign --verify --deep --strict. All project modules verified to originate from snapshot.
-- ZIP: /Users/huang/Documents/eggieflow/release/internal-test-20261012/EggieDocuFlow_V1.5.0_InternalTest_20261012_mac_arm64.zip (76.4 MiB). CRC passed, 884 entries, no .env. SHA256: aad3a65e53a7ef60b5aef241c6218acd0ed8464245fa2a59f893e50b747f6b74.
+- ZIP: release/internal-test-20261012/EggieDocuFlow_V1.5.0_InternalTest_20261012_mac_arm64.zip (76.4 MiB). CRC passed, 884 entries, no .env. SHA256: aad3a65e53a7ef60b5aef241c6218acd0ed8464245fa2a59f893e50b747f6b74.
 - Packaged application launched natively; --version returned 1.5.0; internal test 20261012 branding visible. Actual UI: load formula fixture, select supplier column, preview 2 groups/3 rows, cancel confirmation (no files), confirm export (2 files, execution disabled).
 - Readback: A has 2 rows, amounts 25 and 0; B has 1 row, amount 24. Text 001, False and equals-prefixed text preserved. Zero output formulas.
 - This run's final Excel outputs have NOT been opened in Microsoft Excel; pending acceptance:
-  - /Users/huang/Documents/eggieflow/release/internal-test-20261012/acceptance/category_formula_cache_分类拆分结果/category_formula_cache_A供应商.xlsx
-  - /Users/huang/Documents/eggieflow/release/internal-test-20261012/acceptance/category_formula_cache_分类拆分结果/category_formula_cache_B供应商.xlsx
+  - release/internal-test-20261012/acceptance/category_formula_cache_分类拆分结果/category_formula_cache_A供应商.xlsx
+  - release/internal-test-20261012/acceptance/category_formula_cache_分类拆分结果/category_formula_cache_B供应商.xlsx
 - Blockers: native combo action returned AXError.notImplemented/no change; Finder repeatedly reported user changed application. Multi-sheet/visible-row native flow, legacy packaged tool regression, and Excel client acceptance remain incomplete. Windows excluded. Historical/source tests do not substitute package acceptance.
-- Temporary build/dist removed; source snapshot, ZIP and acceptance outputs retained. Running signed app remains in /private/tmp/eggie-beta-20261012-yf48ih4d until closed after acceptance.
+- Temporary build/dist removed; source snapshot, ZIP and acceptance outputs retained. Running signed app was staged under the temporary build directory: eggie-beta-20261012-yf48ih4d until closed after acceptance.
 - Status: beta artifact produced, partial package acceptance only; not release ready.
 
 
@@ -308,8 +308,8 @@ Artifact: release/internal-test-20261012-r2/EggieDocuFlow_V1.5.0_InternalTest_20
 After user brought R2 to foreground, native category split completed against tests/fixtures/category_formula_cache.xlsx, sheet 公式明细, supplier column A, all rows, one file per category. Preview: 2 classes/3 rows. Cancelled final confirmation and verified acceptance folder remained empty, then confirmed and obtained 2 files/3 rows; duplicate execution button disabled.
 
 Microsoft Excel actually opened both final R2 files:
-- /Users/huang/Documents/eggieflow/release/internal-test-20261012-r2/acceptance/category_formula_cache_分类拆分结果/category_formula_cache_A供应商.xlsx
-- /Users/huang/Documents/eggieflow/release/internal-test-20261012-r2/acceptance/category_formula_cache_分类拆分结果/category_formula_cache_B供应商.xlsx
+- release/internal-test-20261012-r2/acceptance/category_formula_cache_分类拆分结果/category_formula_cache_A供应商.xlsx
+- release/internal-test-20261012-r2/acceptance/category_formula_cache_分类拆分结果/category_formula_cache_B供应商.xlsx
 
 No file-specific damage, repair or content recovery prompts. Excel startup displayed a previous-session recovery banner; inspecting it opened an unrelated historical workbook, not these outputs. No edits/saves made to historical workbook. Returned to exact output paths and confirmed clean workbook views A1:E3 and A1:E2. Excel formula bar D2 showed literal 25 (A) and 24 (B); A E2 showed 001. Full openpyxl readback confirmed all 3 original records, A zero and False values, B literal =原始文字, no formula cells. Initial wildcard readback also encountered Excel's ~$ lock file; corrected readback excluded locks and passed for both actual results.
 

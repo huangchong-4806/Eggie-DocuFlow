@@ -3,28 +3,17 @@ set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PYTHON="${PYTHON:-python3}"
+cd "$PROJECT_ROOT"
 DIST_APP_NAME="Eggie DocuFlow.app"
 APP_VERSION="$("$PYTHON" -c 'from version import APP_VERSION; print(APP_VERSION)')"
 APP_NAME="EggieDocuFlow_V${APP_VERSION}_mac.app"
 ZIP_NAME="EggieDocuFlow_V${APP_VERSION}_mac.zip"
-DIST_DIR="$PROJECT_ROOT/dist"
-BUILD_DIR="$PROJECT_ROOT/build"
 RELEASE_DIR="$PROJECT_ROOT/release"
-
-rm -rf "$DIST_DIR" "$BUILD_DIR"
-find "$PROJECT_ROOT" \
-  -path "$PROJECT_ROOT/.git" -prune -o \
-  -path "$PROJECT_ROOT/.venv" -prune -o \
-  -path "$RELEASE_DIR" -prune -o \
-  -name "__pycache__" -type d -exec rm -rf {} +
-find "$PROJECT_ROOT" \
-  -path "$PROJECT_ROOT/.git" -prune -o \
-  -path "$PROJECT_ROOT/.venv" -prune -o \
-  -path "$RELEASE_DIR" -prune -o \
-  -name ".DS_Store" -type f -delete
 mkdir -p "$RELEASE_DIR"
-rm -rf "$RELEASE_DIR/$APP_NAME"
-rm -f "$RELEASE_DIR/$ZIP_NAME"
+STAGE_DIR="$(mktemp -d "$RELEASE_DIR/.mac-build.XXXXXX")"
+trap 'rm -rf "$STAGE_DIR"' EXIT
+DIST_DIR="$STAGE_DIR/dist"
+BUILD_DIR="$STAGE_DIR/build"
 
 "$PYTHON" -m PyInstaller \
   --noconfirm \
@@ -39,8 +28,8 @@ if [[ ! -d "$APP_PATH" ]]; then
   exit 1
 fi
 
-SIGN_DIR="$(mktemp -d /tmp/eggie-sign.XXXXXX)"
-trap 'rm -rf "$SIGN_DIR"' EXIT
+SIGN_DIR="$STAGE_DIR/sign"
+mkdir "$SIGN_DIR"
 SIGNED_APP_PATH="$SIGN_DIR/$APP_NAME"
 /usr/bin/ditto --norsrc "$APP_PATH" "$SIGNED_APP_PATH"
 /usr/bin/xattr -cr "$SIGNED_APP_PATH"
@@ -49,9 +38,16 @@ SIGNED_APP_PATH="$SIGN_DIR/$APP_NAME"
 
 (
   cd "$SIGN_DIR"
-  COPYFILE_DISABLE=1 /usr/bin/zip -9 -y -q -r "$RELEASE_DIR/$ZIP_NAME" "$APP_NAME" \
+  COPYFILE_DISABLE=1 /usr/bin/zip -9 -y -q -r "$STAGE_DIR/$ZIP_NAME" "$APP_NAME" \
     -x "*.DS_Store" "*/__MACOSX/*"
 )
+
+/usr/bin/unzip -tq "$STAGE_DIR/$ZIP_NAME" >/dev/null
+if [[ -d "$RELEASE_DIR/$ZIP_NAME" ]]; then
+  echo "Output path is a directory: $RELEASE_DIR/$ZIP_NAME" >&2
+  exit 1
+fi
+mv -f "$STAGE_DIR/$ZIP_NAME" "$RELEASE_DIR/$ZIP_NAME"
 
 APP_BYTES="$(/usr/bin/du -sk "$SIGNED_APP_PATH" | awk '{print $1 * 1024}')"
 ZIP_BYTES="$(/usr/bin/stat -f '%z' "$RELEASE_DIR/$ZIP_NAME")"
