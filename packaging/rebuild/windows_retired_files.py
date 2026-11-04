@@ -29,4 +29,4 @@ if __name__ == "__main__":
     cli.add_argument("new_app", type=Path)
     cli.add_argument("output", type=Path)
     args = cli.parse_args()
-    args.output.write_text(make_list(args.old_app, args.new_app), encoding="utf-8")
+    args.output.write_text(make_list(args.old_app, args.new_app), encoding="utf-8", newline="\n")
