@@ -182,8 +182,8 @@ class PdfWorkspaceUiTests(unittest.TestCase):
 
     def test_signed_document_warns_before_editing_and_progress_does_not_complete_job(self):
         self.seed()
-        self.widget._jobs[10] = ("inspect", "opened")
-        result = {"signatures": 1, "attachments": 0, "annotations": 0, "forms": 1, "blocking_reasons": []}
+        self.widget._jobs[10] = ("open", (("signed.pdf",), [], True))
+        result = [WorkspacePage("signed", "src", 0, has_signature=True)]
         with patch("ui.pdf_workspace.QMessageBox.information") as notice, patch(
                 "ui.pdf_workspace.QMessageBox.question") as apply_prompt:
             self.widget._completed(10, self.widget.revision, result)
@@ -494,6 +494,39 @@ class PdfWorkspaceUiTests(unittest.TestCase):
                 self.assertTrue(releases)
                 self.assertEqual(set(releases[-1]["source_ids"]), {"unused-source", "last-source"} if cancel else {"unused-source"})
                 self.assertEqual([ref.page_id for ref in self.widget.state.pages], ["p1", "p2"])
+
+    def test_cancel_replacement_at_final_open_preserves_edits_and_undo(self):
+        self.seed()
+        before = self.widget.state
+        self.widget._record(replace(before, pages=before.pages[::-1]), "交换页")
+        edited = self.widget.state
+        self.widget._busy = True
+        self.widget._cancel_requested = True
+        new = WorkspacePage("new", "new-source", 0, has_signature=True)
+        self.widget._jobs[1] = ("open", (("signed.pdf",), [], True))
+        with patch("ui.pdf_workspace.QMessageBox.information") as notice:
+            self.widget._completed(1, self.widget.revision, (new,))
+        notice.assert_not_called()
+        self.assertIs(self.widget.state, edited)
+        self.assertTrue(self.widget.undo_stack.canUndo())
+        self.assertEqual(self.widget.worker.requests[-1][3]["source_ids"], ("new-source",))
+        self.assertFalse(self.widget._busy)
+
+    def test_temporary_file_errors_identify_storage_cause_without_disclosing_data(self):
+        import errno
+        from threading import Event
+        from ui.tasks import PdfWorkspaceProcess
+        for code, expected in ((errno.EACCES, "不可写"), (errno.ENOSPC, "空间不足")):
+            proc = PdfWorkspaceProcess()
+            proc._cancel = Event()
+            proc._pending = [(1, 0, "export", {"output_file": "test.pdf"})]
+            errors = []
+            proc.failed.connect(lambda i, r, msg: errors.append(msg))
+            with patch.object(proc, "_start"), patch("utils.file_helper.temporary_output",
+                                                     side_effect=OSError(code, "sensitive information")):
+                proc._dispatch()
+            self.assertIn(expected, errors[0])
+            self.assertNotIn("sensitive", errors[0])
 
     def test_cancelling_queued_export_removes_it_before_dispatch(self):
         import tempfile

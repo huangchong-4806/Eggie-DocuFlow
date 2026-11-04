@@ -805,15 +805,11 @@ class PdfWorkspaceWidget(QWidget):
                     self.undo_stack.setClean()
                 else:
                     self._record(replace(self.state, pages=self.state.pages + imported), "插入 PDF 页面")
-                self._set_busy(True, "正在检查签名与附加内容…")
-                self._submit("inspect", {"state": self.state}, "opened")
+                self.status_label.setText(f"已载入 {len(self.state.pages)} 页，原文件未修改。")
+                if any(page.has_signature for page in self.state.pages):
+                    QMessageBox.information(self, "数字签名提醒", "此文档包含签名字段。编辑并另存会影响已有签名的有效性。\n请保留原件；本工具不验证或重新签署文件。")
         elif operation == "inspect":
             self._set_busy(False)
-            if context == "opened":
-                self.status_label.setText(f"已载入 {len(self.state.pages)} 页，原文件未修改。")
-                if result["signatures"]:
-                    QMessageBox.information(self, "数字签名提醒", "此文档包含签名字段。编辑并另存会影响已有签名的有效性。\n请保留原件；本工具不验证或重新签署文件。")
-                return
             if result["blocking_reasons"]:
                 self.show_error("\n".join(result["blocking_reasons"]))
                 return
@@ -910,6 +906,43 @@ class PdfWorkspaceWidget(QWidget):
 
     def _export_allowed(self):
         return self.can_export() and bool(self.state.pages)
+
+    def can_process_files(self, paths):
+        """Independent tools read files on disk, where workspace redactions do not apply."""
+        marked_pages = {mark.page_id for mark in self.state.marks}
+        protected = [page for page in self.state.pages if self._busy or page.page_id in marked_pages]
+        opening = set()
+        if self._busy:
+            for operation, context in self._jobs.values():
+                if operation == "open":
+                    paths_to_open, imported, _ = context
+                    opening.update(Path(path).resolve() for path in paths_to_open)
+                    protected.extend(imported)
+        sources = opening | {Path(self.source_paths[page.source_id]) for page in protected
+                             if page.source_id in self.source_paths}
+        identities = {page.source_identity for page in protected if page.source_identity}
+        if not sources and not identities:
+            return True
+        for path in filter(None, paths):
+            try:
+                selected = Path(path).expanduser().resolve()
+                same = selected in sources
+                if not same:
+                    info = selected.stat()
+                    same = (info.st_dev, info.st_ino) in identities or any(
+                        original.exists() and selected.samefile(original) for original in sources)
+            except FileNotFoundError:
+                continue  # The tool reports missing inputs during its own validation.
+            except (OSError, RuntimeError):
+                self.show_error("无法核对所选文件与工作区原件，请检查文件访问权限后重试。")
+                return False
+            if same:
+                if self._busy:
+                    self.show_error("工作区正在处理这个文件，请等待操作完成后再选择。")
+                else:
+                    self.show_error("所选文件是涂黑文档的原件，仍含原文。请先应用涂黑并另存，再选择导出的副本。")
+                return False
+        return True
 
     def can_export(self):
         if self._busy:
