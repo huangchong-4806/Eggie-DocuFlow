@@ -1,7 +1,8 @@
 import re
+import warnings
 from bisect import bisect_left, bisect_right
 from copy import copy
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime, time
 from pathlib import Path
 
@@ -41,6 +42,7 @@ class CleanupPreview:
     date_cells: int
     number_cells: int
     formula_cells: int
+    blocked_reason: str = ""
 
 
 @dataclass(frozen=True)
@@ -129,6 +131,7 @@ def _sheet_preview(source, sheet, options):
     number_cells = 0
     formula_cells = 0
     seen = set()
+    remove_rows = []
     for row_number, row in enumerate(sheet.iter_rows(), 1):
         for cell in row:
             value = cell.value
@@ -147,11 +150,14 @@ def _sheet_preview(source, sheet, options):
         values = _row_values(row, options.trim_whitespace)
         if all(_is_blank(value) for value in values):
             blank_rows += 1
+            if options.remove_empty_rows:
+                remove_rows.append(row_number)
             continue
         if options.deduplicate:
             key = _selected_key(values, options.duplicate_columns)
             if key in seen:
                 duplicate_rows += 1
+                remove_rows.append(row_number)
             else:
                 seen.add(key)
 
@@ -167,7 +173,17 @@ def _sheet_preview(source, sheet, options):
         date_cells,
         number_cells,
         formula_cells,
-    )
+    ), remove_rows
+
+
+def _load_cleanup_workbook(source):
+    # openpyxl reports some unreadable drawings only as warnings, then omits them on save.
+    try:
+        with warnings.catch_warnings(), source.open("rb") as handle:
+            warnings.filterwarnings("error", category=UserWarning, module=r"openpyxl\.reader\.drawings")
+            return load_workbook(handle, data_only=False, keep_vba=source.suffix.lower() == ".xlsm")
+    except UserWarning:
+        raise ValueError("工作簿包含无法完整读取的图片或图表，请在 Excel 中处理，以保留原件中的对象。") from None
 
 
 def preview_cleanup(source_file, options):
@@ -181,9 +197,21 @@ def preview_cleanup(source_file, options):
     try:
         if options.sheet_name not in workbook.sheetnames:
             raise ValueError("选择的工作表不存在。")
-        return _sheet_preview(source, workbook[options.sheet_name], options)
+        preview, remove_rows = _sheet_preview(source, workbook[options.sheet_name], options)
     finally:
         workbook.close()
+
+    if remove_rows:
+        # Streaming sheets omit drawings, print settings and other reference-bearing objects.
+        try:
+            full = _load_cleanup_workbook(source)
+            try:
+                _delete_rows_safely(full[options.sheet_name], remove_rows, check_only=True)
+            finally:
+                full.close()
+        except ValueError as error:
+            return replace(preview, blocked_reason=str(error))
+    return preview
 
 
 def _rewrite_formula(formula, formula_sheet, target_sheet, removed):
@@ -239,9 +267,39 @@ def _rewrite_formula(formula, formula_sheet, target_sheet, removed):
     return '=' + ''.join(t.value for t in tokens)
 
 
-def _delete_rows_safely(sheet, remove_rows):
+def _check_image_rows(sheet, first_deleted):
+    for image in sheet._images:
+        anchor = image.anchor
+        start = getattr(anchor, "_from", None)
+        affected = True
+        where = "位置不能确定的图片"
+        if start is not None:
+            first = start.row + 1
+            where = f"起始于第 {first} 行的图片"
+            end = getattr(anchor, "to", None)
+            if end is not None:
+                # A bottom marker exactly on a row boundary ends in the preceding row.
+                last = max(first, end.row + int(end.rowOff > 0))
+                affected = first_deleted <= last
+            elif first_deleted > first and hasattr(anchor, "ext"):
+                # One-cell image size is expressed in EMUs (12,700 per point).
+                fmt = sheet.sheet_format
+                default = 0 if fmt.zeroHeight else fmt.defaultRowHeight
+                height = (first_deleted - first) * default
+                for row, dim in sheet.row_dimensions.items():
+                    if first <= row < first_deleted:
+                        actual = 0 if dim.hidden else (dim.height if dim.height is not None else default)
+                        height += actual - default
+                affected = height * 12700 < start.rowOff + anchor.ext.cy
+        if affected:
+            raise ValueError(f"工作表「{sheet.title}」将删除第 {first_deleted} 行，可能影响{where}。"
+                             "请取消“删除空白行”和“删除重复行”后更新预览，或在 Excel 中处理。")
+
+
+def _delete_rows_safely(sheet, remove_rows, *, check_only=False):
     if not remove_rows:
         return
+    _check_image_rows(sheet, remove_rows[0])
     workbook = sheet.parent
     # These structures also contain row references and need Excel's own editor.
     if workbook.defined_names or any(
@@ -250,7 +308,8 @@ def _delete_rows_safely(sheet, remove_rows):
         or other.print_area or other.print_title_rows or other.print_title_cols
         for other in workbook
     ):
-        raise ValueError('工作簿含命名区域、表格、图表或规则，无法安全调整删除行后的引用。请取消删除空行和重复行，或先在 Excel 中处理。')
+        raise ValueError(f"工作表「{sheet.title}」预计删 {len(remove_rows)} 行，首个为第 {remove_rows[0]} 行。"
+                         "工作簿含命名区域、表格、图表、打印设置或规则，无法安全调整引用。请取消“删除空白行”和“删除重复行”后更新预览。")
     merged = list(sheet.merged_cells.ranges)
     for region in merged:
         if bisect_right(remove_rows, region.max_row) > bisect_left(remove_rows, region.min_row):
@@ -292,6 +351,8 @@ def _delete_rows_safely(sheet, remove_rows):
     if freeze:
         col, row = coordinate_from_string(freeze)
         freeze = f'{col}{row - bisect_left(remove_rows, row)}'
+    if check_only:
+        return
     for region in merged:
         sheet.unmerge_cells(str(region))
     for row in reversed(remove_rows):
@@ -314,7 +375,7 @@ def _delete_rows_safely(sheet, remove_rows):
         sheet.freeze_panes = freeze
 
 
-def _apply_cleanup(sheet, options, progress_callback=None):
+def _apply_cleanup(sheet, options, remove_rows, progress_callback=None):
     total_rows = max(sheet.max_row, 1)
     if options.trim_whitespace or options.normalize_dates or options.normalize_numbers:
         for row_number, row in enumerate(sheet.iter_rows(), 1):
@@ -336,26 +397,6 @@ def _apply_cleanup(sheet, options, progress_callback=None):
             if progress_callback and row_number % 200 == 0:
                 progress_callback(row_number, total_rows, f"正在清理第 {row_number} 行")
 
-    remove_rows = []
-    seen = set()
-    for row in sheet.iter_rows(
-        min_row=options.header_row + 1,
-        max_row=sheet.max_row,
-        max_col=sheet.max_column,
-    ):
-        values = tuple(cell.value for cell in row)
-        if all(_is_blank(value) for value in values):
-            if options.remove_empty_rows:
-                remove_rows.append(row[0].row)
-            continue
-        if options.deduplicate:
-            key = _selected_key(values, options.duplicate_columns)
-            if key in seen:
-                remove_rows.append(row[0].row)
-            else:
-                seen.add(key)
-
-    remove_rows.sort()
     _delete_rows_safely(sheet, remove_rows)
     if progress_callback:
         progress_callback(total_rows, total_rows, "数据清理完成，正在保存新文件")
@@ -399,15 +440,14 @@ def clean_workbook(
     source = _source_path(source_file)
     output_folder = Path(output_folder).expanduser().resolve()
     output_folder.mkdir(parents=True, exist_ok=True)
-    preview = preview_cleanup(source, options)
-    keep_vba = source.suffix.lower() == ".xlsm"
-    workbook = load_workbook(source, data_only=False, keep_vba=keep_vba)
+    workbook = _load_cleanup_workbook(source)
     temporary_file = None
     try:
         if options.sheet_name not in workbook.sheetnames:
             raise ValueError("选择的工作表不存在。")
         sheet = workbook[options.sheet_name]
-        removed_rows = _apply_cleanup(sheet, options, progress_callback)
+        preview, remove_rows = _sheet_preview(source, sheet, options)
+        removed_rows = _apply_cleanup(sheet, options, remove_rows, progress_callback)
         final_rows = max(0, sheet.max_row - options.header_row)
         output_file = available_output_path(
             output_folder / f"{source.stem}_清理结果{source.suffix.lower()}"

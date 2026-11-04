@@ -8,6 +8,7 @@ from PySide6.QtCore import QObject, QThread, QTimer, Signal
 
 from api_layer import extract_document_to_files, process_document_with_ocr
 from pdf_invoice_tool import run_invoice_batch_task
+from pdf_workspace import WorkspaceError, workspace_failure
 
 
 class DocumentOCRThread(QThread):
@@ -177,7 +178,7 @@ class PdfWorkspaceProcess(QObject):
     def _start(self):
         if self._process is not None:
             if not self._process.is_alive():
-                raise RuntimeError("PDF 后台已退出，请清空工作区后重新打开文件。")
+                raise WorkspaceError("PDF 后台已退出，当前编辑会话无法继续。请清空工作区后重新打开原文件。")
             return
         from pdf_workspace import run_pdf_workspace_worker
 
@@ -219,9 +220,10 @@ class PdfWorkspaceProcess(QObject):
                 self._temporary_path = temporary_output(self._active[3]["output_file"])
                 self._active[3]["temporary_path"] = self._temporary_path
             self._requests.put(self._active)
-        except Exception:
+        except Exception as error:
             request, self._active = self._active, None
-            self.failed.emit(request[0], request[1], "PDF 后台或输出目录无法使用。请检查后重试；原文件未修改。" + self._clear_temporary())
+            message = workspace_failure(error, request[2])
+            self.failed.emit(request[0], request[1], message + self._clear_temporary())
             for queued in self._pending:
                 self.discarded.emit(queued[0])
             self._pending.clear()
@@ -260,7 +262,7 @@ class PdfWorkspaceProcess(QObject):
             self._dispatch()
         if self._active and self._process is not None and not self._process.is_alive():
             request, self._active = self._active, None
-            self.failed.emit(request[0], request[1], "PDF 后台意外退出，编辑状态已保留；请清空后重新打开文件。" + self._clear_temporary())
+            self.failed.emit(request[0], request[1], "PDF 后台意外退出，当前编辑会话无法继续。请清空工作区后重新打开原文件。" + self._clear_temporary())
             for queued in self._pending:
                 self.discarded.emit(queued[0])
             self._pending.clear()

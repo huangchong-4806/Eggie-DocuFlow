@@ -1,16 +1,16 @@
 # Eggie DocuFlow｜免费的 Excel 与 PDF 桌面处理工具
 
-![Version](https://img.shields.io/badge/version-1.5.0-blue)
+![Version](https://img.shields.io/badge/version-1.5.1-blue)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-blue)
 
 免费的 Excel、PDF 与文件处理工具，无需安装 Python。支持 Excel 合并、拆分与清理，PDF 编辑、发票解析和批量改名。<br>
 A free desktop toolkit for Excel, PDF and file workflows. Merge, split and clean Excel files, edit PDFs, extract invoice data and rename files in batches. No Python installation required.
 
-## 下载 V1.5.0 / Download V1.5.0
+## 下载 V1.5.1 / Download V1.5.1
 
-- [下载 Mac 版 / Download for Mac](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/download/v1.5.0/EggieDocuFlow_V1.5.0_mac_arm64.zip)
-- [下载 Windows 版 / Download for Windows](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/download/v1.5.0/EggieDocuFlow_V1.5.0_Windows_x64_Setup.exe)
-- [源码与校验清单 / Source and checksums](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/tag/v1.5.0)
+- [下载 Mac 版 / Download for Mac](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/download/v1.5.1/EggieDocuFlow_V1.5.1_mac_arm64.zip)
+- [下载 Windows 版 / Download for Windows](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/download/v1.5.1/EggieDocuFlow_V1.5.1_Windows_x64_Setup.exe)
+- [源码与校验清单 / Source and checksums](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/tag/v1.5.1)
 
 **普通用户只需下载对应系统的安装包，无需下载或安装项目源码、第三方源码包及 GitHub 的 Source code 归档；不下载源码包也不影响软件使用。校验清单可按需下载。**<br>
 **For normal use, download only the installer for your operating system. Project source, third-party source packages and GitHub's Source code archives are not required to install or use the app. Checksums are optional.**
@@ -19,10 +19,15 @@ A free desktop toolkit for Excel, PDF and file workflows. Merge, split and clean
 - **Windows**：Windows 10/11，64 位。 / Windows 10/11, 64-bit.
 - 无需安装 Python。 / No Python installation required.
 
-[V1.5.0 更新说明 / Release notes](release_notes_v1.5.0.md)
+[V1.5.1 更新说明 / Release notes](release_notes_v1.5.1.md)
 
 Excel 与 PDF 默认在本机处理并另存结果；文件改名先预览再执行。只有主动配置、启用并确认云 OCR 后，扫描页才会发送给所选服务商。<br>
 Excel and PDF processing runs locally and saves new output files. File renaming requires a preview first. Scanned pages are sent to the selected cloud OCR provider only after configuration, opt-in and confirmation.
+
+## V1.5.1 修复 / Fixes
+- Excel 清理会指出删行可能影响的图片和行号，便于改为只清理文字。 / Excel cleanup identifies rows that would displace an image.
+- PDF 独立工具可以处理无关文件，同时保护仍含原文的涂黑来源。取消打开大文件时，原工作区和撤销记录保留。 / Independent PDF tools can process unrelated files while protecting redaction sources. Cancelling an import preserves the current edits.
+- PDF 压缩显示实际大小和回退情况，水印与页码改善了跨平台字体处理。 / Compression reports actual sizes and fallbacks. Watermarks and page numbers use platform-appropriate fonts.
 
 ## V1.5.0 主要变化 / What's new in V1.5.0
 
@@ -38,6 +43,8 @@ Excel and PDF processing runs locally and saves new output files. File renaming 
   Updated home and tool layouts, clearer labels, and fixes for image previews, conversion buttons, save locations, long Excel identifiers and cell references.
 
 ## 历史版本 / Previous release
+
+- [V1.5.0 下载与说明 / Previous stable release](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/tag/v1.5.0)
 
 - [V1.4.0 Mac：Apple 芯片 / Apple silicon](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/download/v1.4.0/EggieDocuFlow_V1.4.0_mac.zip)
 - [V1.4.0 Windows：Windows 10/11，64 位 / 64-bit](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/download/v1.4.0/EggieDocuFlow_V1.4.0_Windows_x64_Setup.exe)
@@ -115,14 +122,14 @@ The current release focuses on:
 
 如果你只是想直接使用软件，不需要安装 Python，也不需要运行源码。
 
-1. Mac：下载V1.5.0 ZIP，解压后将 `Eggie DocuFlow.app` 放入“应用程序”目录。旧版V1.4.0的应用名为 `EggieDocuFlow_V1.4.0_mac.app`。
-2. Windows：下载安装包并运行 `EggieDocuFlow_V1.5.0_Windows_x64_Setup.exe`，完成安装后从桌面或开始菜单打开软件
+1. Mac：下载V1.5.1 ZIP，解压后将 `Eggie DocuFlow.app` 放入“应用程序”目录。旧版V1.4.0的应用名为 `EggieDocuFlow_V1.4.0_mac.app`。
+2. Windows：下载安装包并运行 `EggieDocuFlow_V1.5.1_Windows_x64_Setup.exe`，完成安装后从桌面或开始菜单打开软件
 
 If you only want to use the application, you do not need to install Python or
 run the source code.
 
-1. On macOS, extract the V1.5.0 ZIP and place `Eggie DocuFlow.app` in Applications.
-2. On Windows, run `EggieDocuFlow_V1.5.0_Windows_x64_Setup.exe`, then launch the app from the desktop or Start menu
+1. On macOS, extract the V1.5.1 ZIP and place `Eggie DocuFlow.app` in Applications.
+2. On Windows, run `EggieDocuFlow_V1.5.1_Windows_x64_Setup.exe`, then launch the app from the desktop or Start menu
 
 > Windows 版支持 Windows 10/11 64 位系统；安装程序默认安装到 `C:\Program Files\Eggie DocuFlow`，安装时会请求 Windows 管理员授权，并提供标准卸载入口。
 > The Windows build supports 64-bit Windows 10/11. It installs to `C:\Program Files\Eggie DocuFlow` by default, requests Windows administrator approval during setup, and includes a standard uninstall entry.
@@ -367,8 +374,8 @@ users do not need to follow these steps.
 准确重建本版请先阅读 [BUILD_RELEASE.md](BUILD_RELEASE.md)，准备定制MuPDF1.28.5引擎。下列pip命令只提供开发环境，默认依赖不等同于发布包。<br>
 For a release-equivalent build, follow [BUILD_RELEASE.md](BUILD_RELEASE.md), including the custom MuPDF 1.28.5 engine. The pip commands below set up a development environment; default dependencies do not reproduce the release package.
 
-V1.5.0 源码需要 Python 3.10 或更高版本（本次使用 3.12）。已有旧环境请保留，不要用 Python 3.9 直接安装新版依赖。以下新建 `.venv-pdf`，不会覆盖原 `.venv`。<br>
-V1.5.0 source requires Python 3.10 or later; this release was built with 3.12. Keep existing environments and do not install the new dependencies with Python 3.9. The commands below create a separate `.venv-pdf` environment.
+V1.5.1 源码需要 Python 3.10 或更高版本（本次使用 3.12）。已有旧环境请保留，不要用 Python 3.9 直接安装新版依赖。以下新建 `.venv-pdf`，不会覆盖原 `.venv`。<br>
+V1.5.1 source requires Python 3.10 or later; this release was built with 3.12. Keep existing environments and do not install the new dependencies with Python 3.9. The commands below create a separate `.venv-pdf` environment.
 
 ```bash
 python3.12 -m venv .venv-pdf
@@ -399,13 +406,13 @@ The current release build supports Apple Silicon Macs only.
 PYTHON=.venv-pdf/bin/python scripts/build_macos.sh
 ```
 
-先完成上面的独立环境安装；不要使用旧 `.venv` 打包 V1.5.0。构建脚本会使用 `version.py` 中的版本号命名，当前源码构建结果位于 `release/`：<br>
-Set up the separate environment above before building V1.5.0. The script uses the version in `version.py` and writes the following output to `release/`:
+先完成上面的独立环境安装；不要使用旧 `.venv` 打包 V1.5.1。构建脚本会使用 `version.py` 中的版本号命名，当前源码构建结果位于 `release/`：<br>
+Set up the separate environment above before building V1.5.1. The script uses the version in `version.py` and writes the following output to `release/`:
 
-- `EggieDocuFlow_V1.5.0_mac.zip`
+- `EggieDocuFlow_V1.5.1_mac.zip`
 
-此通用脚本会生成 `EggieDocuFlow_V1.5.0_mac.app`；发布包统一使用 `Eggie DocuFlow.app`，两者应用标识相同。准确发布构建需遵循BUILD_RELEASE.md的依赖和核对步骤。<br>
-The general build script creates `EggieDocuFlow_V1.5.0_mac.app`; the release package uses `Eggie DocuFlow.app` with the same application identifier. Follow [BUILD_RELEASE.md](BUILD_RELEASE.md) for release dependencies and checks.
+此通用脚本会生成 `EggieDocuFlow_V1.5.1_mac.app`；发布包统一使用 `Eggie DocuFlow.app`，两者应用标识相同。准确发布构建需遵循BUILD_RELEASE.md的依赖和核对步骤。<br>
+The general build script creates `EggieDocuFlow_V1.5.1_mac.app`; the release package uses `Eggie DocuFlow.app` with the same application identifier. Follow [BUILD_RELEASE.md](BUILD_RELEASE.md) for release dependencies and checks.
 
 打包脚本保留所有 `qtbase` 系统语言翻译，并移除本工具不使用的 Qt 网络、TLS、
 SVG 和图片插件。
@@ -426,7 +433,7 @@ powershell -ExecutionPolicy Bypass -File scripts\\build_windows.ps1
 构建脚本按 `version.py` 中的版本号命名，当前源码的预期构建结果位于 `release/`：<br>
 The build script uses the version from `version.py` and writes the following output to `release/`:
 
-- `EggieDocuFlow_V1.5.0_Windows_x64_Setup.exe`
+- `EggieDocuFlow_V1.5.1_Windows_x64_Setup.exe`
 
 准确发布构建需遵循BUILD_RELEASE.md，确保定制引擎与随包声明正确。V1.4.0历史下载保留。<br>
 Follow [BUILD_RELEASE.md](BUILD_RELEASE.md) for the release engine and bundled notices. V1.4.0 downloads remain available.
@@ -435,6 +442,10 @@ Follow [BUILD_RELEASE.md](BUILD_RELEASE.md) for the release engine and bundled n
 After installation, launch the app on Windows and open generated workbooks in Microsoft Excel. Do not distribute a build if its outputs trigger corruption or repair warnings.
 
 ## 版本记录 / Changelog
+
+### V1.5.1
+
+修复 Excel 清理预览、独立 PDF 工具与大文件打开流程。[更新说明 / Release notes](release_notes_v1.5.1.md)
 
 ### V1.5.0
 

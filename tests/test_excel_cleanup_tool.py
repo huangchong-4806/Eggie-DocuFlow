@@ -242,6 +242,60 @@ class ExcelCleanupToolTests(unittest.TestCase):
         w=self.cleaned(remove_empty_rows=False)
         self.assertEqual(w.active['B4'].value,'=INDIRECT("A4")')
 
+    def test_image_remains_with_record_or_blocks_both_preview_and_execution(self):
+        from io import BytesIO
+        from openpyxl.drawing.image import Image as ExcelImage
+        from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, TwoCellAnchor
+        from PIL import Image
+
+        def setup(w, sheet):
+            image_bytes = BytesIO()
+            Image.new("RGB", (30, 12), "red").save(image_bytes, format="PNG")
+            image_bytes.seek(0)
+            image = ExcelImage(image_bytes)
+            image.anchor = TwoCellAnchor(editAs="twoCell", _from=AnchorMarker(col=2, row=3),
+                                         to=AnchorMarker(col=3, row=4))
+            sheet.add_image(image)
+        self.save_sample([["编号"], ["001"], [None], ["002"], ["003"]], setup)
+        original = self.source.read_bytes()
+        options = CleanupOptions("数据")
+        preview = preview_cleanup(self.source, options)
+        self.assertEqual(preview.blank_rows, 1)
+        self.assertIn("第 3 行", preview.blocked_reason)
+        self.assertIn("第 4 行", preview.blocked_reason)
+        with self.assertRaisesRegex(ValueError, "图片"):
+            clean_workbook(self.source, self.root / "output", options)
+        self.assertFalse(list((self.root / "output").glob("*.xlsx")))
+        self.assertEqual(original, self.source.read_bytes())
+
+        unchanged = self.cleaned(remove_empty_rows=False)
+        self.assertEqual(unchanged.active["A4"].value, "002")
+        self.assertEqual(unchanged.active._images[0].anchor._from.row, 3)
+
+    def test_image_boundary_height_and_duplicate_rows(self):
+        from io import BytesIO
+        from openpyxl.drawing.image import Image as ExcelImage
+        from PIL import Image
+        def setup(w, s):
+            raw = BytesIO()
+            Image.new("RGB", (30, 40)).save(raw, format="PNG")
+            raw.seek(0)
+            s.add_image(ExcelImage(raw), "C2")
+            s.row_dimensions[2].height = 20
+        self.save_sample([["编号"], ["001"], ["001"], ["002"]], setup)
+        opts = CleanupOptions("数据", deduplicate=True)
+        preview = preview_cleanup(self.source, opts)
+        self.assertEqual(preview.duplicate_rows, 1)
+        self.assertIn("第 3 行", preview.blocked_reason)
+        def taller(w, s):
+            setup(w, s)
+            s.row_dimensions[2].height = 60
+        self.save_sample([["编号"], ["001"], ["001"], ["002"]], taller)
+        self.assertFalse(preview_cleanup(self.source, opts).blocked_reason)
+        out = self.cleaned(deduplicate=True)
+        self.assertEqual(out.active["A3"].value, "002")
+        self.assertEqual(out.active._images[0].anchor._from.row, 1)
+
     def test_other_sheet_validation_and_chart_dependencies_block_deletion(self):
         from openpyxl.worksheet.datavalidation import DataValidation
         from openpyxl.chart import BarChart,Reference
@@ -256,6 +310,8 @@ class ExcelCleanupToolTests(unittest.TestCase):
                         chart=BarChart();chart.add_data(Reference(s,min_col=1,min_row=2,max_row=4))
                         other.add_chart(chart,'C1')
                 self.save_sample([['金额'],[10],[None],[20]],setup)
+                preview = preview_cleanup(self.source, CleanupOptions("数据"))
+                self.assertRegex(preview.blocked_reason, "规则|图表")
                 with self.assertRaisesRegex(ValueError,'规则|图表'):self.cleaned()
                 self.assertEqual(list((self.root/'output').glob('*.xlsx')),[])
 

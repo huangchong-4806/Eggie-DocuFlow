@@ -17,6 +17,7 @@ from PySide6.QtWidgets import QApplication, QGroupBox, QLabel, QMessageBox, QPus
 
 from app import ClearSpinBox, ExcelMergerWindow, PdfImageCard, PdfPageCard
 from batch_processing_tool import BatchPreview
+from excel_cleanup_tool import CleanupPreview
 from ocr_settings_dialog import SoftwareSettingsDialog
 from pdf_toolbox import PdfToolResult
 from version import APP_VERSION, BUILD_TYPE
@@ -300,6 +301,23 @@ class AppNavigationTests(unittest.TestCase):
         self.assertFalse(self.window.batch_retry_button.isEnabled())
         self.assertFalse(self.window.batch_ocr_checkbox.isChecked())
 
+    def test_cleanup_preview_shows_the_entire_blocking_reason(self):
+        self.window.show_cleanup_tool()
+        self.window.show()
+        QTest.qWait(50)
+        preview = CleanupPreview(
+            source_file="rows.xlsx", sheet_name="明细", headers=("编号",),
+            original_rows=4, original_columns=1, blank_rows=1, duplicate_rows=0,
+            whitespace_cells=1, date_cells=0, number_cells=0, formula_cells=1,
+            blocked_reason="删除第 3 行会影响第 4 行的图片。请取消删除空白行并更新预览。",
+        )
+        self.window.display_cleanup_preview(preview)
+        QTest.qWait(50)
+        label = self.window.cleanup_preview_label
+        self.assertIn(preview.blocked_reason, label.text())
+        self.assertGreaterEqual(label.height(), label.heightForWidth(label.width()))
+        self.assertTrue(label.parentWidget().rect().contains(label.geometry()))
+
     @patch("app.is_provider_configured", return_value=True)
     @patch("app.QMessageBox.question", return_value=QMessageBox.No)
     def test_batch_ocr_confirmation_lists_exact_scanned_pages(
@@ -326,13 +344,84 @@ class AppNavigationTests(unittest.TestCase):
         self.assertNotIn("另存 PDF", labels)
         self.assertEqual(workspace.export_button.text(), "另存 PDF")
 
-    def test_more_tools_cannot_bypass_pending_redaction_guard(self):
-        from pdf_workspace import RedactionMark
-        self.window.pdf_workspace.state.marks = [RedactionMark("m", "page", ((1, 1, 2, 2),))]
-        with patch.object(self.window.pdf_workspace, "show_error") as error, patch.object(self.window, "start_background_task") as start, patch("app.QMessageBox.critical"):
-            self.window.compress_selected_pdf()
-        error.assert_called_once()
-        start.assert_not_called()
+    def test_independent_tools_check_each_selected_source_before_processing(self):
+        from pdf_workspace import RedactionMark, WorkspacePage
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            original, other = root / "contract.pdf", root / "other.pdf"
+            original.touch()
+            other.touch()
+            workspace = self.window.pdf_workspace
+            workspace.state.pages = [WorkspacePage("page", "A", 0)]
+            workspace.state.marks = [RedactionMark("m", "page", ((1, 1, 2, 2),))]
+            workspace.source_paths["A"] = str(original)
+            window = self.window
+            window.pdf_compress_output_folder_edit.setText(folder)
+            window.pdf_security_output_folder = folder
+            window.pdf_compare_output_folder = folder
+            window.pdf_searchable_output_folder = folder
+            window.pdf_image_output_folder_edit.setText(folder)
+            window.pdf_security_mode_combo.setCurrentIndex(1)
+            window.pdf_searchable_inspection = SimpleNamespace(scanned_pages=())
+            with (patch.object(workspace, "show_error") as error,
+                  patch.object(window, "start_background_task") as start,
+                  patch("app.QMessageBox.question") as confirm_ocr):
+                for path, allowed in ((original, False), (other, True)):
+                    window.pdf_compress_source_file = window.pdf_security_source_file = str(path)
+                    window.pdf_searchable_source_file = str(path)
+                    window.pdf_compare_left_file, window.pdf_compare_right_file = str(other), str(path)
+                    window.pdf_export_source_files = [str(other), str(path)]
+                    window.pdf_image_cards = [SimpleNamespace(image_file=str(path))]
+                    for method in (window.compress_selected_pdf, window.process_pdf_security,
+                                   window.create_searchable_pdf, window.create_pdf_compare_report,
+                                   window.export_pdf_to_images, window.convert_images_to_pdf):
+                        with self.subTest(tool=method.__name__, independent=allowed):
+                            error.reset_mock()
+                            start.reset_mock()
+                            method()
+                            self.assertEqual(start.call_count, int(allowed))
+                            self.assertEqual(error.call_count, int(not allowed))
+                window.pdf_compare_left_file, window.pdf_compare_right_file = str(original), str(other)
+                start.reset_mock()
+                window.create_pdf_compare_report()
+                start.assert_not_called()
+                window.pdf_searchable_source_file = str(original)
+                window.pdf_searchable_inspection = SimpleNamespace(scanned_pages=(1,))
+                window.create_searchable_pdf()
+                confirm_ocr.assert_not_called()
+                workspace.state.pages = []
+                workspace.state.marks = []
+                window.pdf_image_cards = []
+
+    def test_workspace_source_guard_recognizes_aliases_applied_marks_and_in_flight_opens(self):
+        from pdf_workspace import RedactionMark, WorkspacePage
+
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / "a.pdf"
+            alias = Path(folder) / "alias.pdf"
+            other = Path(folder) / "b.pdf"
+            source.touch()
+            other.touch()
+            os.link(source, alias)
+            ws = self.window.pdf_workspace
+            info = source.stat()
+            ws.state.pages = [WorkspacePage("p", "A", 0, source_identity=(info.st_dev, info.st_ino))]
+            ws.state.marks = [RedactionMark("m", "p", ((0, 0, 1, 1),), applied=True)]
+            ws.source_paths["A"] = str(source)
+            with patch.object(ws, "show_error"):
+                self.assertFalse(ws.can_process_files([alias]))
+                self.assertTrue(ws.can_process_files([other]))
+                ws._busy = True
+                self.assertTrue(ws.can_process_files([other]))
+                self.assertFalse(ws.can_process_files([source]))
+                ws._jobs[1] = ("open", ((str(other),), [], False))
+                self.assertFalse(ws.can_process_files([other]))
+                source.unlink()
+                self.assertFalse(ws.can_process_files([alias]))
+            ws._busy = False
+            ws._jobs.clear()
+            ws.state.pages, ws.state.marks = [], []
 
     def test_batch_limits_are_visible_before_adding_files(self):
         self.assertEqual(

@@ -171,6 +171,40 @@ class WorkspaceEngineTests(unittest.TestCase):
         self.assertIn("NEW CONTENT", "".join(c["text"] for c in fresh["chars"]))
         self.assertIn("KEEP-456", "".join(c["text"] for c in old["chars"]))
 
+    def test_open_checks_signatures_without_decoding_content_streams(self):
+        path = self.root / "signed.pdf"
+        with self.pdf.open(str(self.source)) as document:
+            sig = self.pdf.Widget()
+            sig.field_name = "Signature1"
+            sig.field_type = self.pdf.PDF_WIDGET_TYPE_SIGNATURE
+            sig.rect = self.pdf.Rect(4, 4, 40, 24)
+            document[0].add_widget(sig)
+            document.save(str(path))
+        with patch.object(self.pdf.Document, "xref_stream", side_effect=AssertionError("decoded during open")):
+            refs = self.engine.open_pdf(str(path))
+        self.assertTrue(refs[0].has_signature)
+        before = set(self.engine._sources)
+        with self.assertRaises(InterruptedError):
+            self.engine.open_pdf(str(path), cancelled=iter([False, True]).__next__)
+        self.assertEqual(set(self.engine._sources), before)
+        # Opening must not disable the full security scan later.
+        with patch.object(self.pdf.Document, "xref_stream", side_effect=ValueError("deep scan")):
+            with self.assertRaisesRegex(ValueError, "deep scan"):
+                self.engine.inspect_document(WorkspaceState(pages=list(refs)))
+
+    def test_read_errors_distinguish_missing_denied_broken_and_memory(self):
+        path = self.root / "unreadable.pdf"
+        with self.assertRaisesRegex(ValueError, "找不到"):
+            self.engine.open_pdf(path)
+        path.write_bytes(b"private invalid input")
+        with self.assertRaisesRegex(ValueError, "损坏"):
+            self.engine.open_pdf(path)
+        for err, expected in ((PermissionError("private"), "权限"), (MemoryError("private"), "内存不足")):
+            with patch("pathlib.Path.open", side_effect=err), self.assertRaisesRegex(ValueError, expected) as msg:
+                self.engine.open_pdf(str(path))
+            self.assertNotIn("private", str(msg.exception))
+        self.assertEqual(set(self.engine._sources), {self.pages[0].source_id})
+
     def test_invalid_pdf_does_not_replace_an_open_document(self):
         broken = self.root / "broken.pdf"
         broken.write_bytes(b"not a PDF")
@@ -276,6 +310,22 @@ class WorkspaceEngineTests(unittest.TestCase):
         with patch.object(self.engine, "_verify_output", side_effect=change_visual_then_verify):
             with self.assertRaisesRegex(ValueError, "外观"):
                 self.engine.export_pdf(self.state, str(self.root / "changed.pdf"))
+        self.assertEqual(set(self.root.iterdir()), before)
+
+    def test_residual_title_blocks_secure_export_before_publication(self):
+        self.mark_secret()
+        verify = self.engine._verify_output
+
+        def inject_title(path, expected, secure):
+            with self.pdf.open(str(path)) as doc:
+                doc.set_metadata({"title": "residual test title"})
+                doc.saveIncr()
+            verify(path, expected, secure)
+
+        before = set(self.root.iterdir())
+        with patch.object(self.engine, "_verify_output", side_effect=inject_title):
+            with self.assertRaisesRegex(ValueError, "敏感附加信息"):
+                self.engine.export_pdf(self.state, str(self.root / "invalid.pdf"))
         self.assertEqual(set(self.root.iterdir()), before)
 
     def test_same_name_does_not_overwrite_and_log_failure_keeps_valid_pdf(self):

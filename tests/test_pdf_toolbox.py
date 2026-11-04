@@ -1,3 +1,4 @@
+import errno
 import tempfile
 import unittest
 from pathlib import Path
@@ -123,6 +124,58 @@ class PdfToolboxTests(unittest.TestCase):
 
         low, high = estimate_compressed_size(1000, "standard")
         self.assertLess(low, high)
+
+    def test_compress_reports_renderer_fallback_and_preserves_prior_output(self):
+        source = self.make_pdf("source.pdf", 1)
+        target = self.root / "result.pdf"
+        target.write_bytes(b"existing")
+        with patch("pdf_toolbox.write_raster_compressed_pdf", side_effect=RuntimeError("renderer")):
+            result = compress_pdf(source, target, "small")
+        self.assertEqual(target.read_bytes(), b"existing")
+        self.assertEqual(len(PdfReader(result.output_file).pages), 1)
+        self.assertEqual(result.compression_method, "保留文字结构")
+        self.assertIn("渲染或编码", result.compression_note)
+        self.assertIn(result.compression_note, Path(result.log_file).read_text(encoding="utf-8"))
+
+    def test_compress_storage_errors_leave_no_result(self):
+        source = self.make_pdf("source.pdf", 1)
+        for function, err, expected in (
+            ("write_raster_compressed_pdf", errno.ENOSPC, "空间不足"),
+            ("publish_output", errno.EACCES, "权限"),
+        ):
+            with self.subTest(function=function), patch("pdf_toolbox." + function, side_effect=OSError(err, "test")):
+                with self.assertRaisesRegex(ValueError, expected):
+                    compress_pdf(source, self.root / "failed.pdf", "small")
+                self.assertEqual(set(self.root.iterdir()), {source})
+
+    def test_compress_copy_failure_removes_only_its_own_partial_file(self):
+        source = self.make_pdf("source.pdf", 1)
+        target = self.root / "result.pdf"
+        def partial(_source, stream, **_kwargs):
+            stream.write(b"incomplete")
+            raise OSError(errno.ENOSPC, "full")
+        with (patch("utils.file_helper.os.link", side_effect=OSError(errno.EXDEV, "copy")),
+              patch("utils.file_helper.shutil.copyfileobj", side_effect=partial)):
+            with self.assertRaisesRegex(ValueError, "空间不足"):
+                compress_pdf(source, target, "clear")
+        self.assertEqual(set(self.root.iterdir()), {source})
+
+        def concurrent_file(_temp, output):
+            if Path(output) == target.resolve():
+                Path(output).write_bytes(b"other writer")
+            raise OSError(errno.EXDEV, "copy")
+        with patch("utils.file_helper.os.link", side_effect=concurrent_file):
+            result = compress_pdf(source, target, "clear")
+        self.assertEqual(target.read_bytes(), b"other writer")
+        self.assertEqual(len(PdfReader(result.output_file).pages), 1)
+
+    def test_compress_log_error_keeps_verified_pdf(self):
+        source = self.make_pdf("source.pdf", 1)
+        with patch("pdf_toolbox.write_log", side_effect=PermissionError(errno.EACCES, "test")):
+            result = compress_pdf(source, self.root / "output.pdf", "clear")
+        self.assertEqual(len(PdfReader(result.output_file).pages), 1)
+        self.assertEqual(result.log_file, "")
+        self.assertIn("日志未写入", result.compression_note)
 
     def test_compress_pdf_handles_existing_content_streams(self):
         source = Path(__file__).resolve().parents[1] / "test_files" / "表格测试.pdf"
@@ -342,6 +395,24 @@ class PdfToolboxTests(unittest.TestCase):
         self.assertIn("5", extracted)
         self.assertIn("页码：已添加", Path(result.log_file).read_text(encoding="utf-8"))
 
+    def test_multiline_cjk_watermarks_and_page_numbers_keep_their_positions(self):
+        import pymupdf
+
+        source = self.make_pdf("layout.pdf", 2)
+        target = self.root / "layout-marked.pdf"
+        add_pdf_marks(source, target, watermark_text="内部资料\n副本", watermark_font_size=16,
+                      watermark_angle=0, watermark_position="top_left",
+                      add_page_numbers=True, page_number_start=8, page_number_position="bottom_right")
+        with pymupdf.open(target) as document:
+            for index, page in enumerate(document, 8):
+                first, = page.search_for("内部资料")
+                second, = page.search_for("副本")
+                number, = page.search_for(str(index))
+                self.assertAlmostEqual(first.x0, 28, delta=2)
+                self.assertGreater(second.y0, first.y0)
+                self.assertGreater(number.x0, page.rect.width / 2)
+                self.assertGreater(number.y0, page.rect.height * .8)
+
     def test_pdf_password_can_be_set_and_removed(self):
         source = self.make_pdf("plain.pdf", 1)
         protected = secure_pdf(source, self.root / "protected.pdf", new_password="secret-123")
@@ -390,6 +461,22 @@ class PdfToolboxTests(unittest.TestCase):
         extracted = " ".join(reader.pages[0].extract_text().split())
         self.assertIn("Searchable Text", extracted)
         self.assertIn("云 OCR 页：1", Path(result.log_file).read_text(encoding="utf-8"))
+
+    @patch("api_layer.document.extract_document")
+    def test_searchable_chinese_is_copyable_inside_recognition_box(self, extract):
+        import pymupdf
+
+        source = self.make_pdf("scan.pdf", 1)
+        word = "合同编号"
+        extract.return_value = DocumentExtraction(str(source), "mock", (
+            PageText(1, word, "cloud_ocr", blocks=(TextBlock(word, (0.1, 0.1, 0.7, 0.3)),),
+                     width=200, height=300),), "test")
+        result = make_searchable_pdf(source, self.root / "ocr.pdf", "mock")
+        self.assertIn(word, PdfReader(result.output_file).pages[0].extract_text())
+        with pymupdf.open(result.output_file) as doc:
+            hits = doc[0].search_for(word)
+            self.assertEqual(len(hits), 1)
+            self.assertTrue(pymupdf.Rect(18, 27, 142, 93).contains(hits[0]), hits[0])
 
     def test_pdf_text_compare_writes_openable_html_report(self):
         project_root = Path(__file__).resolve().parents[1]

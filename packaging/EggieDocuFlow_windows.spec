@@ -18,7 +18,7 @@ a = Analysis(
     datas=[
         (str(PROJECT_ROOT / "LICENSE"), "."),
         (str(PROJECT_ROOT / "THIRD_PARTY_NOTICES.md"), "."),
-        (str(PROJECT_ROOT / "release_notes_v1.5.0.md"), "."),
+        (str(PROJECT_ROOT / "release_notes_v1.5.1.md"), "."),
         (str(PROJECT_ROOT / "BUILD_RELEASE.md"), "."),
         (str(PROJECT_ROOT / "licenses"), "licenses"),
         (str(PROJECT_ROOT / "assets" / "software_logo.png"), "assets"),
@@ -34,6 +34,12 @@ a = Analysis(
     noarchive=False,
     optimize=1,
 )
+
+# Build-machine paths in installer metadata do not belong in a distributed app.
+a.datas = [entry for entry in a.datas if not (
+    ".dist-info/" in entry[0].replace("\\", "/")
+    and Path(entry[0].replace("\\", "/")).name in {"direct_url.json", "uv_cache.json"}
+)]
 
 pyz = PYZ(a.pure)
 
