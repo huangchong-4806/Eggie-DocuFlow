@@ -91,6 +91,7 @@ from pdf_toolbox import (
     COMPRESSION_PRESETS,
     IMAGE_SUFFIXES,
     compress_pdf,
+    compression_io_message,
     compare_pdf_text,
     default_output_name,
     estimate_compressed_size,
@@ -757,6 +758,7 @@ class ExcelMergerWindow(QMainWindow):
 
         preview_group = QGroupBox("预计结果")
         preview_layout = QVBoxLayout(preview_group)
+        preview_layout.setSizeConstraint(QVBoxLayout.SetMinimumSize)
         self.cleanup_preview_label = QLabel("等待选择 Excel 文件")
         self.cleanup_preview_label.setWordWrap(True)
         self.cleanup_preview_label.setProperty("role", "status")
@@ -2565,7 +2567,7 @@ class ExcelMergerWindow(QMainWindow):
         )
 
     def process_pdf_security(self):
-        if not self.pdf_workspace.can_export():
+        if not self.pdf_workspace.can_process_files((self.pdf_security_source_file,)):
             return
         setting_password = self.pdf_security_mode_combo.currentData() == "set"
         source_password = self.pdf_source_password_edit.text()
@@ -2703,7 +2705,7 @@ class ExcelMergerWindow(QMainWindow):
         )
 
     def create_searchable_pdf(self):
-        if not self.pdf_workspace.can_export():
+        if not self.pdf_workspace.can_process_files((self.pdf_searchable_source_file,)):
             return
         inspection = self.pdf_searchable_inspection
         if inspection is None:
@@ -2814,7 +2816,7 @@ class ExcelMergerWindow(QMainWindow):
         )
 
     def create_pdf_compare_report(self):
-        if not self.pdf_workspace.can_export():
+        if not self.pdf_workspace.can_process_files((self.pdf_compare_left_file, self.pdf_compare_right_file)):
             return
         name = self.pdf_compare_output_name_edit.text().strip() or default_output_name(
             "PDF文字对比", ".html"
@@ -2868,7 +2870,8 @@ class ExcelMergerWindow(QMainWindow):
             detail += f"\n\n结果文件：\n{result.output_file}"
         if result.image_files:
             detail += f"\n\n生成图片：{len(result.image_files)} 张"
-        detail += f"\n\n日志文件：\n{result.log_file}"
+        if result.log_file:
+            detail += f"\n\n日志文件：\n{result.log_file}"
         message.setInformativeText(detail.strip())
         open_button = message.addButton("打开结果", QMessageBox.ActionRole)
         ok_button = message.addButton("确定", QMessageBox.AcceptRole)
@@ -2943,7 +2946,7 @@ class ExcelMergerWindow(QMainWindow):
         )
 
     def compress_selected_pdf(self):
-        if not self.pdf_workspace.can_export():
+        if not self.pdf_workspace.can_process_files((self.pdf_compress_source_file,)):
             return
         try:
             output_file = output_path(
@@ -2951,22 +2954,20 @@ class ExcelMergerWindow(QMainWindow):
                 self.pdf_compress_output_name_edit.text(),
                 default_output_name("PDF压缩结果"),
             )
-        except Exception as error:
-            QMessageBox.critical(self, "压缩失败", str(error))
+        except (ValueError, OSError) as error:
+            message = compression_io_message(error) if isinstance(error, OSError) else str(error)
+            QMessageBox.critical(self, "压缩失败", message)
             return
         source_file = self.pdf_compress_source_file
         preset = self.current_pdf_compression_preset()
 
         def compressed(result):
-            if result.saved_percent > 0:
-                text = (
-                    f"压缩完成：{format_file_size(result.source_size)} → "
-                    f"{format_file_size(result.output_size)}，节省 {result.saved_percent}%"
-                )
-            else:
-                text = "压缩完成，但这个 PDF 压缩效果不明显。"
+            change = f"节省 {result.saved_percent}%" if result.output_size < result.source_size else "体积未减小"
+            text = (f"{result.compression_method}：{format_file_size(result.source_size)} → "
+                    f"{format_file_size(result.output_size)}，{change}。")
             self.pdf_compress_status_label.setText(text)
-            self.save_pdf_result_message("PDF 压缩完成", result, text)
+            detail = f"{text}\n{result.compression_note}" if result.compression_note else text
+            self.save_pdf_result_message("PDF 压缩完成", result, detail)
 
         self.start_background_task(
             "正在压缩 PDF",
@@ -3228,16 +3229,16 @@ class ExcelMergerWindow(QMainWindow):
             self.update_pdf_button_states()
 
     def convert_images_to_pdf(self):
-        if not self.pdf_workspace.can_export():
-            return
         try:
+            self.sync_pdf_image_source_files()
+            image_files = tuple(self.pdf_image_source_files)
+            if not self.pdf_workspace.can_process_files(image_files):
+                return
             output_file = output_path(
                 self.pdf_image_output_folder_edit.text(),
                 self.pdf_image_output_name_edit.text(),
                 default_output_name("图片合成PDF"),
             )
-            self.sync_pdf_image_source_files()
-            image_files = tuple(self.pdf_image_source_files)
         except Exception as error:
             QMessageBox.critical(self, "合成失败", str(error))
             return
@@ -3387,7 +3388,7 @@ class ExcelMergerWindow(QMainWindow):
             self.update_pdf_button_states()
 
     def export_pdf_to_images(self):
-        if not self.pdf_workspace.can_export():
+        if not self.pdf_workspace.can_process_files(self.pdf_export_source_files):
             return
         source_files = tuple(self.pdf_export_source_files)
         output_folder = self.pdf_export_output_folder_edit.text()
@@ -4953,16 +4954,22 @@ class ExcelMergerWindow(QMainWindow):
     def refresh_cleanup_preview(self):
         if not self.cleanup_source_file or not self.cleanup_sheet_combo.currentText():
             return
+        source = self.cleanup_source_file
         options = self.current_cleanup_options()
+        self.invalidate_cleanup_preview()
 
         def worker(_progress_callback):
-            return preview_cleanup(self.cleanup_source_file, options)
+            return preview_cleanup(source, options)
+
+        def completed(preview):
+            if self.cleanup_source_file == source and self.current_cleanup_options() == options:
+                self.display_cleanup_preview(preview)
 
         self.start_background_task(
             "检查 Excel",
             f"正在检查工作表：{options.sheet_name}",
             worker,
-            self.display_cleanup_preview,
+            completed,
             status_label=self.cleanup_preview_label,
         )
 
@@ -4993,6 +5000,7 @@ class ExcelMergerWindow(QMainWindow):
             f"数据行 {preview.original_rows}，空白行 {preview.blank_rows}，"
             f"重复行 {preview.duplicate_rows}，空格问题 {preview.whitespace_cells}，"
             f"日期 {preview.date_cells}，数字 {preview.number_cells}{formula_note}"
+            + (f"\n不能执行：{preview.blocked_reason}" if preview.blocked_reason else "")
         )
         self.update_cleanup_button_states()
 
@@ -5015,6 +5023,7 @@ class ExcelMergerWindow(QMainWindow):
             and self.cleanup_sheet_combo.currentText()
             and self.cleanup_output_folder
             and self.cleanup_preview is not None
+            and not self.cleanup_preview.blocked_reason
         )
         self.cleanup_preview_button.setEnabled(
             bool(self.cleanup_source_file and self.cleanup_sheet_combo.currentText())
@@ -5025,6 +5034,9 @@ class ExcelMergerWindow(QMainWindow):
     def start_excel_cleanup(self):
         if self.cleanup_preview is None:
             QMessageBox.information(self, "请先更新预览", "规则变化后需要重新查看预计结果。")
+            return
+        if self.cleanup_preview.blocked_reason:
+            QMessageBox.warning(self, "无法按所选规则清理", self.cleanup_preview.blocked_reason)
             return
         if self.cleanup_preview.formula_cells:
             answer = QMessageBox.question(

@@ -3,7 +3,9 @@
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from collections import Counter
+import errno
 import math
+import os
 import io
 import re
 import sys
@@ -17,12 +19,46 @@ class WorkspaceError(ValueError):
     """Safe, user-facing validation message (never raw PDF parser output)."""
 
 
+def workspace_failure(error, operation):
+    """Preserve actionable causes without displaying parser messages or document content."""
+    if isinstance(error, WorkspaceError):
+        return str(error)
+    code = getattr(error, "errno", None)
+    if type(error).__name__ == "FzErrorSystem":
+        # MuPDF appends the operating system's error text to its diagnostic.
+        # Compare only the suffix, and never expose paths or parser output.
+        detail = str(error).rsplit(": ", 1)[-1].casefold()
+        for number in (errno.ENOSPC, errno.EACCES, errno.EPERM, errno.ENOENT, errno.EROFS, errno.ENOMEM):
+            if detail == os.strerror(number).casefold():
+                code = number
+                break
+    if isinstance(error, MemoryError) or code == errno.ENOMEM:
+        return "内存不足，请关闭占用内存的应用，或减少一次打开的文件后重试。"
+    if code in (errno.ENOSPC, getattr(errno, "EDQUOT", errno.ENOSPC)):
+        return "磁盘空间不足，请释放空间或更换保存位置。"
+    if isinstance(error, PermissionError) or code in (errno.EPERM, errno.EACCES, errno.EROFS):
+        if operation == "export":
+            return "输出位置不可写，请检查权限或更换保存位置。"
+        return "没有权限读取文件，请检查访问权限后重试。"
+    if isinstance(error, FileNotFoundError) or code == errno.ENOENT:
+        if operation == "export":
+            return "输出文件夹不存在，请重新选择保存位置。"
+        return "找不到所选文件，请确认文件是否已移动，并重新选择。"
+    if operation == "open":
+        return "无法读取 PDF，请检查文件是否可访问并重试。"
+    if operation == "export":
+        return "无法保存 PDF，请检查输出位置和文件后重试。"
+    return "PDF 处理失败，请重新打开文件后重试。"
+
+
 @dataclass(frozen=True)
 class WorkspacePage:
     page_id: str
     source_id: str
     source_index: int
     rotation: int = 0
+    source_identity: tuple[int, int] | None = None
+    has_signature: bool = False
 
 
 @dataclass(frozen=True)
@@ -176,29 +212,43 @@ class PdfWorkspaceEngine:
         self._images = {}
         self._font = None
 
-    def open_pdf(self, path: str, password: str = "") -> tuple[WorkspacePage, ...]:
-        source = str(Path(path).expanduser().resolve())
+    def open_pdf(self, path: str, password: str = "", cancelled=lambda: False) -> tuple[WorkspacePage, ...]:
         document = None
         try:
-            if Path(source).suffix.lower() != ".pdf":
+            source = Path(path).expanduser().resolve()
+            if source.suffix.lower() != ".pdf":
                 raise WorkspaceError("请选择 PDF 文件。")
-            snapshot = Path(source).read_bytes()
+            with source.open("rb") as handle:
+                info = os.fstat(handle.fileno())
+                identity = (info.st_dev, info.st_ino) if info.st_ino else None
+                snapshot = handle.read()
+            if cancelled():
+                raise InterruptedError("已取消读取，当前文档未改变。")
             document = self.pdf.open(stream=snapshot, filetype="pdf")
             if document.needs_pass and not document.authenticate(password):
                 raise WorkspaceError("PDF 已加密，请使用正确的原密码。")
             if not 1 <= len(document) <= 1000:
                 raise WorkspaceError("单次支持 1 到 1,000 页，请先拆分文件。")
+            # Opening needs only the signature warning. Full stream inspection belongs to redaction.
+            source_id = uuid4().hex
+            pages = []
+            for page in document:
+                if cancelled():
+                    raise InterruptedError("已取消读取，当前文档未改变。")
+                signed = any(w.field_type == self.pdf.PDF_WIDGET_TYPE_SIGNATURE for w in page.widgets())
+                pages.append(WorkspacePage(uuid4().hex, source_id, page.number,
+                                           source_identity=identity, has_signature=signed))
         except Exception as error:
             if document is not None:
                 document.close()
-            if isinstance(error, WorkspaceError) and not isinstance(error, self.pdf.FileDataError):
+            if isinstance(error, (WorkspaceError, InterruptedError)):
                 raise
-            raise WorkspaceError("PDF 无法读取，请检查文件是否损坏或不可访问。") from None
-        # Each explicit open gets a fresh snapshot; undo references keep their old one.
-        source_id = uuid4().hex
+            if isinstance(error, self.pdf.FileDataError):
+                raise WorkspaceError("PDF 格式无效或文件已损坏，请重新获取原件。") from None
+            raise WorkspaceError(workspace_failure(error, "open")) from None
+        # Publish the snapshot only after every page has passed the opening checks.
         self._sources[source_id] = document
-        return tuple(WorkspacePage(uuid4().hex, source_id, index)
-                     for index in range(len(self._sources[source_id])))
+        return tuple(pages)
 
     def _copy_page(self, ref):
         source = self._sources.get(ref.source_id)
@@ -363,7 +413,7 @@ class PdfWorkspaceEngine:
                     view.show_pdf_page(self.pdf.Rect(x, y, x + width, y + height), stamp)
             page.show_pdf_page(page.rect * page.derotation_matrix, overlay, rotate=page.rotation)
 
-    def inspect_document(self, state):
+    def inspect_document(self, state, cancelled=lambda: False):
         self._validate_state(state)
         result = {"attachments": 0, "annotations": 0, "forms": 0, "signatures": 0,
                   "blocking_reasons": []}
@@ -377,11 +427,15 @@ class PdfWorkspaceEngine:
                     result["blocking_reasons"].append("包含动态表单或替代文字结构，暂不支持安全脱敏。")
             # ponytail: fail closed on alternate content; add support only with removal tests.
             for xref in range(1, source.xref_length()):
+                if cancelled():
+                    raise InterruptedError("已取消安全检查。")
                 if (_has_alternate_text(source.xref_object(xref).encode("utf-8"))
                         or (source.xref_is_stream(xref) and _has_alternate_text(source.xref_stream(xref)))):
                     result["blocking_reasons"].append("包含替代文字，暂不支持安全脱敏。")
                     break
         for ref in state.pages:
+            if cancelled():
+                raise InterruptedError("已取消安全检查。")
             page = self._sources[ref.source_id][ref.source_index]
             annotations = list(page.annots() or ())
             result["annotations"] += len(annotations)
@@ -394,8 +448,8 @@ class PdfWorkspaceEngine:
         result["blocking_reasons"] = tuple(dict.fromkeys(result["blocking_reasons"]))
         return result
 
-    def _check_redaction_safety(self, state, allow_cleanup):
-        inspection = self.inspect_document(state)
+    def _check_redaction_safety(self, state, allow_cleanup, cancelled):
+        inspection = self.inspect_document(state, cancelled)
         if inspection["blocking_reasons"]:
             raise WorkspaceError("\n".join(inspection["blocking_reasons"]))
         if not allow_cleanup and any(inspection[key] for key in ("attachments", "annotations", "forms", "signatures")):
@@ -483,7 +537,7 @@ class PdfWorkspaceEngine:
 
     def validate_apply(self, state, allow_cleanup=False, cancelled=lambda: False, progress=lambda text: None):
         candidate = replace(state, marks=marks_with_state(state.marks, True))
-        self._check_redaction_safety(candidate, allow_cleanup)
+        self._check_redaction_safety(candidate, allow_cleanup, cancelled)
         for index, ref in enumerate(candidate.pages):
             if cancelled():
                 raise InterruptedError("已取消应用，原有标记未改变。")
@@ -530,7 +584,7 @@ class PdfWorkspaceEngine:
                 raise WorkspaceError("临时输出路径无效，已停止保存。")
         secure = any(mark.applied for mark in state.marks)
         if secure:
-            self._check_redaction_safety(state, allow_cleanup)
+            self._check_redaction_safety(state, allow_cleanup, cancelled)
         temporary, published = None, None
         failures = ()
         try:
@@ -595,6 +649,7 @@ class PdfWorkspaceEngine:
 def run_pdf_workspace_worker(request_queue, response_queue, cancel_event=None):
     """Spawn entry point. Only plain models and rendered bytes cross the boundary."""
     engine = PdfWorkspaceEngine()
+    cancelled = cancel_event.is_set if cancel_event is not None else lambda: False
     try:
         while True:
             request_id, revision, operation, payload = request_queue.get()
@@ -602,15 +657,15 @@ def run_pdf_workspace_worker(request_queue, response_queue, cancel_event=None):
                 response_queue.put((request_id, revision, "progress", message))
             try:
                 if operation == "open":
-                    result = engine.open_pdf(**payload)
+                    result = engine.open_pdf(**payload, cancelled=cancelled)
                 elif operation == "inspect":
-                    result = engine.inspect_document(**payload)
+                    result = engine.inspect_document(**payload, cancelled=cancelled)
                 elif operation == "render":
                     result = engine.render_page(**payload)
                 elif operation == "apply":
-                    result = engine.validate_apply(**payload, cancelled=cancel_event.is_set if cancel_event else lambda: False, progress=progress)
+                    result = engine.validate_apply(**payload, cancelled=cancelled, progress=progress)
                 elif operation == "export":
-                    result = engine.export_pdf(**payload, cancelled=cancel_event.is_set if cancel_event else lambda: False, progress=progress)
+                    result = engine.export_pdf(**payload, cancelled=cancelled, progress=progress)
                 elif operation == "image":
                     result = engine.open_watermark_image(**payload)
                 elif operation == "release":
@@ -623,7 +678,7 @@ def run_pdf_workspace_worker(request_queue, response_queue, cancel_event=None):
                 response_queue.put((request_id, revision, "completed", result))
             except (WorkspaceError, InterruptedError) as error:
                 response_queue.put((request_id, revision, "failed", str(error)))
-            except Exception:
-                response_queue.put((request_id, revision, "failed", "PDF 处理失败，原文件未修改。请检查文件和输出目录后重试。"))
+            except Exception as error:
+                response_queue.put((request_id, revision, "failed", workspace_failure(error, operation)))
     finally:
         engine.close()

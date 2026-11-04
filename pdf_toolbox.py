@@ -1,10 +1,10 @@
 import copy
 import difflib
+import errno
 import html
-import shutil
 import tempfile
 from contextlib import ExitStack, closing
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 
@@ -50,6 +50,8 @@ class PdfToolResult:
     image_files: tuple = ()
     source_files: tuple = ()
     failures: tuple = ()
+    compression_method: str = ""
+    compression_note: str = ""
 
     @property
     def saved_bytes(self):
@@ -369,8 +371,8 @@ def add_pdf_marks(
 
 
 def _searchable_overlay_page(output_file, width, height, blocks):
-    from PySide6.QtCore import QRectF
-    from PySide6.QtGui import QColor, QFont
+    from PySide6.QtCore import QPointF, QRectF
+    from PySide6.QtGui import QColor, QFont, QFontMetricsF, QGuiApplication
 
     def draw(painter, page_width, page_height):
         painter.setPen(QColor(0, 0, 0, 1))
@@ -385,19 +387,22 @@ def _searchable_overlay_page(output_file, width, height, blocks):
                 max(2.0, (float(right) - float(left)) * page_width),
                 max(2.0, (float(bottom) - float(top)) * page_height),
             )
-            font = QFont("PingFang SC")
-            font.setPixelSize(
-                max(
-                    5,
-                    min(
-                        72,
-                        round(rect.height() * 0.8),
-                        round(rect.width() / max(len(text), 1) * 1.5),
-                    ),
-                )
-            )
+            font = QFont(QGuiApplication.font())
+            font.setFamilies(["PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", font.family()])
+            font.setPixelSize(max(5, min(72, round(rect.height() * 0.8))))
+            metrics = QFontMetricsF(font, painter.device())
+            lines = text.splitlines()
+            line_width = max(metrics.horizontalAdvance(line) for line in lines)
+            height = metrics.height() + metrics.lineSpacing() * (len(lines) - 1)
+            scale = min(1.0, rect.width() / max(1.0, line_width), rect.height() / max(1.0, height))
+            # Draw complete text at measured baselines instead of clipping it to an OCR box.
+            painter.save()
+            painter.translate(rect.topLeft())
+            painter.scale(scale, scale)
             painter.setFont(font)
-            painter.drawText(rect, text)
+            for index, line in enumerate(lines):
+                painter.drawText(QPointF(0, metrics.ascent() + index * metrics.lineSpacing()), line)
+            painter.restore()
 
     _qt_pdf_page(output_file, width, height, draw)
 
@@ -592,50 +597,67 @@ def write_raster_compressed_pdf(source, output_file, preset):
         document.close()
 
 
+def compression_io_message(error):
+    if error.errno in (errno.ENOSPC, getattr(errno, "EDQUOT", errno.ENOSPC)):
+        return "磁盘空间不足，请释放空间或更换保存位置。"
+    if isinstance(error, PermissionError) or error.errno in (errno.EROFS, errno.EPERM, errno.EACCES):
+        return "文件无法访问或目录不可写，请检查权限或更换保存位置。"
+    return str(error)
+
+
 def compress_pdf(pdf_file, output_file, preset="standard"):
+    from pypdf import PdfReader
+
     source = Path(pdf_file).expanduser().resolve()
     preset = preset if preset in COMPRESSION_PRESETS else "standard"
-    output_file = Path(output_file).expanduser().resolve()
-    output_file.parent.mkdir(parents=True, exist_ok=True)
-    output_file = available_output_path(output_file)
+    target = Path(output_file).expanduser().resolve()
     method = "保留文字结构"
+    note = ""
+    try:
+        source_size = source.stat().st_size
+        expected_pages = page_count(source)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=target.parent, prefix=".eggie-compress-") as folder:
+            best_file = Path(folder) / "structural.pdf"
+            write_structural_compressed_pdf(source, best_file)
+            if preset != "clear":
+                raster_file = Path(folder) / "raster.pdf"
+                try:
+                    write_raster_compressed_pdf(source, raster_file, preset)
+                    if raster_file.stat().st_size < best_file.stat().st_size:
+                        best_file = raster_file
+                        method = "图片式压缩"
+                except OSError as error:
+                    if error.errno is not None or isinstance(error, PermissionError):
+                        raise
+                    note = "图片式压缩未能完成图片读写，已使用保留文字结构的结果。"
+                except MemoryError:
+                    raise
+                except Exception:
+                    note = "图片式压缩未能渲染或编码页面，已使用保留文字结构的结果。"
+            with best_file.open("rb") as handle:
+                if not expected_pages or len(PdfReader(handle).pages) != expected_pages:
+                    raise ValueError("压缩副本页数核验失败。")
+            output_size = best_file.stat().st_size
+            final_file = publish_output(best_file, target)
+    except OSError as error:
+        raise ValueError(compression_io_message(error)) from error
 
-    with tempfile.TemporaryDirectory() as temporary_directory:
-        temporary_root = Path(temporary_directory)
-        structural_file = temporary_root / "structural.pdf"
-        write_structural_compressed_pdf(source, structural_file)
-        best_file = structural_file
-
-        if preset != "clear":
-            raster_file = temporary_root / "raster.pdf"
-            try:
-                write_raster_compressed_pdf(source, raster_file, preset)
-                if raster_file.stat().st_size < best_file.stat().st_size:
-                    best_file = raster_file
-                    method = "图片式压缩"
-            except Exception:
-                method = "保留文字结构"
-
-        shutil.copyfile(best_file, output_file)
-
-    source_size = source.stat().st_size
-    output_size = output_file.stat().st_size
+    result = PdfToolResult(final_file, "", source_size, output_size,
+                           compression_method=method, compression_note=note)
     estimated_low, estimated_high = estimate_compressed_size(source_size, preset)
-    log_file = write_log(
-        output_file.parent,
-        "PDF 压缩",
-        [
-            f"来源文件：{source}",
-            f"输出文件：{output_file}",
-            f"压缩档位：{compression_preset(preset)['label']}",
-            f"实际方式：{method}",
-            f"预计大小：{estimated_low}-{estimated_high}",
-            f"压缩前大小：{source_size}",
-            f"压缩后大小：{output_size}",
-            f"节省比例：{PdfToolResult(str(output_file), '', source_size, output_size).saved_percent}%",
-        ],
-    )
-    return PdfToolResult(str(output_file), log_file, source_size, output_size)
+    try:
+        log_file = write_log(target.parent, "PDF 压缩", [
+            f"来源文件：{source}", f"输出文件：{final_file}",
+            f"压缩档位：{compression_preset(preset)['label']}", f"实际方式：{method}",
+            *(["回退说明：" + note] if note else []),
+            f"预计大小：{estimated_low}-{estimated_high}", f"压缩前大小：{source_size}",
+            f"压缩后大小：{output_size}", f"节省比例：{result.saved_percent}%",
+        ])
+    except OSError as error:
+        note = (note + " " if note else "") + "PDF 已保存，但日志未写入。" + compression_io_message(error)
+        log_file = ""
+    return replace(result, log_file=log_file, compression_note=note)
 
 
 def images_to_pdf(image_files, output_file):

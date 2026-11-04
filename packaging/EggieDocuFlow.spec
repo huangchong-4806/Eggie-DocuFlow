@@ -72,7 +72,7 @@ a = Analysis(
     datas=[
         (str(PROJECT_ROOT / "LICENSE"), "."),
         (str(PROJECT_ROOT / "THIRD_PARTY_NOTICES.md"), "."),
-        (str(PROJECT_ROOT / "release_notes_v1.5.0.md"), "."),
+        (str(PROJECT_ROOT / "release_notes_v1.5.1.md"), "."),
         (str(PROJECT_ROOT / "BUILD_RELEASE.md"), "."),
         (str(PROJECT_ROOT / "licenses"), "licenses"),
         (str(PROJECT_ROOT / "assets" / "software_logo.png"), "assets"),

@@ -205,7 +205,13 @@ class ExcelMergeToolTests(unittest.TestCase):
     def test_merge_rejects_output_alias_of_source(self):
         source = self.create_workbook("source.xlsx")
         alias = self.root / "alias.xlsx"
-        alias.symlink_to(source)
+        try:
+            alias.symlink_to(source)
+        except OSError as error:
+            if getattr(error, "winerror", None) != 1314:
+                raise
+            # Windows standard users can make a hard link to the same source file.
+            alias.hardlink_to(source)
 
         with self.assertRaisesRegex(ValueError, "不能与待合并的源文件相同"):
             build_merged_workbook([source], alias)

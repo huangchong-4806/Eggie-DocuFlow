@@ -1,10 +1,10 @@
-# V1.5.0 构建入口
+# V1.5.1 构建入口
 
-本版构建号2026101601。业务代码沿用已验收RC2；版本标识、说明及PDFium随包声明更新。不能用默认PyPI PyMuPDF wheel代替实际组合：PyMuPDF1.28.2 / MuPDF1.28.5。
+本版构建号2026110401。业务代码沿用已验收的 V1.5.1 构建 2026110302。正式版更新版本标识及随包说明。不能用默认PyPI PyMuPDF wheel代替实际组合：PyMuPDF1.28.2 / MuPDF1.28.5。
 
 ## 输入与环境
 
-同一GitHub v1.5.0发布页提供项目源码、第三方源码材料及SHA256SUMS.txt。项目源码对应v1.5.0标签；第三方材料包含MuPDF1.28.5完整源码（含thirdparty），其SHA256为98a5c10cda20c3992cdf76ff6b2a1149c32bd79cc796d3f703230b1185b7e934。
+同一GitHub v1.5.1发布页提供项目源码、第三方源码材料及SHA256SUMS.txt。项目源码对应 v1.5.1 标签。第三方引擎与依赖沿用 1.5.0，配套第三方源码归档按原样提供，其中的归档记录保留 1.5.0 版本标记；本次版本、构建入口以项目源码为准。第三方材料包含MuPDF1.28.5完整源码（含thirdparty），其SHA256为98a5c10cda20c3992cdf76ff6b2a1149c32bd79cc796d3f703230b1185b7e934。
 
 - Mac：Python3.12.13，Apple Silicon；实际构建主机macOS27.0.1，成品最低系统声明macOS15。
 - Windows：Python3.12.10 x64、Visual Studio2022 C++、Inno Setup6；实际为Windows11 ARM虚拟机运行x64。
@@ -18,7 +18,7 @@
 3. 设置`PYMUPDF_SETUP_MUPDF_BUILD`为MuPDF源码绝对路径。Windows另设置`PYMUPDF_SETUP_DEVENV`为devenv.com路径和`PYMUPDF_SETUP_MUPDF_VS_UPGRADE=1`。
 4. 执行`python -m pip wheel --no-build-isolation --no-deps --no-index <PyMuPDF源码目录> -w <新wheel目录>`，再安装生成的wheel。先导入PySide6.QtCore，再核对pymupdf.VersionBind为1.28.2、VersionFitz为1.28.5。
 5. 运行项目测试，再用PyInstaller及`packaging/EggieDocuFlow.spec`或`packaging/EggieDocuFlow_windows.spec`打包，明确给定新的distpath/workpath。Mac使用本机临时签名，未做Apple开发者签名和公证。
-6. Windows安装器用`packaging/EggieDocuFlow_windows.iss`生成，四个变量必须完整：EGGIE_APP_VERSION=1.5.0、EGGIE_APP_SOURCE_DIR、EGGIE_APP_OUTPUT_DIR、EGGIE_CHINESE_LANGUAGE_FILE。后三项分别指向本次应用目录、新安装包目录和packaging/ChineseSimplified.isl。
+6. Windows安装器用`packaging/EggieDocuFlow_windows.iss`生成，四个变量必须完整：EGGIE_APP_VERSION=1.5.1、EGGIE_APP_SOURCE_DIR、EGGIE_APP_OUTPUT_DIR、EGGIE_CHINESE_LANGUAGE_FILE。后三项分别指向本次应用目录、新安装包目录和packaging/ChineseSimplified.isl。
 7. 核对冻结代码、依赖版本、随包许可证及成品启动。重新编译的哈希可能因工具链、时间和签名而不同，版本号相同不代表同一成品。
 
 ## 范围说明

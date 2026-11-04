@@ -51,13 +51,8 @@ def publish_new_file(temporary_file, output_file):
         if error.errno not in _LINK_RESTRICTION_ERRORS:
             raise
 
-    descriptor = None
+    descriptor = os.open(output_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
     try:
-        descriptor = os.open(
-            output_path,
-            os.O_WRONLY | os.O_CREAT | os.O_EXCL,
-            0o644,
-        )
         with temporary_path.open("rb") as source, os.fdopen(descriptor, "wb") as target:
             descriptor = None
             shutil.copyfileobj(source, target, length=1024 * 1024)
