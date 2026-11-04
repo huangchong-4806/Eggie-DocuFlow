@@ -109,8 +109,8 @@ class WindowsBuildTests(unittest.TestCase):
             shell = ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass"]
             jobs = [subprocess.Popen(shell + ["-File", str(script)], cwd=root, env=env,
                                      stdout=subprocess.PIPE, stderr=subprocess.STDOUT) for _ in range(2)]
-            for job in jobs:
-                output = job.communicate(timeout=90)[0]
+            outputs = [job.communicate(timeout=90)[0] for job in jobs]
+            for job, output in zip(jobs, outputs):
                 self.assertEqual(job.returncode, 0, output[-1600:])
             installer = next((root / "release").glob("*.exe"))
             good = installer.read_bytes()

@@ -14,6 +14,20 @@ $LocalReleaseDir = [System.IO.Path]::Combine($LocalBuildRoot, 'release')
 $SpecFile = [System.IO.Path]::Combine($ProjectRoot, 'packaging', 'EggieDocuFlow_windows.spec')
 $InstallerFile = [System.IO.Path]::Combine($ProjectRoot, 'packaging', 'EggieDocuFlow_windows.iss')
 
+function Get-InstallerHash([string]$FilePath) {
+    $Hash = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $Stream = [System.IO.File]::OpenRead($FilePath)
+        try {
+            return [System.BitConverter]::ToString($Hash.ComputeHash($Stream))
+        } finally {
+            $Stream.Dispose()
+        }
+    } finally {
+        $Hash.Dispose()
+    }
+}
+
 function Find-InnoSetupCompiler {
     $candidate = Get-Command 'ISCC.exe' -ErrorAction SilentlyContinue
     if ($candidate) {
@@ -83,9 +97,9 @@ try {
     if ((Get-Item -LiteralPath $LocalInstallerPath).Length -eq 0) {
         throw 'The generated installer is empty.'
     }
-    $ExpectedHash = (Get-FileHash -LiteralPath $LocalInstallerPath -Algorithm SHA256).Hash
+    $ExpectedHash = Get-InstallerHash $LocalInstallerPath
     Copy-Item -LiteralPath $LocalInstallerPath -Destination $StagedInstaller
-    if ((Get-FileHash -LiteralPath $StagedInstaller -Algorithm SHA256).Hash -ne $ExpectedHash) {
+    if ((Get-InstallerHash $StagedInstaller) -ne $ExpectedHash) {
         throw 'Installer copy failed its SHA-256 check.'
     }
     # Publish by same-directory rename, including on Windows PowerShell 5.1.
