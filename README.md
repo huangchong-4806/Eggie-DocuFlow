@@ -19,7 +19,7 @@ A free desktop toolkit for Excel, PDF and file workflows. Merge, split and clean
 - **Windows**：Windows 10/11，64 位。 / Windows 10/11, 64-bit.
 - 无需安装 Python。 / No Python installation required.
 
-[V1.5.1 更新说明 / Release notes](release_notes_v1.5.1.md)
+[V1.5.1 更新说明 / Release notes](release_notes_v1.5.1.md) · [下载校验与已知安全事项 / Verification and security](SECURITY.md)
 
 Excel 与 PDF 默认在本机处理并另存结果；文件改名先预览再执行。只有主动配置、启用并确认云 OCR 后，扫描页才会发送给所选服务商。<br>
 Excel and PDF processing runs locally and saves new output files. File renaming requires a preview first. Scanned pages are sent to the selected cloud OCR provider only after configuration, opt-in and confirmation.
@@ -49,8 +49,8 @@ Excel and PDF processing runs locally and saves new output files. File renaming 
 - [V1.4.0 Mac：Apple 芯片 / Apple silicon](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/download/v1.4.0/EggieDocuFlow_V1.4.0_mac.zip)
 - [V1.4.0 Windows：Windows 10/11，64 位 / 64-bit](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/download/v1.4.0/EggieDocuFlow_V1.4.0_Windows_x64_Setup.exe)
 
-V1.4.0 的 Mac 系统要求为 macOS 11 及以上；V1.5.0 的 Mac 系统要求为 macOS 15 及以上。<br>
-The V1.4.0 Mac release requires macOS 11 or later; V1.5.0 requires macOS 15 or later.
+V1.4.0 的 Mac 系统要求为 macOS 11 及以上；V1.5.1 的 Mac 系统要求为 macOS 15 及以上。<br>
+The V1.4.0 Mac release requires macOS 11 or later; V1.5.1 requires macOS 15 or later.
 
 开源许可和第三方声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。保留原 MIT 授权与署名，包含 PyMuPDF / MuPDF 的组合应用按 AGPLv3 分发。<br>
 See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for licensing and third-party notices. Original MIT notices are retained; the combined application including PyMuPDF / MuPDF is distributed under AGPLv3.
@@ -136,54 +136,62 @@ run the source code.
 
 ## 软件界面 / Screenshots
 
-以下为 V1.5.0 中文界面。 / The screenshots below show the V1.5.0 Chinese interface.
+以下为 V1.5.1 中文界面。 / The screenshots below show the V1.5.1 Chinese interface.
 
 ### 首页 / Home
 
-![V1.5.0 首页 / Home](docs/ui/v1_5_0_home.png)
+![V1.5.1 首页 / Home](docs/ui/v1_5_1_home.png)
 
 ### Excel 分类拆分 / Excel category splitting
 
-![V1.5.0 分类拆分 / Category splitting](docs/ui/v1_5_0_excel_category_split.png)
+![V1.5.1 分类拆分 / Category splitting](docs/ui/v1_5_1_excel_category_split.png)
 
 ### PDF 页面编辑 / PDF page editing
 
-![V1.5.0 PDF 页面编辑 / PDF page editing](docs/ui/v1_5_0_pdf_pages.png)
+![V1.5.1 PDF 页面编辑 / PDF page editing](docs/ui/v1_5_1_pdf_pages.png)
 
 ### PDF 内容编辑 / PDF content editing
 
-![V1.5.0 PDF 水印与页码 / PDF watermarks and page numbers](docs/ui/v1_5_0_pdf_content.png)
+![V1.5.1 PDF 水印与页码 / PDF watermarks and page numbers](docs/ui/v1_5_1_pdf_content.png)
+
+### Excel 清理预览 / Excel cleanup preview
+
+模拟台账中，删除第 3 行会影响第 4 行的图片。预览会指出具体位置，并提示可改为只清理文字。
+
+![V1.5.1 Excel 数据清理 / Excel cleanup](docs/ui/v1_5_1_excel_cleanup.png)
+
+### PDF 独立工具 / Standalone PDF tools
+
+工作区中的文档有待应用的涂黑标记时，仍可选择另一份 PDF 进行压缩。
+
+![V1.5.1 独立 PDF 压缩 / Standalone PDF compression](docs/ui/v1_5_1_pdf_independent.png)
 
 <details>
 <summary>其他工具界面 / More tool screenshots</summary>
 
 #### Excel 合并 / Excel merge
 
-![V1.5.0 Excel 合并 / Excel merge](docs/ui/v1_5_0_excel_merge.png)
+![V1.5.1 Excel 合并 / Excel merge](docs/ui/v1_5_1_excel_merge.png)
 
 #### 按行数拆分 / Split by row count
 
-![V1.5.0 按行数拆分 / Split by row count](docs/ui/v1_5_0_excel_rows.png)
-
-#### 数据清理 / Data cleanup
-
-![V1.5.0 Excel 数据清理 / Excel cleanup](docs/ui/v1_5_0_excel_cleanup.png)
+![V1.5.1 按行数拆分 / Split by row count](docs/ui/v1_5_1_excel_rows.png)
 
 #### 发票解析 / Invoice extraction
 
-![V1.5.0 发票解析 / Invoice extraction](docs/ui/v1_5_0_invoice.png)
+![V1.5.1 发票解析 / Invoice extraction](docs/ui/v1_5_1_invoice.png)
 
 #### 文档智能处理 / Document processing
 
-![V1.5.0 文档智能处理 / Document processing](docs/ui/v1_5_0_document.png)
+![V1.5.1 文档智能处理 / Document processing](docs/ui/v1_5_1_document.png)
 
 #### PDF 批量处理 / PDF batch processing
 
-![V1.5.0 PDF 批量处理 / PDF batch processing](docs/ui/v1_5_0_batch.png)
+![V1.5.1 PDF 批量处理 / PDF batch processing](docs/ui/v1_5_1_batch.png)
 
 #### 批量改名 / Batch rename
 
-![V1.5.0 批量改名 / Batch rename](docs/ui/v1_5_0_rename.png)
+![V1.5.1 批量改名 / Batch rename](docs/ui/v1_5_1_rename.png)
 
 </details>
 
@@ -384,10 +392,25 @@ python -m pip install -r requirements.txt
 PYTHON="$VIRTUAL_ENV/bin/python" scripts/run_macos_python.sh main.py
 ```
 
+Windows 开发环境（PowerShell，在仓库根目录执行）：
+
+```powershell
+py -3.12 -m venv .venv-pdf
+.\.venv-pdf\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv-pdf\Scripts\python.exe main.py
+```
+
 ## 测试 / Tests
 
 ```bash
 QT_QPA_PLATFORM=offscreen PYTHON="$VIRTUAL_ENV/bin/python" scripts/run_macos_python.sh -m unittest discover -s tests -v
+```
+
+Windows 使用桌面显示后端执行测试。窗口布局测试使用的逻辑桌面至少应能容纳 1280 × 820 的窗口。
+
+```powershell
+$env:QT_QPA_PLATFORM = "windows"
+.\.venv-pdf\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
 性能基准 / Performance benchmark:
@@ -618,6 +641,6 @@ Added Excel category splitting, expanded PDF editing and clearer layouts and lab
 
 ## 许可证 / License
 
-原有代码的 MIT 授权与作者署名保留在 [LICENSE](LICENSE)。V1.5.0 的 PDF 工作区集成及包含 PyMuPDF / MuPDF 的组合应用按 [GNU AGPLv3](licenses/AGPL-3.0.txt) 分发，第三方组件遵守各自许可证。完整说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+原有代码的 MIT 授权与作者署名保留在 [LICENSE](LICENSE)。自 V1.5.0 起，PDF 工作区集成及包含 PyMuPDF / MuPDF 的组合应用按 [GNU AGPLv3](licenses/AGPL-3.0.txt) 分发，第三方组件遵守各自许可证。完整说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
-The original code's MIT grant and author notices are retained in [LICENSE](LICENSE). The V1.5.0 PDF workspace integration and combined application including PyMuPDF / MuPDF are distributed under [GNU AGPLv3](licenses/AGPL-3.0.txt). Third-party components retain their own licenses. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for full details.
+The original code's MIT grant and author notices are retained in [LICENSE](LICENSE). Since V1.5.0, the PDF workspace integration and combined application including PyMuPDF / MuPDF are distributed under [GNU AGPLv3](licenses/AGPL-3.0.txt). Third-party components retain their own licenses. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for full details.
