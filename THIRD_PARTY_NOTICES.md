@@ -1,6 +1,6 @@
 # 开源说明与第三方组件
 
-Eggie DocuFlow / Eggie文档处理系统。本文适用于 V1.5.1（构建号2026110401），不追溯替换旧版的许可证声明。
+Eggie DocuFlow / Eggie文档处理系统。本文适用于 V1.5.1（构建号2026110402），不追溯替换旧版的许可证声明。
 
 ## 项目代码及完整许可文本
 
@@ -14,17 +14,17 @@ Eggie DocuFlow / Eggie文档处理系统。本文适用于 V1.5.1（构建号202
 
 ## 主要运行组件
 
-以下版本与已验收RC2的成品和构建环境核对；本版沿用相同依赖，平台差异分别列出。
+本表列出本构建采用的主要依赖；两端完整版本见 packaging/rebuild 下的清单。
 
 | 组件 | 核对版本 | 许可及来源 |
 | --- | --- | --- |
 | PyMuPDF / MuPDF | 1.28.2 / 1.28.5 | AGPLv3；Copyright Artifex Software, Inc.；[项目及源代码](https://github.com/pymupdf/PyMuPDF)、[MuPDF 源代码](https://github.com/ArtifexSoftware/mupdf)。采用开源路线，不使用商业授权或 PyMuPDF Pro 功能。 |
 | PySide6 Essentials / Shiboken6 / Qt | 6.10.3 | 包元数据列为 LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only；本应用保留动态库及 LGPLv3 权利，未修改这些库；[Qt for Python 源代码](https://code.qt.io/cgit/pyside/pyside-setup.git/)、[Qt 源代码](https://code.qt.io/cgit/qt/)。 |
-| pypdf | 6.10.0 | BSD-3-Clause；[源代码](https://github.com/py-pdf/pypdf)。 |
+| pypdf | 6.21.4 | BSD-3-Clause；[源代码](https://github.com/py-pdf/pypdf)。 |
 | pypdfium2 / PDFium | 5.10.1 / 151.0.7891.0 | BSD-3-Clause、Apache-2.0 及 PDFium 构建依赖的独立声明；[源代码](https://github.com/pypdfium2-team/pypdfium2)。随包保留 BUILD_LICENSES 与 LICENSES；准确配套的完整官方文本位于 licenses/pdfium/mac/ 和 licenses/pdfium/windows/，各16份，补正包装器内较旧的libpng、zlib、lcms和ICU声明。 |
-| Pillow | 12.2.0 | MIT-CMU，包含其编解码依赖的许可证；[源代码](https://github.com/python-pillow/Pillow)。 |
+| Pillow | 13.0.0 | MIT-CMU，包含其编解码依赖的许可证；[源代码](https://github.com/python-pillow/Pillow)。 |
 | openpyxl | 3.1.5 | MIT；[源代码](https://foss.heptapod.net/openpyxl/openpyxl)。 |
-| pdfplumber / pdfminer.six | 0.11.8 / 20251107 | MIT；[pdfplumber](https://github.com/jsvine/pdfplumber)、[pdfminer.six](https://github.com/pdfminer/pdfminer.six)。 |
+| pdfplumber / pdfminer.six | 0.11.10 / 20260107 | MIT；[pdfplumber](https://github.com/jsvine/pdfplumber)、[pdfminer.six](https://github.com/pdfminer/pdfminer.six)。 |
 | cryptography | Mac 50.0.1 / Windows 50.0.2，所用OpenSSL分别4.0.2/4.0.3 | Apache-2.0 OR BSD-3-Clause，另含所用加密库的声明；[源代码](https://github.com/pyca/cryptography)。 |
 | Alibaba Cloud OCR SDK | 3.1.3 | Apache-2.0 及其传递依赖许可；[源代码](https://github.com/aliyun/alibabacloud-python-sdk)。仅原有用户主动配置的云 OCR 流程使用；新 PDF 工作区不联网、不自动 OCR。 |
 
@@ -46,4 +46,4 @@ This software is based in part on the work of the FreeType Team.
 
 PyMuPDF 1.28.2 is built against MuPDF 1.28.5. Both are under AGPL-3.0; this non-default combination is not generally supported by upstream. Runtime verification and original-source/build-patch references are included in this release source and dependency materials. macOS minimum remains 15.
 
-本次补丁未改变第三方引擎和依赖的选型。第三方源码包沿用 V1.5.0 的归档及其构建记录。
+定制 PDF 引擎保持原组合。构建 2026110402 的依赖更新与配套来源记录见第三方源码包及其清单。
