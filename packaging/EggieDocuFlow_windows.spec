@@ -35,6 +35,12 @@ a = Analysis(
     optimize=1,
 )
 
+# Build-machine paths in installer metadata do not belong in a distributed app.
+a.datas = [entry for entry in a.datas if not (
+    ".dist-info/" in entry[0].replace("\\", "/")
+    and Path(entry[0].replace("\\", "/")).name in {"direct_url.json", "uv_cache.json"}
+)]
+
 pyz = PYZ(a.pure)
 
 exe = EXE(
