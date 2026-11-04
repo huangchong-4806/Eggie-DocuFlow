@@ -120,7 +120,7 @@ from ui.theme import ACCENT_PALETTES, build_theme_colors, build_theme_stylesheet
 from ui.tasks import BackgroundTaskThread, DocumentOCRThread, InvoiceBatchProcessThread
 from ui.pdf_workspace import PdfWorkspaceWidget
 from v2.layout_engine import process_layout_document
-from version import APP_VERSION, BUILD_TYPE
+from version import APP_VERSION, BUILD_NUMBER, BUILD_TYPE
 
 
 APP_NAME_ZH = "Eggie文档处理系统"
@@ -526,7 +526,7 @@ class ExcelMergerWindow(QMainWindow):
         layout.addStretch(1)
 
         version_suffix = {"development": "（开发版）", "release_candidate": "（发布候选版）"}.get(BUILD_TYPE, "")
-        version = QLabel(f"版本 {APP_VERSION}{version_suffix}")
+        version = QLabel(f"版本 {APP_VERSION}{version_suffix}\n构建 {BUILD_NUMBER}")
         version.setProperty("homeRole", "muted")
         layout.addWidget(version)
         settings_button = QPushButton("设置")
