@@ -1,6 +1,6 @@
 # 开源说明与第三方组件
 
-Eggie DocuFlow / Eggie文档处理系统。本文适用于 V1.5.0（构建号2026101601），不追溯替换旧版的许可证声明。
+Eggie DocuFlow / Eggie文档处理系统。本文适用于 V1.5.1（构建号2026110401），不追溯替换旧版的许可证声明。
 
 ## 项目代码及完整许可文本
 
@@ -32,7 +32,7 @@ Eggie DocuFlow / Eggie文档处理系统。本文适用于 V1.5.0（构建号202
 
 ## 源代码与分发要求
 
-项目源代码仓库：[huangchong-4806/Eggie-DocuFlow](https://github.com/huangchong-4806/Eggie-DocuFlow)。本版源码对应v1.5.0标签；同一发布页提供准确的项目源码、第三方源码材料及SHA256清单。旧V1.4.0源码不是本版的对应源码。
+项目源代码仓库：[huangchong-4806/Eggie-DocuFlow](https://github.com/huangchong-4806/Eggie-DocuFlow)。本版源码对应v1.5.1标签；同一发布页提供准确的项目源码、第三方源码材料及SHA256清单。旧V1.4.0源码不是本版的对应源码。
 
 同一发布位置提供本版项目源码、依赖源码材料、构建与安装脚本、本文件和许可证。重建入口见 BUILD_RELEASE.md 及 packaging/rebuild/；实际MuPDF1.28.5源码与其thirdparty目录完整保留。requirements.txt用于开发，准确重建须按说明准备定制引擎。
 
@@ -42,6 +42,8 @@ This software is based in part on the work of the FreeType Team.
 
 材料限制：PDFium官方历史任务日志已过期，历史源码检出未取得直接证明；cryptography所用OpenSSL的源码版本、哈希和参数有实际物料清单依据，但原始构建任务身份未直接定位。来源、许可证、源码和固定配方随材料保留；未声称完成独立离线或跨电脑重建。
 
-## V1.5.0 PDF engine build
+## V1.5.1 PDF engine build
 
 PyMuPDF 1.28.2 is built against MuPDF 1.28.5. Both are under AGPL-3.0; this non-default combination is not generally supported by upstream. Runtime verification and original-source/build-patch references are included in this release source and dependency materials. macOS minimum remains 15.
+
+本次补丁未改变第三方引擎和依赖的选型。第三方源码包沿用 V1.5.0 的归档及其构建记录。

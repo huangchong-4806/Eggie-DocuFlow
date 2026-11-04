@@ -19,8 +19,8 @@ class ReleaseMetadataTests(unittest.TestCase):
 
     def test_release_version_is_consistent(self):
         self.assertEqual(APP_VERSION, "1.5.1")
-        self.assertEqual(BUILD_TYPE, "development")
-        self.assertEqual(BUILD_DATE, "2026-11-03")
+        self.assertEqual(BUILD_TYPE, "release")
+        self.assertEqual(BUILD_DATE, "2026-11-04")
         spec = (ROOT / "packaging" / "EggieDocuFlow.spec").read_text(encoding="utf-8")
         self.assertIn('"CFBundleVersion": version_scope["BUILD_NUMBER"]', spec)
 
