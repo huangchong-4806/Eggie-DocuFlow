@@ -152,6 +152,16 @@ activemq-data/
 # Environments
 .env
 .envrc
+.env.*
+.env-*
+!.env.example
+!.env.sample
+*.p12
+*.pfx
+*.key
+id_rsa
+id_ed25519
+credentials.json
 .venv
 .venv-pdf/
 env/
@@ -162,6 +172,7 @@ venv.bak/
 
 # Local release output and benchmark files
 .workbuddy/
+.tools/
 outputs/
 output/
 work/
@@ -170,6 +181,10 @@ logs/
 tmp/
 beta_testing/
 *.xlsx
+*.xls
+*.xlsm
+*.xlsb
+~$*
 
 # Spyder project settings
 .spyderproject

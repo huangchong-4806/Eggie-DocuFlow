@@ -3,7 +3,7 @@ Eggie DocuFlow licensing notice
 The original Eggie DocuFlow code remains available under the MIT License
 reproduced below, including its original copyright notice.
 
-The V1.5.0 PDF workspace integration and distribution of the combined
+Since V1.5.0, the PDF workspace integration and distribution of the combined
 application using PyMuPDF / MuPDF are governed by the GNU Affero General
 Public License, version 3 (AGPL-3.0-only). See licenses/AGPL-3.0.txt for the
 complete license and THIRD_PARTY_NOTICES.md for component-specific notices

@@ -10,7 +10,7 @@
 
 **Spec:** `PRD.md` 第九节，2026-09-15 V1.5.0 PDF 工作区升级。第一至八节为 V1.4.0 历史基线，不是本次打包发布指令。
 
-**Approved UI:** `/Users/huang/.codex/visualizations/2026/09/14/01a09e8c-8cac-7420-a4dc-b5a4e7f76a52/eggie-pdf-workspace-v2.html`。该 HTML 为视觉与交互参考，不能直接当作真实 PDF 引擎；同目录 V1 原型保持原样。
+**Approved UI:** `eggie-pdf-workspace-v2.html`。该 HTML 为视觉与交互参考，不能直接当作真实 PDF 引擎；同目录 V1 原型保持原样。
 
 ## Global Constraints
 
@@ -52,11 +52,11 @@
 
 **Interfaces:** 消费 `PdfPageRef`、`PdfToolResult`、`_publish_writer(writer, output_file)`；保持 `save_pages(page_refs, output_file, title="PDF 页面整理") -> PdfToolResult` 不变。
 
-- [x] 记录 `git status --short` 和原有测试结果。本机 `.venv` 实测为 3.9.6；使用已核验的 `/Users/huang/.local/bin/python3.12` 在 `mktemp -d` 创建的任务临时目录内建独立环境，不覆盖原 `.venv`。后续命令中 `PDF_WORK_PYTHON` 指该目录内的 `bin/python`，全程不更改 HOME / CODEX_HOME。
+- [x] 记录 `git status --short` 和原有测试结果。本机 `.venv` 实测为 3.9.6；使用已核验的 `python3.12` 在 `mktemp -d` 创建的任务临时目录内建独立环境，不覆盖原 `.venv`。后续命令中 `PDF_WORK_PYTHON` 指该目录内的 `bin/python`，全程不更改 HOME / CODEX_HOME。
 
 ```bash
-PDF_WORK_ENV=$(mktemp -d /private/tmp/eggie-pdf-workspace.XXXXXX)
-/Users/huang/.local/bin/python3.12 -m venv "$PDF_WORK_ENV"
+PDF_WORK_ENV=$(mktemp -d "${TMPDIR:-/tmp}/eggie-pdf-workspace.XXXXXX")
+python3.12 -m venv "$PDF_WORK_ENV"
 PDF_WORK_PYTHON="$PDF_WORK_ENV/bin/python"
 "$PDF_WORK_PYTHON" -m pip install -r requirements.txt
 QT_QPA_PLATFORM=offscreen PYTHON="$PDF_WORK_PYTHON" scripts/run_macos_python.sh -m unittest discover -s tests -v
@@ -477,7 +477,7 @@ self.assertIn('"CFBundleVersion": "12"', spec)
 - 开源准备：保留原 MIT 全文；新增 AGPL／GPL／LGPL 正文与第三方声明；两个打包配置均能找到 48 项递归元数据资源。只检查配置及资源，不代表安装包已经构建或完成分发合规验收。
 - 未逐项完成的扩展检查仍保留未勾选：Windows 实机与安装包、各类 PDF 的全部排列组合、Finder 实际拖入／完整 Tab 焦点巡检、真实只读输出目录场景。它们不被本机自动测试或“预览”打开测试冒充；正式发布前继续核验。
 - 最后一次限定代码复核未发现阻断问题；另有 9 项相关检查通过，并复核了正常导出后登记临时文件清理、原文件不变、符号链接路径拒绝和进度消息不提前结束任务。
-- 原 `.venv`、V1／V2 HTML 原型及用户 PDF 均保留。确认测试进程全部结束后，已删除 `/private/tmp/eggie-pdf-workspace.NTOO3d` 中约 487 MB 的独立环境、合成 PDF、测试截图与脚本，并确认该目录不存在；这些测试内容可重建。不修改系统 Python，不提交或推送，HEAD 仍为 `5d6e216`。
+- 原 `.venv`、V1／V2 HTML 原型及用户 PDF 均保留。确认测试进程全部结束后，已删除 `临时工作目录/eggie-pdf-workspace.NTOO3d` 中约 487 MB 的独立环境、合成 PDF、测试截图与脚本，并确认该目录不存在；这些测试内容可重建。不修改系统 Python，不提交或推送，HEAD 仍为 `5d6e216`。
 
 本次交付是 V1.5.0 本地开发代码，不是正式安装版。勾选表示相应本机实施和验证已完成；未勾选的复合验收项仍需补齐，以上记录优先于原计划示例。源码运行方式见 README，旧 Python 3.9 环境不能直接运行新增引擎。
 
@@ -495,4 +495,4 @@ self.assertIn('"CFBundleVersion": "12"', spec)
 - [x] 真实界面组件与后台进程串联检查：换文件后旧来源不可再读取；插入及撤销／重做仍可预览；密文、中文水印与页码另存后重新读取正确，两份原文件摘要均不变。另用 Poppler 渲染并目视检查黑块、保留文字、水印和页码；此项为离屏组件检查，不冒充新一轮原生窗口或安装包验收。
 - [x] 首轮全量检查曾停在原有 `test_global_progress_keeps_the_window_responsive` 的关闭提示。进程采样定位到测试收尾 `closeEvent` 的运行中线程提醒；结束该临时测试后，原测试单独复跑通过，再次全量运行 208 项通过。未修改该测试或相关功能，保留此偶发收尾时序记录。
 - [x] `git diff --check` 通过；`main.py --version` 返回 `1.5.0`。没有构建安装包，没有提交、推送或发布；Windows 实机仍未验收。
-- [x] 全部测试进程结束后，已删除 `/private/tmp/eggie-pdf-fixes.0J9Y4N` 中约 965 MB 的临时环境、缓存、合成样本、截图和测试快照，并确认目录不存在。测试内容可重建，原 `.venv` 和用户原文件保留；未额外留存本轮修复前代码备份。
+- [x] 全部测试进程结束后，已删除 `临时工作目录/eggie-pdf-fixes.0J9Y4N` 中约 965 MB 的临时环境、缓存、合成样本、截图和测试快照，并确认目录不存在。测试内容可重建，原 `.venv` 和用户原文件保留；未额外留存本轮修复前代码备份。
