@@ -3,6 +3,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -32,8 +33,13 @@ class AppNavigationTests(unittest.TestCase):
         self.window = ExcelMergerWindow()
 
     def tearDown(self):
-        self.window.close()
-        self.window.pdf_thumbnail_tempdir.cleanup()
+        # A leftover worker normally opens a modal close warning. Surface it as
+        # a test failure on unattended runners.
+        try:
+            with patch("app.QMessageBox.warning"):
+                self.assertTrue(self.window.close(), "The test window refused to close")
+        finally:
+            self.window.pdf_thumbnail_tempdir.cleanup()
 
     def test_split_modes_keep_legacy_controls_and_expose_category_page(self):
         self.window.show_split_tool()
@@ -837,12 +843,14 @@ with tempfile.TemporaryDirectory() as folder:
         self.assertTrue(self.window.close())
 
     def test_global_progress_keeps_the_window_responsive(self):
-        timer_fired = []
+        timer_fired = threading.Event()
         completed = []
+        errors = []
 
         def worker(progress_callback):
             progress_callback(0, 2, "正在处理第 1 / 2 个文件")
-            QThread.msleep(120)
+            if not timer_fired.wait(5):
+                raise TimeoutError("The GUI timer did not run while the worker was active")
             progress_callback(2, 2, "已处理 2 / 2 个文件")
             return "done"
 
@@ -851,17 +859,25 @@ with tempfile.TemporaryDirectory() as folder:
             "准备处理文件…",
             worker,
             completed.append,
+            on_failure=errors.append,
             total=2,
         )
-        QTimer.singleShot(20, lambda: timer_fired.append(True))
-        for _ in range(50):
-            self.application.processEvents()
-            if completed:
-                break
-            QTest.qWait(10)
-
         self.assertTrue(started)
-        self.assertTrue(timer_fired)
+        QTimer.singleShot(20, timer_fired.set)
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            self.application.processEvents()
+            # The result can reach the window before QThread.run() returns.
+            if (completed or errors) and not any(
+                thread.isRunning() for thread in self.window.findChildren(QThread)
+            ):
+                break
+            time.sleep(0.01)
+        else:
+            self.fail("The background task did not deliver its result and exit in time")
+
+        self.assertEqual(errors, [])
+        self.assertTrue(timer_fired.is_set())
         self.assertEqual(completed, ["done"])
         self.assertIsNone(self.window.background_task_thread)
         self.assertTrue(self.window.stack.isEnabled())
