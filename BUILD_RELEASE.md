@@ -1,14 +1,15 @@
 # V1.5.1 构建入口
 
-本版构建号2026110401。业务代码沿用已验收的 V1.5.1 构建 2026110302。正式版更新版本标识及随包说明。不能用默认PyPI PyMuPDF wheel代替实际组合：PyMuPDF1.28.2 / MuPDF1.28.5。
+本版构建号2026110401。本版基于已验收的 V1.5.1 构建 2026110302，并修复了缺少中文系统字体时旧水印接口的文字提取。不能用默认PyPI PyMuPDF wheel代替实际组合：PyMuPDF1.28.2 / MuPDF1.28.5。
 
 ## 输入与环境
 
 同一GitHub v1.5.1发布页提供项目源码、第三方源码材料及SHA256SUMS.txt。项目源码对应 v1.5.1 标签。第三方引擎与依赖沿用 1.5.0，配套第三方源码归档按原样提供，其中的归档记录保留 1.5.0 版本标记；本次版本、构建入口以项目源码为准。第三方材料包含MuPDF1.28.5完整源码（含thirdparty），其SHA256为98a5c10cda20c3992cdf76ff6b2a1149c32bd79cc796d3f703230b1185b7e934。
 
-- Mac：Python3.12.13，Apple Silicon；实际构建主机macOS27.0.1，成品最低系统声明macOS15。
-- Windows：Python3.12.10 x64、Visual Studio2022 C++、Inno Setup6；实际为Windows11 ARM虚拟机运行x64。
+- Mac：Python3.12.13，Apple Silicon；实际构建主机 macOS 27.2，成品最低系统声明macOS15。
+- Windows：Python3.12.10 x64、Visual Studio2022 C++、Inno Setup6；本次应用及安装器在 GitHub Actions 的 Windows Server 2022 x64 环境构建并安装验证。定制 PDF 引擎来自已经核验的 Windows x64 wheel。
 - `packaging/rebuild/requirements-*-portable.txt`为两端构建版本清单，排除PyMuPDF以防覆盖定制引擎；不是含所有平台wheel的离线包。
+- 使用已重建的定制 wheel 打包时，请核对 PyMuPDF 和 MuPDF 的实际版本。Windows 的 libclang、pipcl 和 SWIG 仅在从源码重建引擎时使用。
 - 项目级打包脚本会写入构建输出目录，仅在新的源码副本执行，勿指向已有交付文件。
 
 ## 重建顺序

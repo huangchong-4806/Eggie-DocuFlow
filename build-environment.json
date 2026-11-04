@@ -3,5 +3,7 @@
   "build": "2026110401",
   "engine": "1.28.5",
   "binding": "1.28.2",
-  "environment_records": "BUILD_RELEASE.md and packaging/rebuild/requirements-mac-portable.txt / requirements-windows-portable.txt"
+  "environment_records": "BUILD_RELEASE.md and packaging/rebuild/requirements-mac-portable.txt / requirements-windows-portable.txt",
+  "mac_build_host": "macOS 27.2, arm64, Python 3.12.13",
+  "windows_build_host": "GitHub Actions windows-2022, x64, Python 3.12.10"
 }
