@@ -277,8 +277,7 @@ def add_pdf_marks(
     page_number_position="bottom_center",
     progress_callback=None,
 ):
-    from PySide6.QtCore import QRectF, Qt
-    from PySide6.QtGui import QColor, QFont, QFontMetricsF
+    import pymupdf
     from pypdf import PdfReader, PdfWriter
 
     source = Path(pdf_file).expanduser().resolve()
@@ -289,63 +288,52 @@ def add_pdf_marks(
     reader = PdfReader(str(source))
     _decrypt_reader(reader, "")
     writer = PdfWriter()
+    # Build one overlay document so every page can share the same embedded CJK font.
+    font = pymupdf.Font("cjk")
+    lines = watermark_text.expandtabs(4).splitlines() if watermark_text.strip() else []
+    if any(not font.has_glyph(ord(char)) for line in lines for char in line):
+        raise ValueError("内置字体不支持部分水印字符，请更换文字；未生成结果。")
+    size = float(watermark_font_size) if lines else 0
+    if lines and size <= 0:
+        raise ValueError("水印字号必须大于零。")
+    line_height = (font.ascender - font.descender) * size
+    widths = [font.text_length(line, fontsize=size) for line in lines]
     with tempfile.TemporaryDirectory(prefix="eggie-pdf-marks-") as folder:
-        folder = Path(folder)
-        for index, source_page in enumerate(reader.pages, 1):
-            if progress_callback:
-                progress_callback(index - 1, len(reader.pages), f"正在处理第 {index} 页")
-            width = float(source_page.cropbox.width)
-            height = float(source_page.cropbox.height)
-            overlay_file = folder / f"overlay-{index}.pdf"
-
-            def draw(painter, page_width, page_height, page_index=index):
-                if watermark_text.strip():
-                    font = QFont("PingFang SC")
-                    font.setPixelSize(int(watermark_font_size))
-                    painter.setFont(font)
-                    painter.setPen(QColor(28, 72, 115, round(255 * float(watermark_opacity))))
-                    metrics = QFontMetricsF(font)
-                    text_width = metrics.horizontalAdvance(watermark_text)
-                    text_height = metrics.height()
-                    left, top = _watermark_position(
-                        watermark_position,
-                        page_width,
-                        page_height,
-                        text_width,
-                        text_height,
-                    )
-                    painter.save()
-                    painter.translate(left + text_width / 2, top + text_height / 2)
-                    painter.rotate(float(watermark_angle))
-                    painter.drawText(
-                        QRectF(-text_width, -text_height, text_width * 2, text_height * 2),
-                        Qt.AlignCenter,
-                        watermark_text,
-                    )
-                    painter.restore()
+        overlay_file = Path(folder) / "marks.pdf"
+        with pymupdf.open() as overlay:
+            for index, source_page in enumerate(reader.pages, 1):
+                if progress_callback:
+                    progress_callback(index - 1, len(reader.pages), f"正在处理第 {index} 页")
+                width, height = float(source_page.cropbox.width), float(source_page.cropbox.height)
+                page = overlay.new_page(width=width, height=height)
+                page.insert_font(fontname="MarksCJK", fontbuffer=font.buffer)
+                if lines:
+                    text_width, text_height = max(widths), len(lines) * line_height
+                    left, top = _watermark_position(watermark_position, width, height, text_width, text_height)
+                    center = pymupdf.Point(left + text_width / 2, top + text_height / 2)
+                    rotation = (center, pymupdf.Matrix(-float(watermark_angle)))
+                    for row, (line, line_width) in enumerate(zip(lines, widths)):
+                        page.insert_text((center.x - line_width / 2, top + row * line_height + font.ascender * size),
+                                         line, fontname="MarksCJK", fontsize=size, morph=rotation,
+                                         color=(28 / 255, 72 / 255, 115 / 255), fill_opacity=float(watermark_opacity))
                 if add_page_numbers:
-                    number_text = str(int(page_number_start) + page_index - 1)
-                    number_font = QFont("PingFang SC")
-                    number_font.setPixelSize(11)
-                    painter.setFont(number_font)
-                    painter.setPen(QColor(45, 55, 65, 210))
-                    metrics = QFontMetricsF(number_font)
-                    text_width = metrics.horizontalAdvance(number_text)
-                    text_height = metrics.height()
-                    left, top = _page_number_position(
-                        page_number_position,
-                        page_width,
-                        page_height,
-                        text_width,
-                        text_height,
-                    )
-                    painter.drawText(QRectF(left, top, text_width + 4, text_height + 2), number_text)
-
-            _qt_pdf_page(overlay_file, width, height, draw)
-            writer.add_page(copy.deepcopy(source_page))
-            writer.pages[-1].merge_page(PdfReader(str(overlay_file)).pages[0])
+                    number = str(int(page_number_start) + index - 1)
+                    left, top = _page_number_position(page_number_position, width, height,
+                                                      font.text_length(number, fontsize=11),
+                                                      (font.ascender - font.descender) * 11)
+                    page.insert_text((left, top + font.ascender * 11), number, fontname="MarksCJK", fontsize=11,
+                                     color=(45 / 255, 55 / 255, 65 / 255), fill_opacity=210 / 255)
+            if len(overlay):
+                overlay.subset_fonts()
+                overlay.save(overlay_file, garbage=4, deflate=True)
+        if len(reader.pages):
+            with overlay_file.open("rb") as handle:
+                marks = PdfReader(handle)
+                for source_page, mark_page in zip(reader.pages, marks.pages):
+                    writer.add_page(copy.deepcopy(source_page))
+                    writer.pages[-1].merge_page(mark_page)
             if progress_callback:
-                progress_callback(index, len(reader.pages), f"第 {index} 页已完成")
+                progress_callback(len(reader.pages), len(reader.pages), "水印与页码已合并")
 
     final_file = _publish_writer(writer, output_file)
     log_file = write_log(

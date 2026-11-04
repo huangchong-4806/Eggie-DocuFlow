@@ -395,6 +395,24 @@ class PdfToolboxTests(unittest.TestCase):
         self.assertIn("5", extracted)
         self.assertIn("页码：已添加", Path(result.log_file).read_text(encoding="utf-8"))
 
+    def test_multiline_cjk_watermarks_and_page_numbers_keep_their_positions(self):
+        import pymupdf
+
+        source = self.make_pdf("layout.pdf", 2)
+        target = self.root / "layout-marked.pdf"
+        add_pdf_marks(source, target, watermark_text="内部资料\n副本", watermark_font_size=16,
+                      watermark_angle=0, watermark_position="top_left",
+                      add_page_numbers=True, page_number_start=8, page_number_position="bottom_right")
+        with pymupdf.open(target) as document:
+            for index, page in enumerate(document, 8):
+                first, = page.search_for("内部资料")
+                second, = page.search_for("副本")
+                number, = page.search_for(str(index))
+                self.assertAlmostEqual(first.x0, 28, delta=2)
+                self.assertGreater(second.y0, first.y0)
+                self.assertGreater(number.x0, page.rect.width / 2)
+                self.assertGreater(number.y0, page.rect.height * .8)
+
     def test_pdf_password_can_be_set_and_removed(self):
         source = self.make_pdf("plain.pdf", 1)
         protected = secure_pdf(source, self.root / "protected.pdf", new_password="secret-123")
