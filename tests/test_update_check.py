@@ -1,4 +1,5 @@
 import os
+import math
 import ssl
 import unittest
 from io import BytesIO
@@ -115,6 +116,15 @@ class UpdateButtonTests(unittest.TestCase):
             QTest.qWait(10)
         self.fail("没有看到更新查询结果")
 
+    def assert_result_box_size(self, box):
+        # Native Windows geometry rounds through physical pixels at fractional
+        # scale factors. Keep exact checks at integral scales; allow only the
+        # logical-pixel equivalent of native rounding otherwise.
+        ratio = box.devicePixelRatioF()
+        tolerance = 0 if ratio.is_integer() else math.ceil(1 / ratio)
+        self.assertAlmostEqual(box.width(), 376, delta=tolerance)
+        self.assertAlmostEqual(box.height(), 164, delta=tolerance)
+
     def test_manual_only_new_build_and_explicit_download(self):
         latest = Release("1.5.1", "2026110402")
         with patch("ui.update_check.APP_VERSION", "1.5.1"), patch("ui.update_check.BUILD_NUMBER", "2026110401"), \
@@ -145,6 +155,7 @@ class UpdateButtonTests(unittest.TestCase):
             self.assertEqual(check.call_count, 2)
 
     def test_result_dialogs_open_at_the_same_size_with_room_for_version_numbers(self):
+        sizes = []
         results = [Release("1.5.1", "2026110401"), Release("1.5.1", "2026110402"),
                    UpdateCheckError("暂时无法连接官方发布页，请检查网络后重试。")]
         with patch("ui.update_check.APP_VERSION", "1.5.1"), patch("ui.update_check.BUILD_NUMBER", "2026110401"), \
@@ -153,11 +164,13 @@ class UpdateButtonTests(unittest.TestCase):
                 with self.subTest(result=result):
                     self.button.click()
                     box = self.result_box()
-                    self.assertEqual((box.width(), box.height()), (376, 164))
+                    self.assert_result_box_size(box)
+                    sizes.append((box.width(), box.height()))
                     for label in box.detail_labels:
                         self.assertGreaterEqual(label.contentsRect().width(), label.fontMetrics().horizontalAdvance(label.text()))
                     box.reject()
                     self.app.processEvents()
+        self.assertEqual(len(set(sizes)), 1)
 
     def test_signed_full_or_delta_download_requires_explicit_restart(self):
         latest = Release(APP_VERSION, str(int(BUILD_NUMBER) + 1))
@@ -172,7 +185,7 @@ class UpdateButtonTests(unittest.TestCase):
                      patch("ui.update_check.stage_download", return_value=staged) as download:
                     self.button.click()
                     box = self.result_box()
-                    self.assertEqual((box.width(), box.height()), (376, 164))
+                    self.assert_result_box_size(box)
                     self.assertIn(phrase, box.detail_labels[-1].text())
                     self.assertIn("1.0 MB", box.detail_labels[-1].text())
                     download.assert_not_called()
