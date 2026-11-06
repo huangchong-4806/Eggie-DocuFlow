@@ -1,10 +1,19 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 from pathlib import Path
+from runpy import run_path
 from PyInstaller.utils.hooks import copy_metadata
 
 
 PROJECT_ROOT = Path(SPECPATH).parent
+build_trust_data = run_path(str(PROJECT_ROOT / "packaging" / "update_trust.py"))["build_trust_data"]
+version_scope = run_path(str(PROJECT_ROOT / "version.py"))
+trust_data = build_trust_data(version_scope)
+recovery_data = []
+if trust_data:
+    prepare_recovery = run_path(str(PROJECT_ROOT / "scripts" / "prepare_windows_updater.py"))["prepare"]
+    recovery_helper = prepare_recovery(Path(workpath) / "eggie-windows-update-tools")
+    recovery_data = [(str(recovery_helper), "update-tools")]
 APP_BASENAME = "Eggie DocuFlow"
 LICENSE_METADATA = []
 for package in ("openpyxl", "pdfplumber", "pypdf", "Pillow", "pypdfium2", "PyMuPDF",
@@ -18,14 +27,14 @@ a = Analysis(
     datas=[
         (str(PROJECT_ROOT / "LICENSE"), "."),
         (str(PROJECT_ROOT / "THIRD_PARTY_NOTICES.md"), "."),
-        (str(PROJECT_ROOT / "release_notes_v1.5.1.md"), "."),
+        (str(PROJECT_ROOT / f"release_notes_v{version_scope['APP_VERSION']}.md"), "."),
         (str(PROJECT_ROOT / "BUILD_RELEASE.md"), "."),
         (str(PROJECT_ROOT / "licenses"), "licenses"),
         (str(PROJECT_ROOT / "assets" / "software_logo.png"), "assets"),
         (str(PROJECT_ROOT / "assets" / "app_icon.png"), "assets"),
         (str(PROJECT_ROOT / "assets" / "app_icon.ico"), "assets"),
         (str(PROJECT_ROOT / "docs" / "OCR使用说明.pdf"), "docs"),
-    ] + LICENSE_METADATA,
+    ] + LICENSE_METADATA + trust_data + recovery_data,
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -66,3 +75,9 @@ coll = COLLECT(
     upx=False,
     name=APP_BASENAME,
 )
+
+
+# Direct PyInstaller + ISCC and the PowerShell wrapper must carry the same stamp.
+if trust_data:
+    write_stamp = run_path(str(PROJECT_ROOT / "scripts" / "build_windows_update.py"))["write_stamp"]
+    write_stamp(Path(DISTPATH) / APP_BASENAME, version_scope["APP_VERSION"], version_scope["BUILD_NUMBER"])

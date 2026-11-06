@@ -3,6 +3,20 @@ import os
 import sys
 from pathlib import Path
 
+# The OS-elevated broker only verifies and hands off signed updates.
+# Dispatch before importing Qt, PDF parsers, OCR clients or application settings.
+if __name__ == "__main__" and sys.argv[1:2] == ["--eggie-install-update"]:
+    if sys.platform != "win32" or not getattr(sys, "frozen", False):
+        raise SystemExit(2)
+    from eggie_update_windows import elevated_entry
+    raise SystemExit(elevated_entry(sys.argv[2:]))
+
+if __name__ == "__main__":
+    from eggie_update_startup import startup_is_blocked
+    if startup_is_blocked():
+        raise SystemExit(0)
+
+
 from PySide6.QtCore import QLocale, QTimer
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
@@ -15,8 +29,27 @@ from app import (
     preferred_system_locale,
     resource_path,
 )
-from excel_merge_tool import SUPPORTED_EXTENSIONS
+from excel_merge_tool import SUPPORTED_EXTENSIONS, discover_excel_files
 from version import APP_VERSION
+
+
+def load_startup_paths(window, paths):
+    excel_paths = []
+    loaded_pdf = False
+    for path in paths:
+        if os.path.isdir(path):
+            excel_paths.extend(discover_excel_files(path))
+        elif Path(path).suffix.lower() in SUPPORTED_EXTENSIONS:
+            excel_paths.append(path)
+        elif Path(path).suffix.lower() == ".pdf":
+            loaded_pdf = window.set_document_source_file(path) or loaded_pdf
+
+    # One review job must cover the whole launch request, in the given order.
+    loaded_excel = bool(excel_paths) and window.add_paths(excel_paths)
+    if loaded_pdf:
+        window.show_document_tool()
+    elif loaded_excel:
+        window.show_excel_tool()
 
 
 def main():
@@ -41,26 +74,11 @@ def main():
 
     window = ExcelMergerWindow()
     window.show()
+    if sys.platform == "darwin" and getattr(sys, "frozen", False):
+        from eggie_update_mac import confirm_healthy_startup
+        QTimer.singleShot(0, confirm_healthy_startup)
 
-    def load_startup_paths():
-        loaded_paths = False
-        loaded_pdf = False
-        for input_path in sys.argv[1:]:
-            if os.path.isdir(input_path):
-                loaded_paths = bool(
-                    window.load_folder(input_path, show_messages=False)
-                ) or loaded_paths
-            elif Path(input_path).suffix.lower() in SUPPORTED_EXTENSIONS:
-                loaded_paths = bool(window.add_paths([input_path])) or loaded_paths
-            elif Path(input_path).suffix.lower() == ".pdf":
-                loaded_pdf = bool(window.set_document_source_file(input_path)) or loaded_pdf
-
-        if loaded_pdf:
-            window.show_document_tool()
-        elif loaded_paths:
-            window.show_excel_tool()
-
-    QTimer.singleShot(0, load_startup_paths)
+    QTimer.singleShot(0, lambda: load_startup_paths(window, sys.argv[1:]))
     sys.exit(application.exec())
 
 

@@ -41,6 +41,86 @@ class AppNavigationTests(unittest.TestCase):
         finally:
             self.window.pdf_thumbnail_tempdir.cleanup()
 
+    def test_multiple_launch_inputs_are_submitted_as_one_ordered_merge_review(self):
+        from main import load_startup_paths
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            sub = root / "补充"
+            sub.mkdir()
+            (sub / "乙区.xlsx").touch()
+            first = str(root / "甲区.xlsx")
+            last = str(root / "丙区.xlsx")
+            with patch.object(self.window, "add_paths", return_value=3) as add:
+                load_startup_paths(self.window, [first, str(sub), last])
+            add.assert_called_once_with([first, str((sub / "乙区.xlsx").resolve()), last])
+            self.assertIs(self.window.stack.currentWidget(), self.window.excel_page)
+
+    def test_update_restart_requires_saved_work_and_successful_handoff(self):
+        w = self.window
+        button = w.update_check_button
+        with patch.object(w.pdf_workspace, "has_unsaved_changes", return_value=True), \
+             patch("app.QMessageBox.information"), patch.object(button, "launch_prepared") as launch:
+            w.restart_for_update()
+            launch.assert_not_called()
+
+        with patch.object(w.pdf_workspace, "request_close", return_value=False), \
+             patch.object(button, "launch_prepared") as launch:
+            w.restart_for_update()
+            launch.assert_not_called()
+
+        with patch.object(button, "launch_prepared", side_effect=ValueError("安装未开始")), \
+             patch.object(w.pdf_workspace, "shutdown") as shutdown, patch("app.QMessageBox.warning"):
+            w.restart_for_update()
+            shutdown.assert_not_called()
+        self.assertFalse(w._restarting_for_update)
+
+    def test_windows_update_waits_for_authorization_without_blocking_the_window(self):
+        w = self.window
+        w.show()
+        entered, finish = threading.Event(), threading.Event()
+        staged = MagicMock()
+        staged.asset.platform = "windows-x64"
+
+        def decline():
+            entered.set()
+            finish.wait(2)
+            raise ValueError("权限确认已取消")
+
+        staged.launch.side_effect = decline
+        w.update_check_button._staged = staged
+        try:
+            with patch("app.QMessageBox.warning") as warning:
+                w.restart_for_update()
+                self.assertTrue(entered.wait(1))
+                self.assertTrue(w.isVisible())
+                self.assertIsNotNone(w._windows_handoff_dialog)
+                self.assertFalse(w.close())
+                finish.set()
+                for _ in range(160):
+                    self.application.processEvents()
+                    if w._windows_handoff_dialog is None:
+                        break
+                    QTest.qWait(10)
+                warning.assert_called_once()
+                self.assertTrue(w.isVisible())
+                self.assertTrue(w.stack.isEnabled())
+                self.assertIs(w.update_check_button._staged, staged)
+
+            staged.launch.side_effect = None
+            w.restart_for_update()
+            for _ in range(160):
+                self.application.processEvents()
+                if not w.isVisible():
+                    break
+                QTest.qWait(10)
+            self.assertFalse(w.isVisible())
+            self.assertTrue(w._windows_update_committed)
+            self.assertIsNone(w.update_check_button._staged)
+            staged.discard.assert_not_called()
+        finally:
+            finish.set()
+
     def test_split_modes_keep_legacy_controls_and_expose_category_page(self):
         self.window.show_split_tool()
         tabs = self.window.split_mode_tabs
@@ -283,9 +363,12 @@ class AppNavigationTests(unittest.TestCase):
         )
         self.assertEqual(window_text.count(f"版本 {APP_VERSION}"), 1)
         if BUILD_TYPE == "development":
-            self.assertIn(f"版本 {APP_VERSION}（开发版）", window_text)
+            self.assertIn("\n开发版\n", window_text)
         elif BUILD_TYPE == "release_candidate":
-            self.assertIn(f"版本 {APP_VERSION}（发布候选版）", window_text)
+            self.assertIn("\n发布候选版\n", window_text)
+        else:
+            self.assertNotIn("发布候选版", window_text)
+            self.assertNotIn("开发版", window_text)
         self.assertTrue(
             {"常用", "清晰", "台账", "识别", "安全", "多功能"}.isdisjoint(home_labels)
         )

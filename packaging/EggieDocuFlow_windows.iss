@@ -6,6 +6,10 @@
 #define MyAppOutputDir GetEnv("EGGIE_APP_OUTPUT_DIR")
 #define MyChineseLanguageFile GetEnv("EGGIE_CHINESE_LANGUAGE_FILE")
 
+#if FileExists(MyAppSourceDir + "\_internal\eggie-update-ed25519.pub") && !FileExists(MyAppSourceDir + "\eggie-runtime.json")
+  #error Signed update runtimes need eggie-runtime.json. Stamp the isolated PyInstaller output before compiling.
+#endif
+
 [Setup]
 AppId={{7DA942BC-98E2-48DB-93C7-741D7FD9C1C3}
 AppName={#MyAppName}

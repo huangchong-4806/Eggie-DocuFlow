@@ -1,0 +1,120 @@
+; Generated per exact source and target. Never distribute the input directory as an installer.
+[Setup]
+AppId=@APP_ID@
+AppName=Eggie DocuFlow
+AppVersion=@VERSION@
+AppPublisher=Eggie DocuFlow
+DefaultDirName={autopf}\Eggie DocuFlow
+UsePreviousAppDir=yes
+DisableDirPage=yes
+DisableProgramGroupPage=yes
+CreateAppDir=yes
+PrivilegesRequired=admin
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
+OutputDir=compiled
+OutputBaseFilename=@BASENAME@
+UninstallDisplayIcon={app}\Eggie DocuFlow.exe
+WizardStyle=modern
+Compression=lzma2/ultra64
+SolidCompression=yes
+CloseApplications=no
+RestartApplications=no
+
+[InstallDelete]
+@DELETE@
+
+[Files]
+@FILES@
+
+[Code]
+function WinAttrs(Path: String): LongWord;
+  external 'GetFileAttributesW@kernel32.dll stdcall';
+
+function NoReparse(Path: String): Boolean;
+var Attr: LongWord; Parent: String;
+begin
+  Result := False;
+  while True do begin
+    Attr := WinAttrs(Path);
+    if (Attr <> $FFFFFFFF) and ((Attr and $400) <> 0) then exit;
+    Parent := ExtractFileDir(Path);
+    if (Parent = '') or (CompareText(Path, Parent) = 0) then break;
+    Attr := WinAttrs(Parent);
+    if (Attr <> $FFFFFFFF) and ((Attr and $10) = 0) then exit;
+    Path := Parent;
+  end;
+  Result := True;
+end;
+
+function MatchesAt(Root, Name, Expected: String): Boolean;
+var Path: String;
+begin
+  Path := AddBackslash(Root) + Name;
+  Result := False;
+  if not NoReparse(Path) or not FileExists(Path) then exit;
+  Result := CompareText(GetSHA256OfFile(Path), Expected) = 0;
+end;
+
+function Matches(Name, Expected: String): Boolean;
+begin
+  Result := MatchesAt(ExpandConstant('{app}'), Name, Expected);
+end;
+
+function AvailablePath(Name: String): Boolean;
+var Path: String;
+begin
+  Path := AddBackslash(ExpandConstant('{app}')) + Name;
+  Result := NoReparse(Path) and (WinAttrs(Path) = $FFFFFFFF);
+end;
+
+procedure RequireAbsent(Name: String);
+begin
+  if not AvailablePath(Name) then
+    RaiseException('目标文件已出现，或旧文件未能安全移除。将从原备份恢复。');
+end;
+
+function ValidWorkFolder(Name: String): Boolean;
+var I: Integer;
+begin
+  Result := False;
+  if (Length(Name) <> 46) or (Copy(Name, 1, 14) <> '.eggie-update-') then exit;
+  for I := 15 to 46 do
+    if Pos(Copy(Name, I, 1), '0123456789abcdef') = 0 then exit;
+  Result := True;
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var Work, Backup, App: String;
+begin
+  Result := '请在 Eggie 中点击“下载更新”和“重启并更新”。此增量包仅供更新助手使用。';
+  Work := ExpandConstant('{param:EGGIEROLLBACK|}');
+  if Work = '' then exit;
+  App := RemoveBackslashUnlessRoot(ExpandFileName(ExpandConstant('{app}')));
+  Work := RemoveBackslashUnlessRoot(ExpandFileName(Work));
+  if not ValidWorkFolder(ExtractFileName(Work)) then exit;
+  if CompareText(ExtractFileDir(Work), ExtractFileDir(App)) <> 0 then exit;
+  if not NoReparse(Work) or not NoReparse(App) then exit;
+  if not NoReparse(Work + '\rollback.json') or not FileExists(Work + '\rollback.json') then exit;
+  Backup := Work + '\backup';
+  if not MatchesAt(Backup, 'eggie-runtime.json', '@BASE_STAMP@') then exit;
+  Result := '当前安装与增量包的旧版本不匹配，或新增位置已有文件。请保留原文件后使用完整更新。';
+  if not Matches('eggie-runtime.json', '@BASE_STAMP@') then exit;
+@VERIFY_BASE@
+  Result := '';
+end;
+
+function NewRuntimeMatches(): Boolean;
+begin
+  Result := False;
+  if not Matches('eggie-runtime.json', '@TARGET_STAMP@') then exit;
+@VERIFY_NEW@
+  Result := True;
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssPostInstall then
+    if not NewRuntimeMatches() then
+      RaiseException('安装后核对失败，需要从更新助手的备份恢复。');
+end;
