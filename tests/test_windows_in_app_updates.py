@@ -116,14 +116,26 @@ class WindowsTransactionTests(unittest.TestCase):
 $ErrorActionPreference='Stop'
 & ([IO.Path]::Combine([Environment]::SystemDirectory,'reg.exe')) query 'HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion' /v CurrentBuild /reg:64 | Out-Null
 if ($LASTEXITCODE -ne 0) {exit 91}
-$copyCommand = Get-Command ([IO.Path]::Combine([Environment]::SystemDirectory,'robocopy.exe'))
-if ($copyCommand.CommandType -ne 'Application') {exit 92}
+$source = [IO.Path]::Combine((Get-Location).Path,'source')
+$destination = [IO.Path]::Combine((Get-Location).Path,'copied')
+[IO.Directory]::CreateDirectory($source) | Out-Null
+[IO.File]::WriteAllText([IO.Path]::Combine($source,'probe.txt'),'system-copy-ok')
+& ([IO.Path]::Combine([Environment]::SystemDirectory,'robocopy.exe')) $source $destination /E /R:0 /W:0 /NFL /NDL /NJH /NJS | Out-Null
+if ($LASTEXITCODE -gt 7) {exit 92}
 [IO.File]::WriteAllText([IO.Path]::Combine((Get-Location).Path,'native-commands-ok'),'ok')
 """
             with patch.dict(os.environ, {"PATHEXT": ".UNTRUSTED"}):
                 process = windows._powershell(script, cwd=root, inherited_handle=[])
-            self.assertEqual(process.wait(timeout=30), 0)
-            self.assertEqual((root / "native-commands-ok").read_text(), "ok")
+            try:
+                self.assertEqual(process.wait(timeout=30), 0)
+                self.assertEqual((root / "native-commands-ok").read_text(), "ok")
+                self.assertEqual((root / "copied/probe.txt").read_text(), "system-copy-ok")
+            finally:
+                # A failing probe must release its working directory before
+                # TemporaryDirectory cleanup, without hiding the first failure.
+                if process.poll() is None:
+                    process.kill()
+                    process.wait(timeout=10)
 
     def test_invalid_base_preserves_install_and_records_exact_failure_stage(self):
         from windows_update_worker import TRANSACTION
