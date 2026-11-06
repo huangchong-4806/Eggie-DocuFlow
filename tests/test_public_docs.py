@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
-from version import APP_VERSION
+from version import APP_VERSION, BUILD_TYPE
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -25,7 +25,13 @@ class PublicDocumentationTests(unittest.TestCase):
     def test_download_buttons_and_checksum_examples_name_the_current_packages(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         security = (ROOT / "SECURITY.md").read_text(encoding="utf-8")
+        published_version = re.search(r"badge/version-([0-9.]+)-blue", readme).group(1)
+        if BUILD_TYPE == "release":
+            self.assertEqual(published_version, APP_VERSION)
+        else:
+            self.assertLessEqual(tuple(map(int, published_version.split("."))),
+                                 tuple(map(int, APP_VERSION.split("."))))
         for suffix in ("mac_arm64.zip", "Windows_x64_Setup.exe"):
-            name = f"EggieDocuFlow_V{APP_VERSION}_{suffix}"
-            self.assertIn(f"/releases/download/v{APP_VERSION}/{name}", readme)
+            name = f"EggieDocuFlow_V{published_version}_{suffix}"
+            self.assertIn(f"/releases/download/v{published_version}/{name}", readme)
             self.assertIn(name, security)

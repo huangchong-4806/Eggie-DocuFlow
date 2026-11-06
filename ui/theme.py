@@ -94,6 +94,20 @@ def build_theme_stylesheet(c):
     QLabel[homeRole="brand"] {{ font-size: 15px; font-weight: 600; }}
     QLabel[homeRole="cardTitle"], QLabel[splitHeading="true"] {{ color: {c['title']}; font-size: 16px; font-weight: 600; }}
     QLabel[homeRole="section"] {{ color: {c['muted']}; font-size: 12px; }}
+    QDialog#mergeReviewDialog QLabel#mergeReviewStatus {{ font-size: 12px; padding: 5px 10px;
+        border-radius: 5px; color: {c['muted']}; background: {c['panel_alt']}; }}
+    QDialog#mergeReviewDialog QLabel#mergeReviewStatus[reviewState="ok"] {{
+        color: {c['primary']}; background: {c['accent_soft']}; }}
+    QDialog#mergeReviewDialog QLabel#mergeReviewStatus[reviewState="error"] {{
+        color: {c['danger_text']}; background: {c['danger_border']}; }}
+    QDialog#mergeReviewDialog QWidget#mergeReviewPending {{ background: {c['panel']};
+        border: 1px solid {c['border_soft']}; border-radius: 6px; }}
+    QDialog#mergeReviewDialog QTableView#mergeReviewPreview {{ background: {c['table_row']};
+        alternate-background-color: {c['table_row_alt']}; border: 1px solid {c['border_soft']};
+        border-radius: 5px; gridline-color: {c['border_soft']}; selection-background-color: {c['accent_soft']};
+        selection-color: {c['title']}; }}
+    QDialog#mergeReviewDialog QPlainTextEdit#mergeReviewDetails {{ background: {c['panel']};
+        color: {c['danger_text']}; border: 1px solid {c['danger_border']}; border-radius: 5px; padding: 5px; }}
     QWidget#homeSidebar {{ background: #EAEAE3; border-right: 1px solid {c['border']}; }}
     QWidget[homePanel="true"], QFrame[splitCard="true"] {{ background: {c['panel']}; border: 1px solid {c['border_soft']}; border-radius: 6px; }}
     QScrollArea {{ background: transparent; border: none; }}

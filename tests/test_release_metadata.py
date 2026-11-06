@@ -1,7 +1,7 @@
 import unittest
 from pathlib import Path
 
-from version import APP_VERSION, BUILD_TYPE, BUILD_DATE
+from version import APP_VERSION, BUILD_TYPE, BUILD_DATE, BUILD_NUMBER
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -18,9 +18,10 @@ class ReleaseMetadataTests(unittest.TestCase):
             self.assertIn("copy_metadata", spec)
 
     def test_release_version_is_consistent(self):
-        self.assertEqual(APP_VERSION, "1.5.1")
+        self.assertEqual(APP_VERSION, "1.5.2")
         self.assertEqual(BUILD_TYPE, "release")
-        self.assertEqual(BUILD_DATE, "2026-11-04")
+        self.assertEqual(BUILD_DATE, "2026-11-06")
+        self.assertEqual(BUILD_NUMBER, "2026110601")
         spec = (ROOT / "packaging" / "EggieDocuFlow.spec").read_text(encoding="utf-8")
         self.assertIn('"CFBundleVersion": version_scope["BUILD_NUMBER"]', spec)
 

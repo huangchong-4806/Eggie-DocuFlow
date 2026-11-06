@@ -33,6 +33,7 @@ MANIFEST
 *.manifest
 *.spec
 !packaging/*.spec
+!packaging/windows/recovery.manifest
 
 # Installer logs
 pip-log.txt

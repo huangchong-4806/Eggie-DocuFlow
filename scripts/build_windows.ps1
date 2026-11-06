@@ -73,6 +73,12 @@ try {
         throw "Application file was not created: ${ApplicationPath}"
     }
 
+    if ($env:EGGIE_UPDATE_PUBLIC_KEY_FILE) {
+        $BuildMatch = [regex]::Match($versionText, '^BUILD_NUMBER\s*=\s*"([0-9]{10})"', 'Multiline')
+        if (-not $BuildMatch.Success) { throw 'A signed update build requires a ten-digit BUILD_NUMBER.' }
+        & $Python (Join-Path $PSScriptRoot 'build_windows_update.py') stamp --root ([IO.Path]::GetDirectoryName($ApplicationPath)) --version $Version --build ($BuildMatch.Groups[1].Value)
+        if ($LASTEXITCODE -ne 0) { throw 'Could not verify the Windows runtime file inventory.' }
+    }
     $env:EGGIE_APP_VERSION = $Version
     $env:EGGIE_APP_SOURCE_DIR = [System.IO.Path]::GetDirectoryName($ApplicationPath)
     $env:EGGIE_APP_OUTPUT_DIR = $LocalReleaseDir

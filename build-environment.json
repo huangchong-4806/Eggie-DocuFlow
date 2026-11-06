@@ -1,9 +1,11 @@
 {
-  "candidate": "V1.5.1 release",
-  "build": "2026110402",
+  "candidate": "V1.5.2 release candidate",
+  "build": "2026110503",
   "engine": "1.28.5",
   "binding": "1.28.2",
   "environment_records": "BUILD_RELEASE.md and packaging/rebuild/requirements-mac-portable.txt / requirements-windows-portable.txt",
   "mac_build_host": "macOS 27.2, arm64, Python 3.12.13",
-  "windows_build_host": "GitHub Actions windows-2022, x64, Python 3.12.10"
+  "windows_build_host": "Windows 11 ARM64 VM, x64 Python 3.12; fresh candidate acceptance pending",
+  "qt": "6.10.3",
+  "mac_cocoa_fix": "8148c48deb8e4345bacb797cb75c011df6f797fa"
 }

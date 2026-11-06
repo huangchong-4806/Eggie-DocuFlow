@@ -1,10 +1,20 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 from pathlib import Path
+import os
+import subprocess
+import sys
+from importlib.metadata import version as distribution_version
+from runpy import run_path
 from PyInstaller.utils.hooks import copy_metadata
 
 
 PROJECT_ROOT = Path(SPECPATH).parent
+build_trust_data = run_path(str(PROJECT_ROOT / "packaging" / "update_trust.py"))["build_trust_data"]
+cocoa_repair = run_path(str(PROJECT_ROOT / "packaging" / "mac_cocoa.py"))
+cocoa_library, cocoa_report = cocoa_repair["verified_component"](
+    os.environ.get("EGGIE_QT_COCOA_REPAIR_DIR"), distribution_version("PySide6-Essentials"),
+)
 APP_BASENAME = "Eggie DocuFlow"
 version_scope = {}
 exec((PROJECT_ROOT / "version.py").read_text(encoding="utf-8"), version_scope)
@@ -65,16 +75,28 @@ def keep_data(entry):
     return filename.startswith("qtbase_")
 
 
+mac_update_binaries = []
+mac_update_notices = []
+if os.environ.get("EGGIE_UPDATE_PUBLIC_KEY_FILE"):
+    tools_dir = Path(workpath) / "eggie-mac-update-tools"
+    subprocess.run([sys.executable, PROJECT_ROOT / "scripts/prepare_mac_updater.py", tools_dir], check=True)
+    mac_update_binaries = [(str(tools_dir / name), "update-tools")
+                           for name in ("BinaryDelta", "EggieUpdateHelper")]
+    mac_update_notices = [(str(tools_dir / "Sparkle-LICENSE.txt"), "licenses/sparkle")]
+
+
 a = Analysis(
     [str(PROJECT_ROOT / "main.py")],
     pathex=[str(PROJECT_ROOT)],
-    binaries=[],
+    binaries=mac_update_binaries,
     datas=[
         (str(PROJECT_ROOT / "LICENSE"), "."),
         (str(PROJECT_ROOT / "THIRD_PARTY_NOTICES.md"), "."),
-        (str(PROJECT_ROOT / "release_notes_v1.5.1.md"), "."),
+        (str(PROJECT_ROOT / f"release_notes_v{APP_VERSION}.md"), "."),
         (str(PROJECT_ROOT / "BUILD_RELEASE.md"), "."),
         (str(PROJECT_ROOT / "licenses"), "licenses"),
+        (str(PROJECT_ROOT / "packaging/macos/qt-cocoa"), "licenses/qt-cocoa"),
+        (str(cocoa_report), "licenses/qt-cocoa"),
         (str(PROJECT_ROOT / "assets" / "software_logo.png"), "assets"),
         (str(PROJECT_ROOT / "assets" / "app_icon.png"), "assets"),
         (str(PROJECT_ROOT / "assets" / "app_icon.icns"), "assets"),
@@ -91,7 +113,7 @@ a = Analysis(
             str(PROJECT_ROOT / "assets" / "zh-Hant.lproj" / "InfoPlist.strings"),
             "zh-Hant.lproj",
         ),
-    ] + LICENSE_METADATA,
+    ] + mac_update_notices + LICENSE_METADATA + build_trust_data(version_scope),
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -105,6 +127,7 @@ a = Analysis(
     optimize=1,
 )
 a.binaries = [entry for entry in a.binaries if keep_binary(entry)]
+a.binaries = cocoa_repair["replace_cocoa_binary"](a.binaries, cocoa_library)
 a.datas = [entry for entry in a.datas if keep_data(entry)]
 
 # Build-machine paths in installer metadata do not belong in a distributed app.

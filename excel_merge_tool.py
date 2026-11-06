@@ -12,6 +12,8 @@ from pathlib import Path
 from xml.etree import ElementTree
 from zipfile import ZipFile
 
+from merge_preflight import compare_merge_sources, review_worksheet, source_fingerprint
+
 from openpyxl import Workbook, load_workbook
 from openpyxl.cell import WriteOnlyCell
 from openpyxl.formula import Tokenizer
@@ -111,7 +113,7 @@ def _relationship_id(element):
     return None
 
 
-def _active_worksheet_path(archive):
+def _worksheet_path(archive, sheet_name):
     workbook_root = ElementTree.fromstring(archive.read("xl/workbook.xml"))
     active_tab = 0
 
@@ -132,7 +134,12 @@ def _active_worksheet_path(archive):
         raise ValueError("Excel 文件中没有工作表。")
 
     active_tab = max(0, min(active_tab, len(sheets) - 1))
-    relationship_id = _relationship_id(sheets[active_tab])
+    sheet = sheets[active_tab]
+    if sheet_name is not None:
+        sheet = next((item for item in sheets if item.get("name") == sheet_name), None)
+        if sheet is None:
+            raise ValueError(f"找不到已选择的工作表“{sheet_name}”，请重新核对。")
+    relationship_id = _relationship_id(sheet)
     if not relationship_id:
         raise ValueError("无法确定 Excel 活动工作表。")
 
@@ -262,21 +269,47 @@ def _scan_worksheet_metadata(archive, worksheet_path):
 
 
 @lru_cache(maxsize=128)
-def _cached_workbook_metadata(filename, modified_time_ns, size):
-    del modified_time_ns, size
+def _cached_workbook_metadata(filename, fingerprint, sheet_name):
     with ZipFile(filename) as archive:
-        worksheet_path = _active_worksheet_path(archive)
-        return _scan_worksheet_metadata(archive, worksheet_path)
+        return _scan_worksheet_metadata(archive, _worksheet_path(archive, sheet_name))
 
 
-def get_workbook_metadata(filename):
-    absolute_filename = os.path.abspath(filename)
-    file_status = os.stat(absolute_filename)
-    return _cached_workbook_metadata(
-        absolute_filename,
-        file_status.st_mtime_ns,
-        file_status.st_size,
-    )
+def get_workbook_metadata(filename, sheet_name=None):
+    path = os.path.abspath(filename)
+    return _cached_workbook_metadata(path, source_fingerprint(path), sheet_name)
+
+
+def inspect_merge_file(path, sheet_name=None, header_row=1):
+    """Inspect the exact sheet and review row that will be used for this source."""
+    path = os.path.abspath(path)
+    if type(header_row) is not int or not 1 <= header_row <= 1048576:
+        raise ValueError("表头所在行必须在 1 到 1048576 之间。")
+    before = source_fingerprint(path)
+    workbook = load_workbook(path, read_only=True, data_only=False, keep_links=False)
+    try:
+        if not workbook.worksheets:
+            raise ValueError("文件中没有可合并的工作表。")
+        if sheet_name is None:
+            active = workbook.active
+            sheet_name = (active if active in workbook.worksheets else workbook.worksheets[0]).title
+        if sheet_name not in {sheet.title for sheet in workbook.worksheets}:
+            raise ValueError(f"找不到已选择的工作表“{sheet_name}”，请重新核对。")
+        metadata = get_workbook_metadata(path, sheet_name)
+        source = review_worksheet(path, workbook, sheet_name, header_row, metadata, before)
+    finally:
+        workbook.close()
+    _verify_reviewed_files((source,))
+    return source
+
+
+def _verify_reviewed_files(sources):
+    for source in sources:
+        try:
+            current = source_fingerprint(source.path)
+        except OSError as error:
+            raise ValueError(f"无法复核“{Path(source.path).name}”，请重新选择文件。") from error
+        if current != source.fingerprint:
+            raise ValueError(f"“{Path(source.path).name}”在核对后发生变化，请重新核对。")
 
 
 def _style_identifier(source_cell):
@@ -367,13 +400,14 @@ def _validate_formula_mapping(cell, segments):
         fail()
 
 
-def _validate_merge_formulas(files, metadata_by_file, skip_rows):
+def _validate_merge_formulas(files, metadata_by_file, skip_rows, sheet_names):
     target_row = 1
     for index, (filename, metadata) in enumerate(zip(files, metadata_by_file)):
         workbook = load_workbook(filename, read_only=True, data_only=False, keep_links=False)
         try:
-            sheet = workbook.active
-            if sheet.max_row is None or metadata.row_count > sheet.max_row:
+            sheet = workbook[sheet_names[index]] if sheet_names else workbook.active
+            if (sheet.max_row is None or metadata.row_count > sheet.max_row
+                    or sheet.max_column is None or metadata.column_count > sheet.max_column):
                 sheet.reset_dimensions()
             first = skip_rows + 1 if index else 1
             segments = ((first, metadata.row_count, target_row - first),)
@@ -864,6 +898,7 @@ def _build_streaming_workbook(
     output_file,
     skip_rows,
     progress_callback,
+    sheet_names,
 ):
     output_workbook = Workbook(write_only=True)
     output_sheet = output_workbook.create_sheet("合并结果")
@@ -884,7 +919,7 @@ def _build_streaming_workbook(
                 )
 
             try:
-                worksheet = workbook.active
+                worksheet = workbook[sheet_names[file_index]] if sheet_names else workbook.active
                 # Some valid Excel files do not store an explicit sheet size.
                 # In read-only mode openpyxl reports that size as None; refresh
                 # the dimensions before iterating instead of comparing a number
@@ -892,6 +927,8 @@ def _build_streaming_workbook(
                 if (
                     worksheet.max_row is None
                     or metadata.row_count > worksheet.max_row
+                    or worksheet.max_column is None
+                    or metadata.column_count > worksheet.max_column
                 ):
                     worksheet.reset_dimensions()
 
@@ -934,6 +971,7 @@ def _build_compatibility_workbook(
     skip_rows,
     keep_merged_cells,
     progress_callback,
+    sheet_names,
 ):
     output_workbook = Workbook()
     output_sheet = output_workbook.active
@@ -953,7 +991,7 @@ def _build_compatibility_workbook(
                 )
 
             try:
-                worksheet = workbook.active
+                worksheet = workbook[sheet_names[file_index]] if sheet_names else workbook.active
                 start_row = skip_rows + 1 if file_index > 0 else 1
                 row_offset = current_row - start_row
                 style_cache = {}
@@ -1006,6 +1044,9 @@ def build_merged_workbook(
     skip_rows=1,
     keep_merged_cells=True,
     progress_callback=None,
+    *,
+    reviewed_sources=None,
+    headerless=False,
 ):
     if not files:
         raise ValueError("至少需要选择一个 Excel 文件。")
@@ -1017,11 +1058,25 @@ def build_merged_workbook(
             if os.path.exists(filename) and os.path.samefile(filename, output_file):
                 raise ValueError("保存位置不能与待合并的源文件相同。")
 
+    sheet_names = None
+    if reviewed_sources is not None:
+        reviewed_sources = tuple(reviewed_sources)
+        if [source.path for source in reviewed_sources] != files:
+            raise ValueError("文件列表或顺序已变化，请重新核对。")
+        _verify_reviewed_files(reviewed_sources)
+        for source, check in zip(reviewed_sources, compare_merge_sources(reviewed_sources, headerless)):
+            if not check.ok:
+                raise ValueError(f"“{Path(source.path).name}”{check.summary}。"
+                                 + "\n".join(check.details))
+        sheet_names = [source.sheet_name for source in reviewed_sources]
+    elif headerless:
+        raise ValueError("无表头模式需要先核对文件。")
+
     metadata_by_file = [
-        get_workbook_metadata(filename)
-        for filename in files
+        get_workbook_metadata(filename, sheet_names[index] if sheet_names else None)
+        for index, filename in enumerate(files)
     ]
-    _validate_merge_formulas(files, metadata_by_file, skip_rows)
+    _validate_merge_formulas(files, metadata_by_file, skip_rows, sheet_names)
     requires_compatibility_mode = False
 
     if keep_merged_cells:
@@ -1046,6 +1101,7 @@ def build_merged_workbook(
                 skip_rows,
                 keep_merged_cells,
                 progress_callback,
+                sheet_names,
             )
         else:
             _build_streaming_workbook(
@@ -1054,7 +1110,10 @@ def build_merged_workbook(
                 temporary_output,
                 skip_rows,
                 progress_callback,
+                sheet_names,
             )
+        if reviewed_sources is not None:
+            _verify_reviewed_files(reviewed_sources)
         os.replace(temporary_output, output_file)
     except Exception:
         try:
