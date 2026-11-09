@@ -40,6 +40,9 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [InstallDelete]
 #include "retired_2026110401.iss"
+; Old layout package, removed only when it still looks like our Python package.
+Type: filesandordirs; Name: "{app}\v2"; Check: RetiredPackageDir('v2')
+Type: filesandordirs; Name: "{app}\_internal\v2"; Check: RetiredPackageDir('_internal\v2')
 
 [Files]
 Source: "{#MyAppSourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -60,4 +63,22 @@ begin
   Result := FileExists(Filename);
   if Result then
     Result := CompareText(GetSHA256OfFile(Filename), ExpectedHash) = 0;
+end;
+
+function RetiredPackageDir(Relative: String): Boolean;
+var
+  Dir: String;
+  Found: TFindRec;
+begin
+  Dir := ExpandConstant('{app}\') + Relative;
+  Result := DirExists(Dir) and (
+    FileExists(Dir + '\__init__.py') or FileExists(Dir + '\__init__.pyc'));
+  if not Result and DirExists(Dir) then
+  begin
+    if FindFirst(Dir + '\__init__.cpython-*.pyc', Found) then
+    begin
+      Result := True;
+      FindClose(Found);
+    end;
+  end;
 end;

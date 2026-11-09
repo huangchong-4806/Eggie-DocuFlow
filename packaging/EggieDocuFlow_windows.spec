@@ -16,7 +16,7 @@ if trust_data:
     recovery_data = [(str(recovery_helper), "update-tools")]
 APP_BASENAME = "Eggie DocuFlow"
 LICENSE_METADATA = []
-for package in ("openpyxl", "pdfplumber", "pypdf", "Pillow", "pypdfium2", "PyMuPDF",
+for package in ("openpyxl", "xlrd", "pdfplumber", "pypdf", "Pillow", "pypdfium2", "PyMuPDF",
                 "PySide6-Essentials", "alibabacloud_ocr_api20210707"):
     LICENSE_METADATA += copy_metadata(package, recursive=True)
 

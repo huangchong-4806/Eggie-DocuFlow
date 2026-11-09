@@ -178,6 +178,7 @@ outputs/
 output/
 work/
 release/
+ci-package/
 logs/
 tmp/
 beta_testing/
@@ -250,3 +251,4 @@ __marimo__/
 # Native Excel-calculated formula fixture for category splitting regression tests
 !tests/fixtures/
 !tests/fixtures/category_formula_cache.xlsx
+!tests/fixtures/category_split.xls

@@ -2,19 +2,23 @@
 from __future__ import annotations
 
 from copy import copy
+import csv
 from dataclasses import dataclass, replace
 from datetime import date, datetime, time
 from hashlib import sha256
-from io import BytesIO
+from io import BytesIO, StringIO
 from pathlib import Path
 import re
 import shutil
 import warnings
 import unicodedata
 
+import xlrd
 from openpyxl import Workbook, load_workbook
 from openpyxl.utils import get_column_letter, range_boundaries
 from openpyxl.worksheet.dimensions import RowDimension, ColumnDimension
+
+SPREADSHEET_SUFFIXES = (".xlsx", ".xls", ".csv")
 
 
 @dataclass(frozen=True)
@@ -86,13 +90,156 @@ class ExportResult:
     output_folder: Path
 
 
-def _read_bytes(source):
+def _load_source(source):
+    """Return original bytes and an .xlsx payload the existing splitter can open."""
     source = Path(source)
-    if source.suffix.lower() != '.xlsx':
-        raise ValueError('分类拆分目前只支持 .xlsx 文件。')
+    suffix = source.suffix.lower()
+    if suffix not in SPREADSHEET_SUFFIXES:
+        raise ValueError('分类拆分支持 .xlsx、.xls 和 .csv 文件。')
     if not source.is_file():
         raise ValueError('源文件不存在，请重新选择。')
-    return source.read_bytes()
+    raw = source.read_bytes()
+    if suffix == '.xlsx':
+        data = raw
+    elif suffix == '.xls':
+        data = _xls_to_xlsx_bytes(raw)
+    else:
+        data = _csv_to_xlsx_bytes(raw)
+    return raw, data
+
+
+def _read_bytes(source):
+    return _load_source(source)[1]
+
+
+def _explicit_text(cell, value):
+    cell.value = value
+    if isinstance(value, str):
+        cell.data_type = 's'
+
+
+def _csv_text(raw):
+    if not raw.strip():
+        raise ValueError('CSV 文件是空的，没有可拆分的数据。')
+    for encoding in ('utf-8-sig', 'utf-8', 'gb18030'):
+        try:
+            return raw.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    raise ValueError('无法识别 CSV 编码，请另存为 UTF-8 的 .csv 或 .xlsx。')
+
+
+def _csv_to_xlsx_bytes(raw):
+    text = _csv_text(raw)
+    sample = text[:8192]
+    try:
+        dialect = csv.Sniffer().sniff(sample, delimiters=',;\t')
+    except csv.Error:
+        dialect = csv.excel
+    rows = list(csv.reader(StringIO(text), dialect))
+    if not rows or all(not any(str(cell).strip() for cell in row) for row in rows):
+        raise ValueError('CSV 文件是空的，没有可拆分的数据。')
+    width = max(len(row) for row in rows)
+    if width * len(rows) > 2_000_000:
+        raise ValueError('所选区域超过 200 万单元格，请缩小处理区域。')
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = '数据'
+    for row_number, row in enumerate(rows, 1):
+        for column, value in enumerate(row, 1):
+            if value == '':
+                continue
+            _explicit_text(sheet.cell(row_number, column), value)
+    buffer = BytesIO()
+    try:
+        workbook.save(buffer)
+    finally:
+        workbook.close()
+    return buffer.getvalue()
+
+
+def _open_xls(raw):
+    last_error = None
+    for formatting in (True, False):
+        try:
+            return xlrd.open_workbook(file_contents=raw, formatting_info=formatting)
+        except Exception as error:
+            message = str(error).lower()
+            if 'encrypt' in message or 'password' in message:
+                raise ValueError('这个 .xls 已加密，请用 Excel 解密后另存为 .xlsx。') from error
+            last_error = error
+    raise ValueError('无法读取这个 .xls 文件，请用 Excel 另存为 .xlsx 后再试。') from last_error
+
+
+def _xls_cell_value(book, cell, label):
+    if cell.ctype in (xlrd.XL_CELL_EMPTY, xlrd.XL_CELL_BLANK):
+        return None
+    if cell.ctype == xlrd.XL_CELL_TEXT:
+        return cell.value
+    if cell.ctype == xlrd.XL_CELL_NUMBER:
+        value = cell.value
+        if isinstance(value, float) and value.is_integer() and abs(value) < 10 ** 15:
+            return int(value)
+        return value
+    if cell.ctype == xlrd.XL_CELL_DATE:
+        try:
+            return xlrd.xldate_as_datetime(cell.value, book.datemode)
+        except Exception as error:
+            raise ValueError(f'{label} 的日期无法读取，请用 Excel 另存为 .xlsx。') from error
+    if cell.ctype == xlrd.XL_CELL_BOOLEAN:
+        return bool(cell.value)
+    if cell.ctype == xlrd.XL_CELL_ERROR:
+        raise ValueError(f'{label} 是错误值，请先在 Excel 中处理后再拆分。')
+    return cell.value
+
+
+def _xls_to_xlsx_bytes(raw):
+    book = _open_xls(raw)
+    try:
+        if book.nsheets < 1:
+            raise ValueError('.xls 文件里没有工作表。')
+        workbook = Workbook()
+        workbook.remove(workbook.active)
+        try:
+            for sheet in book.sheets():
+                title = sheet.name[:31] or '工作表'
+                target = workbook.create_sheet(title)
+                for rowx in range(sheet.nrows):
+                    info = getattr(sheet, 'rowinfo_map', {}).get(rowx)
+                    if info is not None and info.hidden:
+                        target.row_dimensions[rowx + 1].hidden = True
+                    for colx in range(sheet.ncols):
+                        label = f'{sheet.name}!{get_column_letter(colx + 1)}{rowx + 1}'
+                        value = _xls_cell_value(book, sheet.cell(rowx, colx), label)
+                        if value is None:
+                            continue
+                        cell = target.cell(rowx + 1, colx + 1)
+                        if isinstance(value, str):
+                            _explicit_text(cell, value)
+                        else:
+                            cell.value = value
+                for colx, info in getattr(sheet, 'colinfo_map', {}).items():
+                    dimension = target.column_dimensions[get_column_letter(colx + 1)]
+                    if getattr(info, 'hidden', False):
+                        dimension.hidden = True
+                    width = getattr(info, 'width', 0) or 0
+                    if width:
+                        dimension.width = width / 256
+                for rlo, rhi, clo, chi in getattr(sheet, 'merged_cells', ()):
+                    if rhi - rlo > 1 or chi - clo > 1:
+                        target.merge_cells(
+                            start_row=rlo + 1,
+                            end_row=rhi,
+                            start_column=clo + 1,
+                            end_column=chi,
+                        )
+            buffer = BytesIO()
+            workbook.save(buffer)
+        finally:
+            workbook.close()
+        return buffer.getvalue()
+    finally:
+        book.release_resources()
 
 
 def _open(data, **kwargs):
@@ -108,7 +255,7 @@ def _open(data, **kwargs):
 
 def source_info(source, sheet=None, area=None, header_rows=1):
     """Return sheet names and actual source-column labels without changing data."""
-    data = _read_bytes(source)
+    raw, data = _load_source(source)
     wb = _open(data, read_only=True, data_only=True)
     try:
         names = tuple(wb.sheetnames)
@@ -124,7 +271,7 @@ def source_info(source, sheet=None, area=None, header_rows=1):
             if header_rows and value is not None:
                 label += f' — {value}'
             labels.append((col, label))
-        return names, tuple(labels), sha256(data).hexdigest()
+        return names, tuple(labels), sha256(raw).hexdigest()
     finally:
         wb.close()
 
@@ -162,7 +309,7 @@ def _filter_active(af, bounds):
 
 
 def inspect_source(options):
-    data = _read_bytes(options.source)
+    raw, data = _load_source(options.source)
     wb = _open(data, data_only=False)
     cached = None
     try:
@@ -217,7 +364,7 @@ def inspect_source(options):
                 values.append(value)
             item = SourceRow(row,tuple(values),hidden,all(v is None or v == '' for v in values))
             (headers if row <= header_end else rows).append(item)
-        return SourceSnapshot(sha256(data).hexdigest(),tuple(rows),bool(has_filter),
+        return SourceSnapshot(sha256(raw).hexdigest(),tuple(rows),bool(has_filter),
                               any(r.hidden for r in rows),tuple(dict.fromkeys(issues)),options,bounds,tuple(headers))
     finally:
         wb.close()
@@ -338,8 +485,8 @@ def export_split(preview, progress_callback=None):
     if not preview.selected_ids:
         raise ValueError('请至少选择一个类别。')
     options=preview.options
-    data=_read_bytes(options.source)
-    if sha256(data).hexdigest()!=preview.source_sha256:
+    raw, data=_load_source(options.source)
+    if sha256(raw).hexdigest()!=preview.source_sha256:
         raise ValueError('源文件已变化，请重新读取、预览并确认。')
     snapshot=inspect_source(options)
     if snapshot.source_sha256!=preview.source_sha256:
@@ -415,7 +562,11 @@ def export_split(preview, progress_callback=None):
                 progress_callback(index+1,len(selected),f'正在生成：{preview.names[g.id]}')
         if options.output_mode=='sheets':
             output.save(path);output.close();output=None;files.append(path)
-        if sha256(_read_bytes(options.source)).hexdigest()!=preview.source_sha256:
+        try:
+            current_raw = Path(options.source).read_bytes()
+        except OSError as error:
+            raise ValueError('处理期间源文件已变化，本次结果已撤回，请重新预览。') from error
+        if sha256(current_raw).hexdigest()!=preview.source_sha256:
             raise ValueError('处理期间源文件已变化，本次结果已撤回，请重新预览。')
         # Independently read actual outputs before announcing success.
         actual=0

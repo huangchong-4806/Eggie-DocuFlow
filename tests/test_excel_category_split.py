@@ -5,13 +5,14 @@ from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
+import xlrd
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font
 from openpyxl.worksheet.filters import AutoFilter
 from openpyxl.worksheet.table import Table
 
 from excel_category_split import (
-    SplitOptions, inspect_source, build_preview, select_groups, export_split,
+    SplitOptions, source_info, inspect_source, build_preview, select_groups, export_split,
 )
 
 
@@ -337,3 +338,54 @@ class CategorySplitTests(unittest.TestCase):
     def test_excel_cached_error_result_cannot_be_hidden_by_blank_filter(self):
         o=SplitOptions(Path(__file__).parent/'fixtures/category_formula_cache.xlsx','错误结果',key_columns=(1,),output_dir=self.root)
         with self.assertRaisesRegex(ValueError,'B2'):export_split(self.preview(o))
+
+    def test_csv_and_xls_use_the_same_split_flow(self):
+        csv_file = self.root / '订单.csv'
+        csv_file.write_bytes('供应商,金额\n甲,10\n乙,20\n甲,=30\n'.encode('gb18030'))
+        opts = SplitOptions(csv_file, '数据', key_columns=(1,), output_dir=self.root)
+        preview = self.preview(opts)
+        self.assertEqual([g.source_rows for g in preview.groups], [(2, 4), (3,)])
+        result = export_split(preview)
+        wb = load_workbook(result.output_files[0])
+        self.addCleanup(wb.close)
+        self.assertEqual(list(wb.active.values), [('供应商', '金额'), ('甲', '10'), ('甲', '=30')])
+        self.assertEqual(wb.active['B3'].data_type, 's')
+
+        xls = Path(__file__).parent / 'fixtures/category_split.xls'
+        names, _labels, _digest = source_info(xls)
+        self.assertEqual(names, ('明细', '其他'))
+        opts = SplitOptions(xls, '明细', key_columns=(1,), output_dir=self.root)
+        snapshot = inspect_source(opts)
+        self.assertTrue(snapshot.has_hidden)
+        self.assertEqual(snapshot.data_rows[1].hidden, True)
+        visible = replace(opts, visible_only=True)
+        preview = build_preview(inspect_source(visible), visible)
+        self.assertEqual(preview.counts.hidden, 1)
+        result = export_split(preview)
+        values = []
+        for path in result.output_files:
+            book = load_workbook(path)
+            values.append(tuple(book.active.values))
+            book.close()
+        self.assertIn((('供应商', '金额'), ('甲', 10), ('甲', 30)), values)
+        self.assertNotIn((('供应商', '金额'), ('乙', 20)), values)
+
+    def test_csv_xls_failures_are_explicit_and_xlsx_still_rejects_other_types(self):
+        empty = self.root / '空.csv'
+        empty.write_text(' \n', encoding='utf-8')
+        opts = SplitOptions(empty, '数据', key_columns=(1,), output_dir=self.root)
+        with self.assertRaisesRegex(ValueError, '空'):
+            inspect_source(opts)
+        broken = self.root / '坏.xls'
+        broken.write_bytes(b'not-an-xls')
+        with self.assertRaisesRegex(ValueError, '无法读取'):
+            inspect_source(replace(opts, source=broken))
+        other = self.root / '宏.xlsm'
+        other.write_bytes(b'nope')
+        with self.assertRaisesRegex(ValueError, r'\.xlsx、\.xls 和 \.csv'):
+            inspect_source(replace(opts, source=other))
+        with patch('xlrd.open_workbook', side_effect=xlrd.XLRDError('Workbook is encrypted')):
+            locked = self.root / '加密.xls'
+            locked.write_bytes(b'encrypted')
+            with self.assertRaisesRegex(ValueError, '加密'):
+                inspect_source(replace(opts, source=locked))

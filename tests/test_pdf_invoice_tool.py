@@ -409,9 +409,15 @@ class PdfInvoiceToolTests(unittest.TestCase):
         try:
             sheet = workbook.active
             self.assertEqual(sheet.title, "发票汇总")
+            self.assertEqual(sheet.max_column, 10)
+            self.assertEqual([cell.value for cell in sheet[1]], [
+                "文件名", "发票号码", "开票日期", "购买方", "销售方",
+                "金额", "税额", "价税合计", "异常数量", "结果文件路径",
+            ])
             self.assertEqual(sheet["B2"].value, "12345678")
             self.assertEqual(sheet["F2"].value, 100)
             self.assertEqual(sheet["I2"].value, 1)
+            self.assertNotEqual(sheet["B2"].fill.fgColor.rgb, "00F4C7C3")
         finally:
             workbook.close()
 
@@ -424,6 +430,75 @@ class PdfInvoiceToolTests(unittest.TestCase):
         self.assertIn("失败 source_file=", log_text)
         self.assertIn("文件生成状态", log_text)
         self.assertIn("summary_file=", log_text)
+        self.assertIn("重复发票行数=0", log_text)
+        self.assertEqual(ledger.duplicate_rows, 0)
+
+    def _summary_result(self, number, name):
+        return PdfInvoiceResult(
+            output_file=str(self.root / f"{name}.xlsx"),
+            item_count=1,
+            abnormal_count=0,
+            source_file=str(self.root / name),
+            invoice_number=number,
+            amount=Decimal("10.00"),
+        )
+
+    def test_duplicate_invoice_numbers_are_marked_and_blanks_are_not(self):
+        results = [
+            self._summary_result("1234 5678", "a.pdf"),
+            self._summary_result("12345678", "b.pdf"),
+            self._summary_result("  ", "blank.pdf"),
+            self._summary_result("", "empty.pdf"),
+            self._summary_result(None, "missing.pdf"),
+            self._summary_result("ab12", "c.pdf"),
+            self._summary_result("AB 12", "d.pdf"),
+            self._summary_result("999", "e.pdf"),
+        ]
+
+        ledger = write_invoice_ledger(results, [], self.root)
+
+        self.assertEqual(ledger.duplicate_rows, 4)
+        workbook = load_workbook(ledger.output_file)
+        try:
+            sheet = workbook.active
+            self.assertEqual(sheet.max_column, 11)
+            self.assertEqual(sheet["K1"].value, "查重结果")
+            marked = []
+            for row in range(2, 10):
+                red = str(sheet.cell(row, 2).fill.fgColor.rgb or "").upper().endswith("F4C7C3")
+                note = sheet.cell(row, 11).value or ""
+                marked.append((sheet.cell(row, 2).value, red, "重复" in note))
+            self.assertEqual(marked, [
+                ("1234 5678", True, True),
+                ("12345678", True, True),
+                ("  ", False, False),
+                (None, False, False),
+                (None, False, False),
+                ("ab12", True, True),
+                ("AB 12", True, True),
+                ("999", False, False),
+            ])
+            self.assertIn("共 2 张", sheet["K2"].value)
+            self.assertIn("共 2 张", sheet["K7"].value)
+        finally:
+            workbook.close()
+        log_text = Path(ledger.log_file).read_text(encoding="utf-8")
+        self.assertIn("重复发票行数=4", log_text)
+        self.assertIn("重复发票号=12345678,AB12", log_text)
+        self.assertIn("空白发票号不参与查重", log_text)
+
+    def test_only_blank_invoice_numbers_do_not_count_as_duplicates(self):
+        ledger = write_invoice_ledger(
+            [self._summary_result("", "a.pdf"), self._summary_result("   ", "b.pdf")],
+            [],
+            self.root,
+        )
+        self.assertEqual(ledger.duplicate_rows, 0)
+        workbook = load_workbook(ledger.output_file)
+        try:
+            self.assertEqual(workbook.active.max_column, 10)
+        finally:
+            workbook.close()
 
     def test_ledger_is_kept_when_only_its_log_cannot_be_written(self):
         result = PdfInvoiceResult(

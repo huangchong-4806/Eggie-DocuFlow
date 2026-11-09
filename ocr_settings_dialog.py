@@ -26,6 +26,7 @@ from api_layer.config import (
     save_credentials,
 )
 from api_layer.providers import create_provider
+from ui.feedback import DEFAULT_FEEDBACK_CHANNEL, normalize_feedback_channel
 
 
 class ConnectionTestThread(QThread):
@@ -53,13 +54,15 @@ class SoftwareSettingsDialog(QDialog):
         accent_options=(),
         selected_accent="",
         parent=None,
+        feedback_channel="",
     ):
         super().__init__(parent)
         self.setWindowTitle("软件设置")
         self.setMinimumWidth(700)
-        self.resize(760, 590)
+        self.resize(760, 700)
         self._test_thread = None
         self._fields = {}
+        self._normalized_feedback = DEFAULT_FEEDBACK_CHANNEL
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(22, 20, 22, 20)
@@ -153,6 +156,23 @@ class SoftwareSettingsDialog(QDialog):
         service_layout.addLayout(buttons)
         layout.addWidget(service_group)
 
+        feedback_group = QGroupBox("问题反馈")
+        feedback_form = QFormLayout(feedback_group)
+        feedback_form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
+        feedback_note = QLabel(
+            "默认发到 448223855@qq.com。以后也可以改成腾讯问卷或金数据链接。"
+            "软件不会上传业务文件，除非您自己在邮件或问卷里附上。"
+        )
+        feedback_note.setWordWrap(True)
+        feedback_note.setProperty("role", "hint")
+        feedback_form.addRow(feedback_note)
+        self.feedback_edit = QLineEdit()
+        self.feedback_edit.setPlaceholderText("邮箱，或 https:// 开头的问卷链接")
+        self.feedback_edit.setText(feedback_channel or DEFAULT_FEEDBACK_CHANNEL)
+        self.feedback_edit.setClearButtonEnabled(True)
+        feedback_form.addRow("反馈地址：", self.feedback_edit)
+        layout.addWidget(feedback_group)
+
         close_row = QHBoxLayout()
         close_row.addStretch(1)
         self.close_button = QPushButton("完成")
@@ -179,6 +199,18 @@ class SoftwareSettingsDialog(QDialog):
     @property
     def selected_accent(self):
         return self.theme_combo.currentData()
+
+    @property
+    def feedback_channel(self):
+        return self._normalized_feedback
+
+    def accept(self):
+        try:
+            self._normalized_feedback = normalize_feedback_channel(self.feedback_edit.text())
+        except ValueError as error:
+            QMessageBox.warning(self, "反馈入口无效", str(error))
+            return
+        super().accept()
 
     def _theme_changed(self):
         accent = self.selected_accent

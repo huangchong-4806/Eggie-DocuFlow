@@ -24,6 +24,7 @@ Eggie DocuFlow / Eggie文档处理系统。本文适用于当前 V1.5.2 候选�
 | pypdfium2 / PDFium | 5.10.1 / 151.0.7891.0 | BSD-3-Clause、Apache-2.0 及 PDFium 构建依赖的独立声明；[源代码](https://github.com/pypdfium2-team/pypdfium2)。随包保留 BUILD_LICENSES 与 LICENSES；准确配套的完整官方文本位于 licenses/pdfium/mac/ 和 licenses/pdfium/windows/，各16份，补正包装器内较旧的libpng、zlib、lcms和ICU声明。 |
 | Pillow | 13.0.0 | MIT-CMU，包含其编解码依赖的许可证；[源代码](https://github.com/python-pillow/Pillow)。 |
 | openpyxl | 3.1.5 | MIT；[源代码](https://foss.heptapod.net/openpyxl/openpyxl)。 |
+| xlrd | 2.0.2 | BSD-3-Clause；只用于把分类拆分的 .xls 读成表格，[源代码](https://github.com/python-excel/xlrd)。 |
 | pdfplumber / pdfminer.six | 0.11.10 / 20260107 | MIT；[pdfplumber](https://github.com/jsvine/pdfplumber)、[pdfminer.six](https://github.com/pdfminer/pdfminer.six)。 |
 | Sparkle BinaryDelta | 2.10.1（含增量更新的 Mac 安装包） | 用于生成和应用差异包。完整版权声明随工具保存在 licenses/sparkle/Sparkle-LICENSE.txt；[对应源代码](https://github.com/sparkle-project/Sparkle/tree/2.10.1)。 |
 | cryptography | Mac 50.0.1 / Windows 50.0.2，所用OpenSSL分别4.0.2/4.0.3 | Apache-2.0 OR BSD-3-Clause，另含所用加密库的声明；[源代码](https://github.com/pyca/cryptography)。 |

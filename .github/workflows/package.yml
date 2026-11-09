@@ -1,0 +1,72 @@
+name: Package
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Windows installer
+    runs-on: windows-2022
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: python -m pip install -r requirements.txt
+      - name: Build installer, checksum, and smoke-install
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $key = Join-Path $env:RUNNER_TEMP 'eggie-update-ed25519.pub'
+          python -c "from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey; import base64, pathlib, sys; key = Ed25519PrivateKey.generate(); pathlib.Path(sys.argv[1]).write_bytes(base64.b64encode(key.public_key().public_bytes_raw()))" $key
+          $env:EGGIE_UPDATE_PUBLIC_KEY_FILE = $key
+          ./scripts/build_windows.ps1
+          New-Item -ItemType Directory -Force ci-package | Out-Null
+          $src = Get-ChildItem release\*_Windows_x64_Setup.exe | Select-Object -First 1
+          $named = Join-Path (Resolve-Path ci-package) ($src.Name -replace '_Setup\.exe$','_Setup_ci.exe')
+          Copy-Item -LiteralPath $src.FullName -Destination $named
+          python scripts/write_sha256sums.py $named ci-package\SHA256SUMS.txt
+          $install = Join-Path $env:RUNNER_TEMP 'EggieSmoke'
+          & $named /VERYSILENT /SUPPRESSMSGBOXES /NORESTART "/DIR=$install"
+          if ($LASTEXITCODE -ne 0) { throw "Installer smoke failed with exit $LASTEXITCODE" }
+          & (Join-Path $install 'Eggie DocuFlow.exe') --version
+          if ($LASTEXITCODE -ne 0) { throw "Installed app did not launch with exit $LASTEXITCODE" }
+          # --check-install needs the custom MuPDF 1.28.5 engine and is not run on this stock-wheel build.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-ci-installer
+          path: ci-package/
+          if-no-files-found: error
+
+  mac:
+    name: Mac unsigned package
+    runs-on: macos-latest
+    timeout-minutes: 90
+    env:
+      EGGIE_CI_UNSIGNED: '1'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: python -m pip install -r requirements.txt
+      - name: Build unsigned zip, checksum, and smoke-launch
+        run: bash scripts/package_unsigned_mac.sh
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mac-ci-unsigned
+          path: ci-package/
+          if-no-files-found: error

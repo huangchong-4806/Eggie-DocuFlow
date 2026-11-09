@@ -352,6 +352,24 @@ try {
             [IO.File]::Delete($path)
         }
     }
+    # layout_batch rename: drop a leftover v2 package that was not a stamped file.
+    function Remove-RetiredPackage([string]$relative) {
+        $base = [IO.Path]::GetFullPath($app).TrimEnd('\') + '\'
+        $path = [IO.Path]::GetFullPath([IO.Path]::Combine($app, $relative))
+        if (!$path.StartsWith($base, [StringComparison]::OrdinalIgnoreCase)) { throw 'Retired path escaped the install' }
+        if (![IO.Directory]::Exists($path)) { return }
+        $attrs = [IO.File]::GetAttributes($path)
+        if (($attrs -band [IO.FileAttributes]::ReparsePoint) -ne 0) { return }
+        $marked = [IO.File]::Exists([IO.Path]::Combine($path, '__init__.py')) -or
+            [IO.File]::Exists([IO.Path]::Combine($path, '__init__.pyc'))
+        if (-not $marked) {
+            $compiled = @(Get-ChildItem -LiteralPath $path -Filter '__init__.cpython-*.pyc' -File -ErrorAction SilentlyContinue)
+            if ($compiled.Count -eq 0) { return }
+        }
+        Clear-Tree $path
+    }
+    Remove-RetiredPackage 'v2'
+    Remove-RetiredPackage '_internal\v2'
     $signals = @(foreach ($h in @($config.ready_handle,$config.bad_handle)) {
         $e = [Threading.EventWaitHandle]::new($false,[Threading.EventResetMode]::ManualReset)
         $e.SafeWaitHandle = [Microsoft.Win32.SafeHandles.SafeWaitHandle]::new([IntPtr][long]$h,$true)

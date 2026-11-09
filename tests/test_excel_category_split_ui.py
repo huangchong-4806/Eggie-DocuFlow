@@ -8,7 +8,7 @@ from openpyxl import Workbook, load_workbook
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
-from ui.excel_category_split import CategorySplitPage
+from ui.excel_category_split import SOURCE_FILE_FILTER, CategorySplitPage
 
 
 class CategoryUiTests(unittest.TestCase):
@@ -111,3 +111,27 @@ class CategoryUiTests(unittest.TestCase):
         with patch.object(self.page,'ask_confirmation',return_value=True):self.page.confirm_export();self.wait_idle()
         w=load_workbook(self.page.result.output_files[0]);self.addCleanup(w.close)
         self.assertEqual(w.sheetnames,['B']);self.assertEqual(w.active['B2'].value,20)
+
+    def test_csv_can_be_previewed_and_exported(self):
+        self.assertIn('*.xls', SOURCE_FILE_FILTER)
+        self.assertIn('*.csv', SOURCE_FILE_FILTER)
+        self.assertIn('*.xlsx', SOURCE_FILE_FILTER)
+        csv_file = self.root / '分类.csv'
+        csv_file.write_text('类别,金额\n甲,1\n乙,2\n甲,3\n', encoding='utf-8')
+        self.page.source_edit.setText(str(csv_file))
+        QTest.mouseClick(self.page.load_button, Qt.LeftButton)
+        self.wait_idle()
+        self.assertEqual(self.page.sheet_combo.currentText(), '数据')
+        self.page.output_edit.setText(str(self.root))
+        QTest.mouseClick(self.page.next_button, Qt.LeftButton)
+        self.wait_idle()
+        self.page.column_list.item(0).setCheckState(Qt.Checked)
+        QTest.mouseClick(self.page.next_button, Qt.LeftButton)
+        self.wait_idle()
+        self.assertEqual(self.page.steps.currentIndex(), 2)
+        self.assertEqual(self.page.preview.counts.exported, 3)
+        with patch.object(self.page, 'ask_confirmation', return_value=True):
+            QTest.mouseClick(self.page.confirm_button, Qt.LeftButton)
+            self.wait_idle()
+        self.assertEqual(self.page.result.exported_rows, 3)
+        self.assertTrue(self.page.result.output_files[0].is_file())

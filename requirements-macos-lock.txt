@@ -44,4 +44,5 @@ typing_extensions==4.16.0
 tzlocal==5.4.4
 urllib3==2.8.0
 websocket-client==1.9.2
+xlrd==2.0.2
 yarl==1.25.1

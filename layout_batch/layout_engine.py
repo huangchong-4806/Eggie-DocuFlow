@@ -5,9 +5,9 @@ import document_router
 from core.classifier import CONTRACT, TABLE, UNKNOWN, detect_doc_type
 from utils.file_helper import available_output_path
 from utils.pdf_helper import extract_text, validate_pdf
-from v2.batch_engine import _v2_result
-from v2.layout_exporters import export_contract_layout, export_table_layout
-from v2.layout_extractor import extract_contract_layout, extract_table_layout
+from layout_batch.batch_engine import _layout_result
+from layout_batch.layout_exporters import export_contract_layout, export_table_layout
+from layout_batch.layout_extractor import extract_contract_layout, extract_table_layout
 
 
 def process_layout_document(pdf_file, output_dir=None, progress_callback=None, log_root=None, style_template=None):
@@ -53,7 +53,7 @@ def process_layout_document(pdf_file, output_dir=None, progress_callback=None, l
                 }
             )
         else:
-            return _v2_result(
+            return _layout_result(
                 document_router.process_document(pdf_file, output_dir, progress_callback, log_root),
                 pdf_file,
             )

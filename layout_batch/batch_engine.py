@@ -5,10 +5,10 @@ from pathlib import Path
 
 import document_router
 
-from v2.queue_system import TaskQueue
+from layout_batch.queue_system import TaskQueue
 
 
-def _v2_result(router_result, source_file):
+def _layout_result(router_result, source_file):
     source_file = str(Path(source_file).expanduser().resolve())
     if not isinstance(router_result, dict):
         return {
@@ -95,7 +95,7 @@ class BatchEngine:
                 progress_callback=router_progress,
                 log_root=log_root,
             )
-            return _v2_result(result, pdf_file)
+            return _layout_result(result, pdf_file)
 
         queue = TaskQueue(
             worker,
@@ -115,7 +115,7 @@ def _cli_progress(value, total, message):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="DocuFlow v2 批量处理")
+    parser = argparse.ArgumentParser(description="DocuFlow 版面批量处理")
     parser.add_argument("input_folder", help="待扫描文件夹")
     parser.add_argument("-o", "--output-dir", help="输出文件夹，默认 input/output")
     parser.add_argument("--recursive", action="store_true", help="扫描子文件夹")

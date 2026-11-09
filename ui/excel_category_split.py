@@ -14,6 +14,8 @@ from excel_category_split import (
     SplitOptions, source_info, inspect_source, build_preview,
     select_groups, export_split,
 )
+
+SOURCE_FILE_FILTER = '表格文件 (*.xlsx *.xls *.csv)'
 from ui.tasks import BackgroundTaskThread
 from ui.common_widgets import SelectionComboBox, ClearSpinBox
 
@@ -35,7 +37,7 @@ class CategorySplitPage(QWidget):
         self.step_label=QLabel();self.step_label.setProperty('role','subtitle');self.step_label.hide()
         self.steps=QStackedWidget();layout.addWidget(self.steps,1)
         first=QWidget();form=QFormLayout(first);form.setSpacing(14);form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
-        self.source_edit=QLineEdit();self.source_edit.setPlaceholderText('选择本地 .xlsx 文件')
+        self.source_edit=QLineEdit();self.source_edit.setPlaceholderText('选择本地 .xlsx、.xls 或 .csv 文件')
         browse=QPushButton('选择文件');browse.clicked.connect(self.choose_source)
         self.load_button=QPushButton('重新读取');self.load_button.clicked.connect(self.load_source)
         row=QHBoxLayout();row.addWidget(self.source_edit,1);row.addWidget(browse);row.addWidget(self.load_button)
@@ -46,7 +48,7 @@ class CategorySplitPage(QWidget):
         row=QHBoxLayout();row.addWidget(self.range_combo);row.addWidget(self.area_edit,1);form.addRow('处理范围',row)
         self.header_spin=ClearSpinBox();self.header_spin.setRange(0,1048575);self.header_spin.setValue(1);self.header_spin.setSuffix(' 行');self.header_spin.setMaximumWidth(160)
         form.addRow('表头行数',self.header_spin)
-        hint=QLabel('所选区域开头的表头行会复制到每份结果。数据默认全部参与；发现筛选或隐藏行时，会提示选择处理范围。\n请先在 Excel 中完成计算并保存；原文件保持不变。')
+        hint=QLabel('所选区域开头的表头行会复制到每份结果。数据默认全部参与；发现筛选或隐藏行时，会提示选择处理范围。\n.xls 和 .csv 会先转成普通表格再拆分，图表、宏和数据验证不会带入。请先在 Excel 中完成计算并保存；原文件保持不变。')
         hint.setWordWrap(True);hint.setProperty('role','hint');form.addRow(hint)
         self.add_card(first,'选择要拆分的数据','先选择文件，再指定工作表和表头。')
         second=QWidget();form=QFormLayout(second);form.setSpacing(12);form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
@@ -116,7 +118,7 @@ class CategorySplitPage(QWidget):
         self.confirm_button.setEnabled(False);self.open_button.hide()
 
     def choose_source(self):
-        path,_=QFileDialog.getOpenFileName(self,'选择 Excel 文件','','Excel 文件 (*.xlsx)')
+        path,_=QFileDialog.getOpenFileName(self,'选择表格文件','',SOURCE_FILE_FILTER)
         if path:self.source_edit.setText(path);self.load_source()
 
     def choose_output(self):

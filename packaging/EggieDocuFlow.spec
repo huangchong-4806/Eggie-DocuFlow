@@ -12,15 +12,12 @@ from PyInstaller.utils.hooks import copy_metadata
 PROJECT_ROOT = Path(SPECPATH).parent
 build_trust_data = run_path(str(PROJECT_ROOT / "packaging" / "update_trust.py"))["build_trust_data"]
 cocoa_repair = run_path(str(PROJECT_ROOT / "packaging" / "mac_cocoa.py"))
-cocoa_library, cocoa_report = cocoa_repair["verified_component"](
-    os.environ.get("EGGIE_QT_COCOA_REPAIR_DIR"), distribution_version("PySide6-Essentials"),
-)
 APP_BASENAME = "Eggie DocuFlow"
 version_scope = {}
 exec((PROJECT_ROOT / "version.py").read_text(encoding="utf-8"), version_scope)
 APP_VERSION = version_scope["APP_VERSION"]
 LICENSE_METADATA = []
-for package in ("openpyxl", "pdfplumber", "pypdf", "Pillow", "pypdfium2", "PyMuPDF",
+for package in ("openpyxl", "xlrd", "pdfplumber", "pypdf", "Pillow", "pypdfium2", "PyMuPDF",
                 "PySide6-Essentials", "alibabacloud_ocr_api20210707"):
     LICENSE_METADATA += copy_metadata(package, recursive=True)
 
@@ -75,14 +72,29 @@ def keep_data(entry):
     return filename.startswith("qtbase_")
 
 
+# CI smoke packages skip the local Cocoa repair, release signing key, and updater.
+# They are not a substitute for the signed, notarized, or ad-hoc release build.
+CI_UNSIGNED = os.environ.get("EGGIE_CI_UNSIGNED") == "1"
 mac_update_binaries = []
 mac_update_notices = []
-if os.environ.get("EGGIE_UPDATE_PUBLIC_KEY_FILE"):
+if CI_UNSIGNED:
+    cocoa_library = cocoa_report = None
+    trust_data = []
+elif os.environ.get("EGGIE_UPDATE_PUBLIC_KEY_FILE"):
+    cocoa_library, cocoa_report = cocoa_repair["verified_component"](
+        os.environ.get("EGGIE_QT_COCOA_REPAIR_DIR"), distribution_version("PySide6-Essentials"),
+    )
+    trust_data = build_trust_data(version_scope)
     tools_dir = Path(workpath) / "eggie-mac-update-tools"
     subprocess.run([sys.executable, PROJECT_ROOT / "scripts/prepare_mac_updater.py", tools_dir], check=True)
     mac_update_binaries = [(str(tools_dir / name), "update-tools")
                            for name in ("BinaryDelta", "EggieUpdateHelper")]
     mac_update_notices = [(str(tools_dir / "Sparkle-LICENSE.txt"), "licenses/sparkle")]
+else:
+    cocoa_library, cocoa_report = cocoa_repair["verified_component"](
+        os.environ.get("EGGIE_QT_COCOA_REPAIR_DIR"), distribution_version("PySide6-Essentials"),
+    )
+    trust_data = build_trust_data(version_scope)
 
 
 a = Analysis(
@@ -96,7 +108,6 @@ a = Analysis(
         (str(PROJECT_ROOT / "BUILD_RELEASE.md"), "."),
         (str(PROJECT_ROOT / "licenses"), "licenses"),
         (str(PROJECT_ROOT / "packaging/macos/qt-cocoa"), "licenses/qt-cocoa"),
-        (str(cocoa_report), "licenses/qt-cocoa"),
         (str(PROJECT_ROOT / "assets" / "software_logo.png"), "assets"),
         (str(PROJECT_ROOT / "assets" / "app_icon.png"), "assets"),
         (str(PROJECT_ROOT / "assets" / "app_icon.icns"), "assets"),
@@ -113,7 +124,7 @@ a = Analysis(
             str(PROJECT_ROOT / "assets" / "zh-Hant.lproj" / "InfoPlist.strings"),
             "zh-Hant.lproj",
         ),
-    ] + mac_update_notices + LICENSE_METADATA + build_trust_data(version_scope),
+    ] + ([(str(cocoa_report), "licenses/qt-cocoa")] if cocoa_report else []) + mac_update_notices + LICENSE_METADATA + trust_data,
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -127,7 +138,8 @@ a = Analysis(
     optimize=1,
 )
 a.binaries = [entry for entry in a.binaries if keep_binary(entry)]
-a.binaries = cocoa_repair["replace_cocoa_binary"](a.binaries, cocoa_library)
+if cocoa_library is not None:
+    a.binaries = cocoa_repair["replace_cocoa_binary"](a.binaries, cocoa_library)
 a.datas = [entry for entry in a.datas if keep_data(entry)]
 
 # Build-machine paths in installer metadata do not belong in a distributed app.

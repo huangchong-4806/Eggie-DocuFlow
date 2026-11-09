@@ -115,6 +115,7 @@ class InvoiceLedgerResult:
     output_file: str
     log_file: str
     log_error: str = ""
+    duplicate_rows: int = 0
 
 
 def _clean_text(value):
@@ -915,7 +916,22 @@ def _ledger_log_path(output_folder):
     return available_output_path(Path(output_folder) / f"发票批量汇总日志_{stamp}.txt")
 
 
-def _write_invoice_ledger_log(log_file, results, failures, ledger_file):
+def invoice_number_key(value):
+    """Comparable invoice number. Blank values are empty and are not duplicates."""
+    return re.sub(r"\s+", "", _clean_text(value)).upper()
+
+
+def invoice_duplicate_flags(results):
+    keys = [invoice_number_key(result.invoice_number) for result in results]
+    counts = {}
+    for key in keys:
+        if key:
+            counts[key] = counts.get(key, 0) + 1
+    flags = tuple(bool(key) and counts[key] > 1 for key in keys)
+    return flags, counts
+
+
+def _write_invoice_ledger_log(log_file, results, failures, ledger_file, duplicate_rows=0, duplicate_numbers=()):
     total_items = sum(result.item_count for result in results)
     total_abnormal = sum(result.abnormal_count for result in results)
     with Path(log_file).open("w", encoding="utf-8") as handle:
@@ -939,6 +955,10 @@ def _write_invoice_ledger_log(log_file, results, failures, ledger_file):
         handle.write(f"失败发票数={len(failures)}\n")
         handle.write(f"明细行数合计={total_items}\n")
         handle.write(f"校验异常合计={total_abnormal}\n")
+        handle.write(f"重复发票行数={duplicate_rows}\n")
+        if duplicate_numbers:
+            handle.write(f"重复发票号={','.join(duplicate_numbers)}\n")
+        handle.write("空白发票号不参与查重\n")
         handle.write("\n文件生成状态：\n")
         handle.write(f"summary_file={ledger_file}\n")
         handle.write(f"log_file={log_file}\n")
@@ -952,30 +972,52 @@ def write_invoice_ledger(results, failures, output_folder):
     ledger_file = available_output_path(
         output_folder / f"发票批量汇总_{datetime.now():%Y%m%d}.xlsx"
     )
+    flags, counts = invoice_duplicate_flags(results)
+    duplicate_rows = sum(flags)
+    duplicate_numbers = tuple(sorted({
+        invoice_number_key(result.invoice_number)
+        for result, flagged in zip(results, flags)
+        if flagged
+    }))
+    fields = list(LEDGER_FIELDS)
+    if duplicate_rows:
+        fields.append("查重结果")
 
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "发票汇总"
-    sheet.append(LEDGER_FIELDS)
-    for result in results:
-        sheet.append(
-            [
-                Path(result.source_file or result.output_file).name,
-                result.invoice_number,
-                _date_value(result.invoice_date),
-                result.buyer_name,
-                result.seller_name,
-                _excel_value(result.amount),
-                _excel_value(result.tax_amount),
-                _excel_value(result.total_amount),
-                result.abnormal_count,
-                result.output_file,
-            ]
-        )
+    sheet.append(fields)
+    for result, flagged in zip(results, flags):
+        row = [
+            Path(result.source_file or result.output_file).name,
+            result.invoice_number,
+            _date_value(result.invoice_date),
+            result.buyer_name,
+            result.seller_name,
+            _excel_value(result.amount),
+            _excel_value(result.tax_amount),
+            _excel_value(result.total_amount),
+            result.abnormal_count,
+            result.output_file,
+        ]
+        if duplicate_rows:
+            key = invoice_number_key(result.invoice_number)
+            row.append(f"重复（相同发票号共 {counts[key]} 张）" if flagged else "")
+        sheet.append(row)
     _style_sheet(
         sheet,
-        [32, 18, 16, 28, 28, 14, 14, 14, 12, 64],
+        [32, 18, 16, 28, 28, 14, 14, 14, 12, 64, 28][: len(fields)],
     )
+    if duplicate_rows:
+        duplicate_fill = PatternFill("solid", fgColor="F4C7C3")
+        duplicate_font = Font(color="9C1B1B", bold=True)
+        for row_index, flagged in enumerate(flags, 2):
+            if not flagged:
+                continue
+            for cell in sheet[row_index]:
+                cell.fill = duplicate_fill
+                if cell.column == len(fields):
+                    cell.font = duplicate_font
     file_descriptor, temporary_file = tempfile.mkstemp(
         prefix=f".{Path(ledger_file).stem}-",
         suffix=".xlsx",
@@ -998,14 +1040,22 @@ def write_invoice_ledger(results, failures, output_folder):
 
     log_file = _ledger_log_path(output_folder)
     try:
-        _write_invoice_ledger_log(log_file, results, failures, ledger_file)
+        _write_invoice_ledger_log(
+            log_file,
+            results,
+            failures,
+            ledger_file,
+            duplicate_rows,
+            duplicate_numbers,
+        )
     except Exception as error:
         return InvoiceLedgerResult(
             str(ledger_file),
             "",
             f"{type(error).__name__}: {error}",
+            duplicate_rows,
         )
-    return InvoiceLedgerResult(str(ledger_file), str(log_file))
+    return InvoiceLedgerResult(str(ledger_file), str(log_file), "", duplicate_rows)
 
 
 def convert_invoice_pdf(pdf_file, output_file, progress_callback=None, overwrite=False):
