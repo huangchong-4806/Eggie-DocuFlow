@@ -60,7 +60,8 @@ class WindowRefactorTests(unittest.TestCase):
         self.window.dragEnterEvent(drag)
         with patch.object(self.window, "set_document_source_file", return_value=True) as load:
             self.window.dropEvent(drop)
-        load.assert_called_once_with(source)
+        # QUrl returns forward slashes on Windows as well as on macOS.
+        load.assert_called_once_with(QUrl.fromLocalFile(source).toLocalFile())
         self.assertTrue(drag.isAccepted())
         self.assertTrue(drop.isAccepted())
         self.assertIs(self.window.stack.currentWidget(), self.window.document_page)
