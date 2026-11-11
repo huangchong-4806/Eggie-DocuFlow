@@ -19,6 +19,9 @@ def _batch_result(router_result, source_file):
         }
 
     data = {"source_file": source_file}
+    for field in ("warning", "text_only", "retryable"):
+        if field in router_result:
+            data[field] = router_result[field]
     if "confidence" in router_result:
         data["confidence"] = router_result["confidence"]
     if "error_message" in router_result:

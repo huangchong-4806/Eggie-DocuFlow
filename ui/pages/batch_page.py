@@ -133,6 +133,7 @@ class BatchPageMixin:
         self.choose_batch_source_button.clicked.connect(self.choose_batch_source_folder)
         self.choose_batch_output_button.clicked.connect(self.choose_batch_output_folder)
         self.batch_preview_button.clicked.connect(self.refresh_batch_preview)
+        self.batch_ocr_checkbox.toggled.connect(self.invalidate_batch_settings)
         self.batch_recursive_checkbox.toggled.connect(self.refresh_batch_preview)
         self.batch_ocr_provider_combo.currentIndexChanged.connect(
             self.batch_ocr_provider_changed
@@ -178,6 +179,19 @@ class BatchPageMixin:
         self.batch_output_path_edit.setText(self.batch_output_folder)
         self.update_batch_button_states()
 
+    def batch_settings(self):
+        cloud = self.batch_ocr_checkbox.isChecked()
+        provider = self.batch_ocr_provider_combo.currentData() if cloud else None
+        return self.batch_source_folder, self.batch_recursive_checkbox.isChecked(), cloud, provider
+
+    def invalidate_batch_settings(self, *_args):
+        if self.batch_previews and getattr(self, "batch_preview_settings", None) != self.batch_settings():
+            self.batch_previews = []
+            self.batch_failed_files = []
+            self.batch_file_table.clear()
+            self.batch_status_label.setText("识别设置已变化，请重新检查文件。")
+            self.update_batch_button_states()
+
     def refresh_batch_preview(self, *_args):
         if not self.batch_source_folder:
             return
@@ -197,6 +211,15 @@ class BatchPageMixin:
             self.update_batch_button_states()
             return
 
+        settings = self.batch_settings()
+
+        def completed(previews):
+            if settings == self.batch_settings():
+                self.display_batch_previews(previews)
+            else:
+                self.batch_status_label.setText("设置已变化，请重新检查文件。")
+                self.update_batch_button_states()
+
         def worker(progress_callback):
             return inspect_pdf_files(files, progress_callback)
 
@@ -205,12 +228,13 @@ class BatchPageMixin:
             "检查批量文件",
             f"正在检查 {len(files)} 个 PDF…",
             worker,
-            self.display_batch_previews,
+            completed,
             total=len(files),
             status_label=self.batch_source_status_label,
         )
 
     def display_batch_previews(self, previews):
+        self.batch_preview_settings = self.batch_settings()
         self.batch_previews = list(previews)
         self.batch_file_table.clear()
         invalid_count = 0
@@ -244,6 +268,7 @@ class BatchPageMixin:
         self.update_batch_button_states()
 
     def batch_ocr_provider_changed(self):
+        self.invalidate_batch_settings()
         provider = self.batch_ocr_provider_combo.currentData()
         try:
             select_provider(provider)
@@ -321,16 +346,22 @@ class BatchPageMixin:
         if not files or not self.batch_output_folder:
             QMessageBox.information(self, "信息不完整", "请先选择文件夹并完成预览。")
             return
-        if not self._confirm_batch_ocr(files):
-            return
+        previews = tuple(self.batch_previews)
         use_ocr = self.batch_ocr_checkbox.isChecked()
         provider = self.batch_ocr_provider_combo.currentData()
+        folder = self.batch_output_folder
+        if self.batch_settings() != getattr(self, "batch_preview_settings", None):
+            self.invalidate_batch_settings()
+            return
+        if not self._confirm_batch_ocr(files):
+            return
         self._set_batch_rows_waiting(files)
 
         def worker(progress_callback):
             return process_pdf_files(
                 files,
-                self.batch_output_folder,
+                folder,
+                expected_previews=previews,
                 use_ocr=use_ocr,
                 provider_name=provider,
                 progress_callback=progress_callback,
@@ -357,29 +388,39 @@ class BatchPageMixin:
             row = rows.get(source)
             if item_result.get("status") == "success":
                 status = f"成功：{DOCUMENT_TYPE_LABELS.get(item_result.get('doc_type'), '普通文档')}"
+                if data.get("text_only"):
+                    status = "成功：仅提取文字"
                 tooltip = item_result.get("output_file", "")
+                if data.get("warning"):
+                    status += "（有提醒）"
+                    tooltip += "\n" + data["warning"]
+            elif item_result.get("status") == "unprocessed":
+                status = "未处理"
+                tooltip = data.get("error_message", "请重新预览。")
             else:
                 status = "失败"
                 tooltip = data.get("error_message", "处理失败")
-                if source:
+                if not data.get("retryable", True) and item_result.get("output_file"):
+                    tooltip += "\n请先核对已有结果：" + item_result["output_file"]
+                if source and data.get("retryable", True):
                     self.batch_failed_files.append(source)
             if row is not None:
                 row.setText(5, status)
                 row.setToolTip(5, tooltip)
         self.batch_last_log_file = result.log_file
         self.batch_status_label.setText(
-            f"处理完成：成功 {len(result.successful)} 个，失败 {len(result.failed)} 个；"
-            f"日志：{result.log_file}"
+            f"处理完成：成功 {len(result.successful)} 个，失败 {len(result.failed)} 个，未处理 {len(result.unprocessed)} 个；"
+            f"日志：{result.warning or result.log_file}"
         )
         self.update_batch_button_states()
         message = QMessageBox(self)
         message.setWindowTitle("批量处理完成")
-        message.setIcon(QMessageBox.Warning if result.failed else QMessageBox.Information)
+        message.setIcon(QMessageBox.Warning if result.failed or result.unprocessed or result.warning else QMessageBox.Information)
         message.setText(
-            f"成功 {len(result.successful)} 个，失败 {len(result.failed)} 个"
+            f"成功 {len(result.successful)} 个，失败 {len(result.failed)} 个，未处理 {len(result.unprocessed)} 个"
         )
         message.setInformativeText(
-            f"结果文件夹：\n{self.batch_output_folder}\n\n处理日志：\n{result.log_file}"
+            f"结果文件夹：\n{self.batch_output_folder}\n\n处理日志：\n{result.warning or result.log_file}"
         )
         open_button = message.addButton("打开文件夹", QMessageBox.ActionRole)
         ok_button = message.addButton("确定", QMessageBox.AcceptRole)

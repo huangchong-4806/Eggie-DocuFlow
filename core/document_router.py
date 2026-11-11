@@ -142,21 +142,30 @@ def process_document(
     progress_callback=None,
     log_root=None,
     extractor=None,
+    source_label=None,
 ):
     """Classify one PDF, route it once, and return the required result dictionary."""
     result = {"doc_type": UNKNOWN, "confidence": 0.0, "output_file": "", "status": "failed"}
     session = None
+
+    def log(method, *args, **kwargs):
+        if session is not None:
+            try:
+                getattr(session, method)(*args, **kwargs)
+            except Exception as error:
+                result["warning"] = f"处理日志未写入：{error}"
+
     started = time.monotonic()
     try:
         try:
             session = SessionLogger(log_root)
-        except Exception:
-            session = None
+        except Exception as error:
+            result["warning"] = f"处理日志未写入：{error}"
         pdf_file = validate_pdf(pdf_file)
         output_dir = Path(output_dir).expanduser().resolve() if output_dir else pdf_file.parent
         output_dir.mkdir(parents=True, exist_ok=True)
         if session:
-            session.info(f"文件加载: {pdf_file}, bytes={pdf_file.stat().st_size}")
+            log("info", f"文件加载: {source_label or pdf_file}, bytes={pdf_file.stat().st_size}")
 
         with tempfile.TemporaryDirectory(prefix="eggie-document-") as work_folder:
             text_file = Path(work_folder) / "extracted.txt"
@@ -174,19 +183,19 @@ def process_document(
                 result["cloud_page_count"] = extraction.cloud_page_count
                 result["ocr_provider"] = extraction.provider
             if session:
-                session.step(
+                log("step",
                     f"PDF解析完成: pages={page_count}, "
                     f"sampled_chars={len(classification_text)}"
                 )
                 if extraction is not None:
-                    session.info(
+                    log("info",
                         "OCR提取统计: "
                         f"provider={extraction.provider}, "
                         f"local_pages={extraction.local_page_count}, "
                         f"cloud_pages={extraction.cloud_page_count}"
                     )
                     for page in extraction.pages:
-                        session.step(
+                        log("step",
                             "OCR页面结果: "
                             f"page={page.page_number}, method={page.method}, "
                             f"chars={len(page.text)}, blocks={len(page.blocks)}, "
@@ -200,11 +209,11 @@ def process_document(
             result["doc_type"] = doc_type
             result["confidence"] = confidence_value
             if session:
-                session.info(f"类型识别: {doc_type}, confidence={confidence_value}")
-                session.step("分类完成")
+                log("info", f"类型识别: {doc_type}, confidence={confidence_value}")
+                log("step", "分类完成")
 
             if session:
-                session.info(f"路由分发: {doc_type}")
+                log("info", f"路由分发: {doc_type}")
             result["output_file"] = route_document(
                 doc_type,
                 pdf_file,
@@ -215,15 +224,20 @@ def process_document(
                 extraction,
             )
             result["status"] = "success"
+            if extraction is not None and extraction.cloud_page_count and Path(result["output_file"]).suffix == ".txt":
+                result["text_only"] = True
             if session:
-                session.step(
+                log("step",
                     f"输出生成完成: {result['output_file']}, "
                     f"elapsed={time.monotonic() - started:.2f}s"
                 )
     except Exception as error:
-        result["error_message"] = f"{type(error).__name__}: {error}"
-        if session:
-            session.error(
+        if result["status"] == "success":
+            result["warning"] = f"结果已生成，处理记录未完成：{error}"
+        else:
+            result["error_message"] = f"{type(error).__name__}: {error}"
+        if session and result["status"] != "success":
+            log("error",
                 f"处理失败: {result['error_message']}, "
                 f"elapsed={time.monotonic() - started:.2f}s",
                 exc_info=True,
@@ -232,6 +246,6 @@ def process_document(
         if session:
             try:
                 session.close()
-            except Exception:
-                pass
+            except Exception as error:
+                result["warning"] = f"处理日志未写入：{error}"
     return result

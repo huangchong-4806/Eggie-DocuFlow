@@ -16,12 +16,13 @@ class DocumentOCRThread(QThread):
     completed = Signal(object)
     failed = Signal(str)
 
-    def __init__(self, task_kind, source_file, output_folder, provider, parent=None):
+    def __init__(self, task_kind, source_file, output_folder, provider, parent=None, *, approval=None):
         super().__init__(parent)
         self.task_kind = task_kind
         self.source_file = source_file
         self.output_folder = output_folder
         self.provider = provider
+        self.approval = approval
 
     def _progress(self, value, total, message):
         self.progress.emit(value, total, message)
@@ -34,6 +35,7 @@ class DocumentOCRThread(QThread):
                     self.output_folder,
                     provider_name=self.provider,
                     progress_callback=self._progress,
+                    approval=self.approval,
                 )
             else:
                 result = extract_document_to_files(
@@ -41,6 +43,7 @@ class DocumentOCRThread(QThread):
                     self.output_folder,
                     self.provider,
                     progress_callback=self._progress,
+                    approval=self.approval,
                 )
         except Exception as error:
             self.failed.emit(f"{type(error).__name__}: {error}")

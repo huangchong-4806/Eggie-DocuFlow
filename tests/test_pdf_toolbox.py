@@ -130,7 +130,7 @@ class PdfToolboxTests(unittest.TestCase):
         target = self.root / "result.pdf"
         target.write_bytes(b"existing")
         with patch("pdf_toolbox.write_raster_compressed_pdf", side_effect=RuntimeError("renderer")):
-            result = compress_pdf(source, target, "small")
+            result = compress_pdf(source, target, "small", allow_raster=True)
         self.assertEqual(target.read_bytes(), b"existing")
         self.assertEqual(len(PdfReader(result.output_file).pages), 1)
         self.assertEqual(result.compression_method, "保留文字结构")
@@ -145,7 +145,7 @@ class PdfToolboxTests(unittest.TestCase):
         ):
             with self.subTest(function=function), patch("pdf_toolbox." + function, side_effect=OSError(err, "test")):
                 with self.assertRaisesRegex(ValueError, expected):
-                    compress_pdf(source, self.root / "failed.pdf", "small")
+                    compress_pdf(source, self.root / "failed.pdf", "small", allow_raster=True)
                 self.assertEqual(set(self.root.iterdir()), {source})
 
     def test_compress_copy_failure_removes_only_its_own_partial_file(self):
@@ -504,6 +504,24 @@ class PdfToolboxTests(unittest.TestCase):
         self.assertNotIn("<img src=x onerror=alert(1)>", report)
         self.assertIn("&lt;img src=x onerror=alert(1)&gt;.pdf", report)
         self.assertIn("A&amp;B.pdf", report)
+
+    def test_default_compression_preserves_searchable_text_for_all_presets(self):
+        source = Path(__file__).resolve().parents[1] / "test_files" / "表格测试.pdf"
+        expected = [p.extract_text() for p in PdfReader(source).pages]
+        self.assertTrue(any(text.strip() for text in expected))
+        with patch("pdf_toolbox.write_raster_compressed_pdf") as raster:
+            for preset in COMPRESSION_PRESETS:
+                result = compress_pdf(source, self.root / "result.pdf", preset)
+                self.assertEqual([p.extract_text() for p in PdfReader(result.output_file).pages], expected)
+            raster.assert_not_called()
+
+    def test_malformed_and_empty_compression_leave_no_output(self):
+        source = self.root / "bad.pdf"
+        for data, message in ((b"", "空文件"), (b"%PDF-1.4 broken", "无法读取 PDF")):
+            source.write_bytes(data)
+            with self.assertRaisesRegex(ValueError, message):
+                compress_pdf(source, self.root / "result.pdf")
+            self.assertEqual(list(self.root.iterdir()), [source])
 
 
 if __name__ == "__main__":

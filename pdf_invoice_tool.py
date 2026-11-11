@@ -1387,8 +1387,8 @@ def write_invoice_ledger(results, failures, output_folder):
         workbook.close()
         Path(temporary_file).unlink(missing_ok=True)
 
-    log_file = _ledger_log_path(output_folder)
     try:
+        log_file = _ledger_log_path(output_folder)
         _write_invoice_ledger_log(log_file, results, failures, ledger_file)
     except Exception as error:
         return InvoiceLedgerResult(

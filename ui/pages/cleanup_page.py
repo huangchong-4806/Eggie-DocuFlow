@@ -319,12 +319,16 @@ class CleanupPageMixin:
                 return
         options = self.current_cleanup_options()
 
+        preview = self.cleanup_preview
+        source, folder = self.cleanup_source_file, self.cleanup_output_folder
+
         def worker(progress_callback):
             return clean_workbook(
-                self.cleanup_source_file,
-                self.cleanup_output_folder,
+                source,
+                folder,
                 options,
                 progress_callback,
+                expected_preview=preview,
             )
 
         self.start_background_task(
@@ -340,7 +344,7 @@ class CleanupPageMixin:
         self.cleanup_result_file = result.output_file
         self.cleanup_preview_label.setText(
             f"清理完成：删除 {result.removed_rows} 行，剩余数据行 {result.final_rows}；"
-            f"日志：{result.log_file}"
+            f"日志：{result.warning or result.log_file}"
         )
         self.update_cleanup_button_states()
         message = QMessageBox(self)
@@ -348,7 +352,7 @@ class CleanupPageMixin:
         message.setIcon(QMessageBox.Information)
         message.setText("已生成新的 Excel 文件，原文件没有修改")
         message.setInformativeText(
-            f"结果文件：\n{result.output_file}\n\n处理日志：\n{result.log_file}"
+            f"结果文件：\n{result.output_file}\n\n处理日志：\n{result.warning or result.log_file}"
         )
         open_button = message.addButton("打开结果", QMessageBox.ActionRole)
         ok_button = message.addButton("确定", QMessageBox.AcceptRole)

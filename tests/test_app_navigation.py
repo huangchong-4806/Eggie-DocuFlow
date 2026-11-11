@@ -41,6 +41,35 @@ class AppNavigationTests(unittest.TestCase):
         finally:
             self.window.pdf_thumbnail_tempdir.cleanup()
 
+    def test_compress_form_keeps_text_by_default_and_handles_empty_source(self):
+        w = self.window
+        w.show_pdf_tool()
+        w.pdf_tabs.setCurrentIndex(w.pdf_tabs.count() - 1)
+        w.pdf_more_tabs.setCurrentIndex(0)
+        self.assertFalse(w.pdf_allow_raster.isChecked())
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / "空.pdf"
+            source.touch()
+            w.pdf_compress_source_file = str(source)
+            w.update_pdf_compress_estimate()
+            self.assertIn("空文件", w.pdf_compress_size_label.text())
+            source.write_bytes(b"broken")
+            w.update_pdf_compress_estimate()
+            self.assertIn("损坏", w.pdf_compress_size_label.text())
+        w.pdf_compress_source_file = str(Path(__file__).resolve().parents[1] / "test_files" / "表格测试.pdf")
+        w.update_pdf_compress_estimate()
+        self.assertIn("保留文字", w.pdf_compress_size_label.text())
+        w.pdf_allow_raster.setChecked(True)
+        self.assertIn("预计缩小", w.pdf_compress_size_label.text())
+
+    def test_batch_ocr_setting_invalidates_a_completed_local_preview(self):
+        w = self.window
+        w.display_batch_previews([BatchPreview(str(Path("test.pdf").resolve()), 1)])
+        w.batch_ocr_checkbox.setChecked(True)
+        self.assertFalse(w.batch_start_button.isEnabled())
+        self.assertEqual(w.batch_previews, [])
+        self.assertIn("重新检查", w.batch_status_label.text())
+
     def test_multiple_launch_inputs_are_submitted_as_one_ordered_merge_review(self):
         from main import load_startup_paths
 

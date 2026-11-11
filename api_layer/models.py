@@ -91,6 +91,25 @@ class PdfInspection:
     source_file: str
     page_count: int
     scanned_pages: tuple = ()
+    digest: str = ""
+
+
+@dataclass(frozen=True)
+class OCRApproval:
+    source_file: str
+    digest: str
+    scanned_pages: tuple
+    provider: str
+
+    @classmethod
+    def from_preview(cls, preview, provider):
+        if not preview.digest:
+            raise ValueError("请重新检查 PDF 后确认扫描页。")
+        return cls(preview.source_file, preview.digest, tuple(preview.scanned_pages), provider)
+
+    def check_provider(self, provider):
+        if self.provider != provider:
+            raise ValueError("OCR 平台已变化，请重新确认扫描页。")
 
 
 @dataclass(frozen=True)
@@ -104,3 +123,4 @@ class ExtractionFiles:
     local_page_count: int
     cloud_page_count: int
     pages: tuple = field(default_factory=tuple)
+    warning: str = ""

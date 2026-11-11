@@ -315,6 +315,29 @@ class ExcelCleanupToolTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError,'规则|图表'):self.cleaned()
                 self.assertEqual(list((self.root/'output').glob('*.xlsx')),[])
 
+    def test_cleanup_rejects_changed_source_and_changed_options(self):
+        preview = preview_cleanup(self.source, self.options())
+        output = self.root / "out"
+        with self.assertRaisesRegex(ValueError, "规则已变化"):
+            clean_workbook(self.source, output, self.options(trim_whitespace=False), expected_preview=preview)
+        workbook = load_workbook(self.source)
+        workbook.active["A2"] = "New"
+        workbook.save(self.source)
+        workbook.close()
+        with self.assertRaisesRegex(ValueError, "重新预览"):
+            clean_workbook(self.source, output, self.options(), expected_preview=preview)
+        self.assertFalse(list(output.glob("*.xlsx")))
+
+    def test_cleanup_log_failure_keeps_usable_workbook(self):
+        preview = preview_cleanup(self.source, self.options())
+        with patch("excel_cleanup_tool._write_log", side_effect=PermissionError("denied")):
+            result = clean_workbook(self.source, self.root, self.options(), expected_preview=preview)
+        self.assertEqual(result.log_file, "")
+        self.assertIn("日志未写入", result.warning)
+        workbook = load_workbook(result.output_file)
+        self.assertEqual(workbook.active["A2"].value, "Alice")
+        workbook.close()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -68,6 +68,37 @@ class BatchProcessingToolTests(unittest.TestCase):
         self.assertIn("OCR 平台：baidu", log_text)
         self.assertNotIn("API_KEY", log_text)
 
+    def test_stale_pdf_is_unprocessed_and_valid_peer_is_saved_once(self):
+        import shutil
+        sample = Path(__file__).resolve().parents[1] / "test_files" / "表格测试.pdf"
+        first = Path(shutil.copy(sample, self.root / "a.pdf"))
+        second = Path(shutil.copy(sample, self.root / "b.pdf"))
+        previews = inspect_pdf_files([first, second])
+        first.write_bytes(b"replacement")
+        with patch("batch_processing_tool._batch_log", side_effect=PermissionError("log")), patch("core.document_router.SessionLogger"):
+            result = process_pdf_files([first, second], self.root / "out", expected_previews=previews)
+        self.assertEqual((len(result.successful), len(result.unprocessed), len(result.failed)), (1, 1, 0))
+        self.assertEqual(result.unprocessed[0]["data"]["source_file"], str(first.resolve()))
+        self.assertTrue(Path(result.successful[0]["output_file"]).is_file())
+        self.assertEqual(result.log_file, "")
+        self.assertIn("日志未写入", result.warning)
+
+    def test_queue_log_failure_and_uncertain_output_cannot_replay_worker(self):
+        from unittest.mock import Mock
+        from layout_batch.queue_system import TaskQueue
+        output = self.root / "completed.txt"
+        output.write_text("result")
+        for status in ("success", "failed"):
+            worker = Mock(return_value={"status": status, "output_file": str(output)})
+            queue = TaskQueue(worker, max_retries=2)
+            with patch.object(queue, "_write_log", side_effect=PermissionError("log")):
+                item, = queue.run([str(self.root / "a.pdf")])
+            worker.assert_called_once()
+            self.assertEqual(item["output_file"], str(output))
+            self.assertIn("日志未写入", item["data"]["warning"])
+            if status == "failed":
+                self.assertFalse(item["data"]["retryable"])
+
 
 if __name__ == "__main__":
     unittest.main()

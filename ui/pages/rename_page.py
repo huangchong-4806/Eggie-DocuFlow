@@ -34,6 +34,9 @@ from ui.app_support import (
 )
 
 
+from api_layer.models import OCRApproval
+
+
 class RenamePageMixin:
     """Existing window methods; initialization remains in the window."""
 
@@ -584,10 +587,19 @@ class RenamePageMixin:
             if answer != QMessageBox.Yes:
                 self.rename_status_label.setText("已取消云 OCR 智能命名")
                 return
-        self.run_smart_rename_preview(True, provider)
+        approvals = {p.source_file: OCRApproval.from_preview(p, provider)
+                     for p in inspections if p.digest and not p.error_message}
+        self.run_smart_rename_preview(True, provider, approvals)
 
-    def run_smart_rename_preview(self, use_ocr, provider):
+    def run_smart_rename_preview(self, use_ocr, provider, approvals=None):
         files = tuple(self.rename_source_files)
+
+        def completed(result):
+            if (tuple(self.rename_source_files) == files and self.current_rename_rule() == "smart"
+                    and self.rename_smart_ocr_checkbox.isChecked() == use_ocr
+                    and self.rename_smart_provider_combo.currentData() == provider):
+                self.smart_rename_preview_completed(result)
+
         self.rename_status_label.setText(f"正在智能识别 {len(files)} 个文件…")
         self.start_background_task(
             "智能识别命名",
@@ -596,9 +608,10 @@ class RenamePageMixin:
                 files,
                 use_ocr=use_ocr,
                 provider_name=provider,
+                approvals=approvals,
                 progress_callback=progress,
             ),
-            self.smart_rename_preview_completed,
+            completed,
             total=len(files),
             status_label=self.rename_status_label,
         )
@@ -716,21 +729,22 @@ class RenamePageMixin:
         message = QMessageBox(self)
         message.setWindowTitle("批量改名完成")
         message.setIcon(
-            QMessageBox.Warning if result.failed_count else QMessageBox.Information
+            QMessageBox.Warning if result.failed_count or result.warning or result.unprocessed_count else QMessageBox.Information
         )
         message.setText(
             f"成功 {result.success_count} 个，跳过 {result.skipped_count} 个，"
-            f"失败 {result.failed_count} 个"
+            f"失败 {result.failed_count} 个，未处理 {result.unprocessed_count} 个"
         )
-        message.setInformativeText(f"日志文件：\n{result.log_file}")
+        message.setInformativeText("\n".join(filter(None, (result.warning, result.log_file))))
         failures = [
-            f"{Path(action.source_path).name}：{action.error}"
+            f"{action.status}：{action.source_path} → {action.target_path} {action.error}"
             for action in result.actions
-            if action.status == "失败"
+            if result.warning or action.status in ("失败", "未处理")
         ]
         if failures:
             message.setDetailedText("\n".join(failures))
         open_button = message.addButton("打开日志", QMessageBox.ActionRole)
+        open_button.setEnabled(bool(result.log_file))
         ok_button = message.addButton("确定", QMessageBox.AcceptRole)
         for button in (ok_button, open_button):
             button.setFixedSize(112, 36)

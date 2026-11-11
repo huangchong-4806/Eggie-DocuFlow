@@ -8,6 +8,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 
+from utils.source_snapshot import source_snapshot
 from utils.file_helper import available_output_path, publish_output, temporary_output
 
 
@@ -52,6 +53,7 @@ class PdfToolResult:
     failures: tuple = ()
     compression_method: str = ""
     compression_note: str = ""
+    warning: str = ""
 
     @property
     def saved_bytes(self):
@@ -158,6 +160,13 @@ def write_log(folder, title, lines):
     return str(log_file)
 
 
+def result_log(folder, title, lines):
+    try:
+        return write_log(folder, title, lines), ""
+    except OSError as error:
+        return "", f"处理日志未写入：{error}"
+
+
 def _publish_writer(writer, output_file):
     output_file = available_output_path(Path(output_file).expanduser().resolve())
     output_file.parent.mkdir(parents=True, exist_ok=True)
@@ -199,7 +208,7 @@ def secure_pdf(pdf_file, output_file, new_password="", source_password=""):
         writer.encrypt(new_password, algorithm="AES-256-R5")
         action = "设置密码"
     final_file = _publish_writer(writer, output_file)
-    log_file = write_log(
+    log_file, warning = result_log(
         Path(final_file).parent,
         f"PDF {action}",
         [
@@ -215,6 +224,7 @@ def secure_pdf(pdf_file, output_file, new_password="", source_password=""):
         log_file,
         source.stat().st_size,
         Path(final_file).stat().st_size,
+        warning=warning,
     )
 
 
@@ -336,7 +346,7 @@ def add_pdf_marks(
                 progress_callback(len(reader.pages), len(reader.pages), "水印与页码已合并")
 
     final_file = _publish_writer(writer, output_file)
-    log_file = write_log(
+    log_file, warning = result_log(
         Path(final_file).parent,
         "PDF 水印与页码",
         [
@@ -355,6 +365,7 @@ def add_pdf_marks(
         log_file,
         source.stat().st_size,
         Path(final_file).stat().st_size,
+        warning=warning,
     )
 
 
@@ -400,12 +411,21 @@ def make_searchable_pdf(
     output_file,
     provider_name,
     progress_callback=None,
+    *, approval=None,
 ):
+    if approval is not None:
+        approval.check_provider(provider_name)
+        with source_snapshot(pdf_file, approval) as (copy, _):
+            return _make_searchable_pdf(copy, output_file, provider_name, progress_callback, approval, approval.source_file)
+    return _make_searchable_pdf(pdf_file, output_file, provider_name, progress_callback)
+
+
+def _make_searchable_pdf(pdf_file, output_file, provider_name, progress_callback, approval=None, source_label=None):
     from api_layer.document import extract_document
     from pypdf import PdfReader, PdfWriter
 
     source = Path(pdf_file).expanduser().resolve()
-    extraction = extract_document(source, provider_name, progress_callback)
+    extraction = extract_document(source, provider_name, progress_callback, allowed_pages=approval.scanned_pages if approval else None)
     reader = PdfReader(str(source))
     _decrypt_reader(reader, "")
     writer = PdfWriter()
@@ -424,11 +444,11 @@ def make_searchable_pdf(
                 )
                 writer.pages[-1].merge_page(PdfReader(str(overlay_file)).pages[0])
     final_file = _publish_writer(writer, output_file)
-    log_file = write_log(
+    log_file, warning = result_log(
         Path(final_file).parent,
         "可搜索 PDF",
         [
-            f"来源文件：{source}",
+            f"来源文件：{source_label or source}",
             f"页数：{extraction.page_count}",
             f"本机文字页：{extraction.local_page_count}",
             f"云 OCR 页：{extraction.cloud_page_count}",
@@ -443,6 +463,7 @@ def make_searchable_pdf(
         log_file,
         source.stat().st_size,
         Path(final_file).stat().st_size,
+        warning=warning,
     )
 
 
@@ -483,7 +504,7 @@ def compare_pdf_text(left_pdf, right_pdf, output_file, progress_callback=None):
             Path(temporary_file).unlink(missing_ok=True)
     if progress_callback:
         progress_callback(2, 2, "文字对比报告已生成")
-    log_file = write_log(
+    log_file, warning = result_log(
         Path(final_file).parent,
         "PDF 文字对比",
         [
@@ -495,7 +516,7 @@ def compare_pdf_text(left_pdf, right_pdf, output_file, progress_callback=None):
             f"文件生成状态：output_file={final_file}",
         ],
     )
-    return PdfToolResult(final_file, log_file, source_files=(str(left), str(right)))
+    return PdfToolResult(final_file, log_file, source_files=(str(left), str(right)), warning=warning)
 
 
 def save_pages(page_refs, output_file, title="PDF 页面整理"):
@@ -527,12 +548,13 @@ def save_pages(page_refs, output_file, title="PDF 页面整理"):
     output_file = Path(_publish_writer(writer, output_file))
 
     lines = [f"页面数量：{len(page_refs)}", f"输出文件：{output_file}", *page_lines]
-    log_file = write_log(output_file.parent, title, lines)
+    log_file, warning = result_log(output_file.parent, title, lines)
     return PdfToolResult(
         str(output_file),
         log_file,
         source_size=sum(source_sizes.values()),
         output_size=output_file.stat().st_size,
+        warning=warning,
     )
 
 
@@ -593,7 +615,7 @@ def compression_io_message(error):
     return str(error)
 
 
-def compress_pdf(pdf_file, output_file, preset="standard"):
+def compress_pdf(pdf_file, output_file, preset="standard", *, allow_raster=False):
     from pypdf import PdfReader
 
     source = Path(pdf_file).expanduser().resolve()
@@ -603,12 +625,21 @@ def compress_pdf(pdf_file, output_file, preset="standard"):
     note = ""
     try:
         source_size = source.stat().st_size
-        expected_pages = page_count(source)
+        if source_size == 0:
+            raise ValueError("PDF 是空文件，请重新选择。")
+        try:
+            expected_pages = page_count(source)
+        except OSError:
+            raise
+        except Exception as error:
+            raise ValueError("无法读取 PDF 页面，请检查文件是否损坏或需要密码。") from error
+        if not expected_pages:
+            raise ValueError("PDF 中没有可压缩的页面。")
         target.parent.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(dir=target.parent, prefix=".eggie-compress-") as folder:
             best_file = Path(folder) / "structural.pdf"
             write_structural_compressed_pdf(source, best_file)
-            if preset != "clear":
+            if allow_raster and preset != "clear":
                 raster_file = Path(folder) / "raster.pdf"
                 try:
                     write_raster_compressed_pdf(source, raster_file, preset)
@@ -633,13 +664,16 @@ def compress_pdf(pdf_file, output_file, preset="standard"):
 
     result = PdfToolResult(final_file, "", source_size, output_size,
                            compression_method=method, compression_note=note)
-    estimated_low, estimated_high = estimate_compressed_size(source_size, preset)
+    estimate = "保留文字结构，以实际结果为准"
+    if allow_raster and preset != "clear":
+        low, high = estimate_compressed_size(source_size, preset)
+        estimate = f"{low}-{high}"
     try:
         log_file = write_log(target.parent, "PDF 压缩", [
             f"来源文件：{source}", f"输出文件：{final_file}",
             f"压缩档位：{compression_preset(preset)['label']}", f"实际方式：{method}",
             *(["回退说明：" + note] if note else []),
-            f"预计大小：{estimated_low}-{estimated_high}", f"压缩前大小：{source_size}",
+            f"预计大小：{estimate}", f"压缩前大小：{source_size}",
             f"压缩后大小：{output_size}", f"节省比例：{result.saved_percent}%",
         ])
     except OSError as error:
@@ -682,7 +716,7 @@ def images_to_pdf(image_files, output_file):
             Path(temporary_file).unlink(missing_ok=True)
 
     source_size = sum(Path(image_file).stat().st_size for image_file in image_files)
-    log_file = write_log(
+    log_file, warning = result_log(
         output_file.parent,
         "图片转 PDF",
         [
@@ -696,6 +730,7 @@ def images_to_pdf(image_files, output_file):
         log_file,
         source_size,
         output_file.stat().st_size,
+        warning=warning,
     )
 
 
@@ -917,7 +952,7 @@ def pdf_to_images(pdf_file, output_folder, image_format="jpg", dpi=300):
     )
     output_folder = Path(output_folder).expanduser().resolve()
 
-    log_file = write_log(
+    log_file, warning = result_log(
         output_folder,
         "PDF 转图片",
         [
@@ -939,6 +974,7 @@ def pdf_to_images(pdf_file, output_folder, image_format="jpg", dpi=300):
         sum(Path(image_file).stat().st_size for image_file in image_files),
         image_files,
         (str(source),),
+        warning=warning,
     )
 
 
@@ -1011,7 +1047,7 @@ def pdfs_to_images(
                 f"已完成 {file_index} / {total_files} 个 PDF",
             )
 
-    log_file = write_log(
+    log_file, warning = result_log(
         output_folder,
         "批量 PDF 转图片",
         [
@@ -1033,6 +1069,7 @@ def pdfs_to_images(
         tuple(image_files),
         tuple(source_files),
         tuple(failures),
+        warning=warning,
     )
 
 

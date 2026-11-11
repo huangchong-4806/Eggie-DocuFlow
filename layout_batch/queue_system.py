@@ -65,24 +65,43 @@ class TaskQueue:
 
     def _run_one(self, task):
         started = time.monotonic()
-        self._log_event(task, "start")
+        warnings = []
+
+        def record(logger, *args, **fields):
+            try:
+                logger(*args, **fields)
+            except OSError as error:
+                warning = f"队列日志未写入：{error}"
+                if warning not in warnings:
+                    warnings.append(warning)
+
+        def with_warnings(result):
+            if warnings:
+                previous = result["data"].get("warning", "")
+                result["data"]["warning"] = "；".join(filter(None, [previous, *warnings]))
+            return result
+
+        record(self._log_event, task, "start")
         last_error = ""
         for attempt in range(1, self.max_retries + 2):
             try:
                 result = self._normalize(self.worker(task.source_file), task.source_file)
-                if result["status"] == "success":
-                    self._log_event(
-                        task,
-                        "success",
+                if result["status"] == "failed" and result["output_file"] and Path(result["output_file"]).is_file():
+                    result["data"]["retryable"] = False
+                    result["data"].setdefault("error_message", "结果文件已存在，请核对后再处理。")
+                if result["status"] in ("success", "unprocessed") or result["data"].get("retryable") is False:
+                    record(
+                        self._log_event, task,
+                        result["status"],
                         attempt=attempt,
                         elapsed=f"{time.monotonic() - started:.2f}s",
                         output_file=result.get("output_file", ""),
                     )
-                    return result
+                    return with_warnings(result)
                 last_error = result["data"].get("error_message", "任务返回失败")
             except Exception as error:
                 last_error = f"{type(error).__name__}: {error}"
-            self._log_error(task, attempt, last_error)
+            record(self._log_error, task, attempt, last_error)
             if attempt <= self.max_retries and self.retry_delay:
                 time.sleep(self.retry_delay)
         failed = {
@@ -95,14 +114,14 @@ class TaskQueue:
             "output_file": "",
             "status": "failed",
         }
-        self._log_event(
-            task,
+        record(
+            self._log_event, task,
             "failed",
             attempts=self.max_retries + 1,
             elapsed=f"{time.monotonic() - started:.2f}s",
             error=last_error,
         )
-        return failed
+        return with_warnings(failed)
 
     def _normalize(self, result, source_file):
         if not isinstance(result, dict):

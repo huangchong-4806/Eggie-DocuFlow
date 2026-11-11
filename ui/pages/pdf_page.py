@@ -3,6 +3,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
+    QCheckBox,
     QFileDialog,
     QFormLayout,
     QGroupBox,
@@ -30,6 +31,7 @@ from pdf_toolbox import (
     output_path,
     secure_pdf,
 )
+from api_layer.models import OCRApproval
 from ui.common_widgets import SelectionComboBox
 from ui.pdf_workspace import PdfWorkspaceWidget
 
@@ -110,6 +112,14 @@ class PdfPageMixin:
         preset_layout.addWidget(self.pdf_compress_preset_combo)
         preset_layout.addWidget(self.pdf_compress_size_label, 1)
         layout.addWidget(preset_group)
+        self.pdf_allow_raster = QCheckBox("允许转成图片以进一步缩小")
+        self.pdf_allow_raster.setToolTip("转成图片后，原有文字可能无法选择、复制或搜索。")
+        layout.addWidget(self.pdf_allow_raster)
+        raster_hint = QLabel("转成图片后，原有文字可能无法选择、复制或搜索。")
+        raster_hint.setProperty("role", "hint")
+        raster_hint.setWordWrap(True)
+        layout.addWidget(raster_hint)
+        self.pdf_allow_raster.toggled.connect(self.update_pdf_compress_estimate)
 
         output_group = QGroupBox("保存设置")
         output_layout = QHBoxLayout(output_group)
@@ -630,6 +640,7 @@ class PdfPageMixin:
                 source_file,
                 output_file,
                 provider,
+                approval=OCRApproval.from_preview(inspection, provider),
                 progress_callback=progress,
             ),
             completed,
@@ -744,6 +755,8 @@ class PdfPageMixin:
             detail += f"\n\n生成图片：{len(result.image_files)} 张"
         if result.log_file:
             detail += f"\n\n日志文件：\n{result.log_file}"
+        if result.warning:
+            detail += f"\n\n{result.warning}"
         message.setInformativeText(detail.strip())
         open_button = message.addButton("打开结果", QMessageBox.ActionRole)
         ok_button = message.addButton("确定", QMessageBox.AcceptRole)
@@ -795,16 +808,24 @@ class PdfPageMixin:
         return self.pdf_compress_preset_combo.currentData() or "standard"
 
     def update_pdf_compress_estimate(self):
+        self.pdf_allow_raster.setEnabled(self.current_pdf_compression_preset() != "clear")
         if not getattr(self, "pdf_compress_source_file", ""):
             self.pdf_compress_size_label.setText("原始大小：-    预计压缩后：-    预计缩小：-")
             return
         source = Path(self.pdf_compress_source_file)
-        if not source.exists():
-            self.pdf_compress_size_label.setText(
-                "原始大小：文件不存在    预计压缩后：-    预计缩小：-"
-            )
+        try:
+            source_size = source.stat().st_size
+            if not source_size:
+                raise ValueError("PDF 是空文件，请重新选择。")
+            with source.open("rb") as handle:
+                if b"%PDF-" not in handle.read(1024):
+                    raise ValueError("无法识别 PDF 文件，请检查文件是否损坏。")
+        except (OSError, ValueError) as error:
+            self.pdf_compress_size_label.setText(str(error))
             return
-        source_size = source.stat().st_size
+        if not self.pdf_allow_raster.isChecked() or self.current_pdf_compression_preset() == "clear":
+            self.pdf_compress_size_label.setText(f"原始大小：{format_file_size(source_size)}    保留文字结构，压缩后大小以实际结果为准")
+            return
         low, high = estimate_compressed_size(
             source_size,
             self.current_pdf_compression_preset(),
@@ -833,6 +854,8 @@ class PdfPageMixin:
         source_file = self.pdf_compress_source_file
         preset = self.current_pdf_compression_preset()
 
+        allow_raster = self.pdf_allow_raster.isChecked()
+
         def compressed(result):
             change = f"节省 {result.saved_percent}%" if result.output_size < result.source_size else "体积未减小"
             text = (f"{result.compression_method}：{format_file_size(result.source_size)} → "
@@ -844,7 +867,7 @@ class PdfPageMixin:
         self.start_background_task(
             "正在压缩 PDF",
             f"正在处理：{Path(source_file).name}",
-            lambda _progress: compress_pdf(source_file, output_file, preset),
+            lambda _progress: compress_pdf(source_file, output_file, preset, allow_raster=allow_raster),
             compressed,
             lambda error: QMessageBox.critical(self, "压缩失败", error),
             status_label=self.pdf_compress_status_label,
