@@ -5,6 +5,7 @@ import unicodedata
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
+from operator import itemgetter
 from pathlib import Path
 from typing import Optional
 
@@ -120,8 +121,9 @@ class InvoiceLedgerResult:
 def _clean_text(value):
     text = unicodedata.normalize("NFKC", str(value or ""))
     text = text.replace("\u200b", "").replace("\ufeff", "")
-    text = re.sub(r"(\d)\s*%", r"\1%", text)
-    return re.sub(r"\s+", " ", text).strip(" |丨")
+    if "%" in text:
+        text = re.sub(r"(\d)\s*%", r"\1%", text)
+    return " ".join(text.split()).strip(" |丨")
 
 
 def _compact(value):
@@ -205,8 +207,8 @@ def _extract_party(lines, start_label, end_labels):
 
 
 def _decimal_tokens(text):
-    tokens = re.findall(r"[-+]?(?:\d[\d,]*\.?\d*|\.\d+)%?", _clean_text(text))
-    return [token for token in tokens if re.search(r"\d", token)]
+    # Keep a malformed run intact so _to_decimal rejects the whole field.
+    return re.findall(r"[-+]?(?:\d[\d,.]*|\.\d[\d,.]*)%?", _clean_text(text))
 
 
 def _to_decimal(value, percent=False):
@@ -215,12 +217,15 @@ def _to_decimal(value, percent=False):
     text = _clean_text(value).replace("¥", "").replace("￥", "").replace(",", "")
     is_percent = text.endswith("%")
     text = text.rstrip("%").strip()
+    # Multiple decimal points can be overlapping PDF text, not a number to repair.
+    # Keep the field missing so validation reports it instead of inventing money.
     if text.count(".") > 1:
-        parts = text.split(".")
-        text = "".join(parts[:-1]) + "." + parts[-1]
+        return None
     try:
         number = Decimal(text)
     except InvalidOperation:
+        return None
+    if not number.is_finite():
         return None
     if percent or is_percent:
         number /= 100
@@ -356,8 +361,13 @@ def _positioned_items(blocks):
             line_top = min(block.top for block in line)
             if any(abs(line_top - top) <= 10 for top in subtotal_tops):
                 continue
-            amount = _to_decimal(_column_text(line, 385, 450))
-            if amount is not None:
+            amount_text = _column_text(line, 385, 450)
+            # A numeric amount with multiple decimal points still identifies
+            # an item row. Leave its amount blank for the existing checks.
+            if _to_decimal(amount_text) is not None or (
+                amount_text.count(".") > 1
+                and re.fullmatch(r"[¥￥]?[-+]?\.?\d[\d,.]*", amount_text)
+            ):
                 numeric_indexes.append(index)
         if not numeric_indexes:
             continue
@@ -407,8 +417,7 @@ def _positioned_items(blocks):
                 tax_rate=_to_decimal(_column_text(first_line, 450, 530), percent=True),
                 tax_amount=_to_decimal(_column_text(first_line, 530, float("inf"))),
             )
-            if item.amount is not None:
-                items.append(item)
+            items.append(item)
     return items
 
 
@@ -468,6 +477,40 @@ def _parties_from_blocks(blocks):
     return extract(20, midpoint), extract(midpoint, page_width + 1)
 
 
+def _positioned_remark(blocks):
+    """Read a vertical remark label's box, including text above the label.
+
+    The gross-total row and signature row bound the box vertically. The label
+    bounds it on the left, so seller fields beside an old-style box stay out.
+    """
+    remark_pages = {block.page for block in blocks if "备" in block.text and _compact(block.text) == "备"}
+    for page in sorted(remark_pages):
+        page_blocks = [block for block in blocks if block.page == page]
+        gross = [block for block in page_blocks if "价税合计" in _compact(block.text)]
+        if not gross:
+            continue
+        top = max(block.top for block in gross) + 5
+        footers = [block.top for block in page_blocks
+                   if block.top > top and re.match(r"^(开票人|收款人|复核)[:：]", _clean_text(block.text))]
+        if not footers:
+            continue
+        bottom = min(footers)
+        region = [block for block in page_blocks if top < block.top < bottom]
+        for first in region:
+            if _compact(first.text) != "备":
+                continue
+            second = next((block for block in region
+                           if _compact(block.text) == "注"
+                           and abs(block.x0 - first.x0) <= 1
+                           and 0 < block.top - first.top <= 80), None)
+            if second is None:
+                continue
+            left = max(first.x1, second.x1)
+            content = [block for block in region if block.x0 > left]
+            return "\n".join(_line_text(line) for line in _group_lines(content))
+    return ""
+
+
 def _extract_header(lines):
     header = {name: "" for name in HEADER_FIELDS}
     text = "\n".join(lines)
@@ -503,6 +546,8 @@ def _extract_header(lines):
 
     for line in lines:
         compact = _compact(line)
+        if not (compact.startswith("合计") or "价税合计" in compact):
+            continue
         numbers = _decimal_tokens(line)
         if compact.startswith("合计") and "价税合计" not in compact:
             if numbers:
@@ -650,6 +695,8 @@ def parse_invoice_blocks(blocks):
     if len(invoice_numbers) > 1:
         raise ValueError("检测到多张发票，请拆分为每个 PDF 一张发票后再处理。")
     header = _extract_header(lines)
+    if not header["备注"]:
+        header["备注"] = _positioned_remark(blocks)
     buyer, seller = _parties_from_blocks(blocks)
     for prefix, party in (("购买方", buyer), ("销售方", seller)):
         for suffix in ("名称", "税号", "地址电话", "开户行及账号"):
@@ -672,6 +719,30 @@ def parse_invoice_blocks(blocks):
     return invoice
 
 
+def _deduplicated_text_page(page):
+    """Ignore exact overprints on this page, preserving real repeated text/rows.
+
+    Compare glyphs, not words: duplicate text can have different word boundaries.
+    Exact geometry plus font/size/orientation avoids merging nearby characters.
+    One pass avoids quadratic character searches on long invoice pages.
+    """
+    seen = set()
+    duplicate_ids = set()
+    glyph_key = itemgetter("text", "fontname", "size", "upright", "x0", "x1", "top", "bottom")
+    for char in page.chars:
+        try:
+            key = glyph_key(char)
+        except KeyError:
+            continue  # Incomplete geometry or font information cannot prove an overprint.
+        if key in seen:
+            duplicate_ids.add(id(char))
+        else:
+            seen.add(key)
+    if not duplicate_ids:
+        return page
+    return page.filter(lambda obj: id(obj) not in duplicate_ids)
+
+
 def _pdf_text_blocks(pdf_file, progress_callback=None):
     try:
         import pdfplumber
@@ -692,7 +763,8 @@ def _pdf_text_blocks(pdf_file, progress_callback=None):
         if progress_callback:
             progress_callback(0, total, f"已读取 PDF，共 {total} 页")
         for page_number, page in enumerate(document.pages, 1):
-            words = page.extract_words(use_text_flow=True, keep_blank_chars=False) or []
+            text_page = _deduplicated_text_page(page)
+            words = text_page.extract_words(use_text_flow=True, keep_blank_chars=False) or []
             visible_text = "".join(str(word.get("text", "")) for word in words)
             page_area = max(float(page.width) * float(page.height), 1)
             has_page_image = any(
@@ -830,7 +902,8 @@ def write_invoice_workbook(invoice, output_file, overwrite=False):
             ]
         )
     for row in range(2, item_sheet.max_row + 1):
-        for column in (4, 5, 6, 8):
+        item_sheet.cell(row, 4).number_format = "General"
+        for column in (5, 6, 8):
             item_sheet.cell(row, column).number_format = '#,##0.00####;[Red]-#,##0.00####;"-"'
         item_sheet.cell(row, 7).number_format = "0.00%"
 
@@ -863,12 +936,12 @@ def write_invoice_workbook(invoice, output_file, overwrite=False):
 
     _style_sheet(
         header_sheet,
-        (15, 18, 13, 24, 22, 28, 30, 24, 22, 28, 30, 18, 14, 18, 20, 32),
+        (15, 26, 13, 36, 26, 28, 30, 36, 26, 28, 30, 18, 14, 18, 20, 32),
     )
-    _style_sheet(item_sheet, (80, 24, 10, 12, 14, 14, 10, 14))
+    _style_sheet(item_sheet, (80, 48, 10, 12, 14, 14, 10, 14))
     _style_sheet(
         validation_sheet,
-        (18, 11, 30, 12, 30, 16, 16, 14, 28),
+        (26, 11, 30, 12, 30, 16, 16, 14, 28),
     )
 
     file_descriptor, temporary_file = tempfile.mkstemp(
@@ -907,6 +980,7 @@ LEDGER_FIELDS = (
     "价税合计",
     "异常数量",
     "结果文件路径",
+    "处理状态",
 )
 
 
@@ -924,8 +998,9 @@ def _write_invoice_ledger_log(log_file, results, failures, ledger_file):
         handle.write(f"汇总结果：{ledger_file}\n\n")
         handle.write("匹配结果：\n")
         for result in results:
+            status = "已生成，需核对" if result.abnormal_count else "已生成，校验通过"
             handle.write(
-                "成功 "
+                f"{status} "
                 f"source_file={result.source_file} "
                 f"invoice_number={result.invoice_number} "
                 f"seller_name={result.seller_name} "
@@ -935,7 +1010,9 @@ def _write_invoice_ledger_log(log_file, results, failures, ledger_file):
         for source_file, error in failures:
             handle.write(f"失败 source_file={source_file} error={error}\n")
         handle.write("\n计算过程：\n")
-        handle.write(f"成功发票数={len(results)}\n")
+        handle.write(f"已生成发票数={len(results)}\n")
+        handle.write(f"校验通过发票数={sum(result.abnormal_count == 0 for result in results)}\n")
+        handle.write(f"需核对发票数={sum(result.abnormal_count > 0 for result in results)}\n")
         handle.write(f"失败发票数={len(failures)}\n")
         handle.write(f"明细行数合计={total_items}\n")
         handle.write(f"校验异常合计={total_abnormal}\n")
@@ -970,11 +1047,12 @@ def write_invoice_ledger(results, failures, output_folder):
                 _excel_value(result.total_amount),
                 result.abnormal_count,
                 result.output_file,
+                "已生成，需核对" if result.abnormal_count else "已生成，校验通过",
             ]
         )
     _style_sheet(
         sheet,
-        [32, 18, 16, 28, 28, 14, 14, 14, 12, 64],
+        [32, 26, 16, 36, 36, 14, 14, 14, 12, 64, 24],
     )
     file_descriptor, temporary_file = tempfile.mkstemp(
         prefix=f".{Path(ledger_file).stem}-",

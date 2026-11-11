@@ -228,14 +228,20 @@ class InvoicePageMixin:
     def show_invoice_complete_message(self, results, failures, ledger_result=None):
         message = QMessageBox(self)
         message.setWindowTitle("批量发票解析完成")
-        message.setIcon(QMessageBox.Warning if failures else QMessageBox.Information)
-        message.setText(f"成功 {len(results)} 个，失败 {len(failures)} 个")
+        warning_count = sum(result.abnormal_count > 0 for result in results)
+        message.setIcon(QMessageBox.Warning if failures or warning_count else QMessageBox.Information)
+        message.setText(
+            f"已生成 {len(results)} 个（校验通过 {len(results) - warning_count} 个，"
+            f"需核对 {warning_count} 个），失败 {len(failures)} 个"
+        )
         item_count = sum(result.item_count for result in results)
         abnormal_count = sum(result.abnormal_count for result in results)
         detail = (
             f"保存文件夹：\n{self.invoice_output_folder}\n\n"
             f"明细行数：{item_count}\n校验异常：{abnormal_count} 项"
         )
+        if warning_count:
+            detail += "\n请先查看结果文件的“校验结果”，核对异常后再使用。"
         if ledger_result:
             detail += (
                 f"\n\n汇总结果：\n{ledger_result.output_file}"
