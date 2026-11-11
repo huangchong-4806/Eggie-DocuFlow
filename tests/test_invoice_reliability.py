@@ -16,7 +16,7 @@ from ui.pages.invoice_page import InvoicePageMixin
 
 def flat_page(number="00000001", code="001234567890", page=1, rate="0%"):
     text = ([f"发票代码: {code}"] if code else []) + [
-        f"发票号码: {number}", "项目名称 数量 单价 金额 税率 税额",
+        f"发票号码: {number}", "开票日期: 2026年11月10日", "项目名称 数量 单价 金额 税率 税额",
         f"服务 1 100 100 {rate} 0.00", "合计 ¥100.00 ¥0.00", "价税合计(小写) ¥100.00",
     ]
     return [TextBlock(v, page, top=20*i) for i, v in enumerate(text)]
@@ -86,6 +86,7 @@ class InvoiceReliabilityTests(unittest.TestCase):
                     def write(x, y, text):
                         page.insert_text((x, y), text, fontsize=8, fontname="china-s")
                     write(10, 30, "发票号码:00000001")
+                    write(220, 30, "开票日期:2026年11月10日")
                     columns = (10, 107+shift, 209+shift, 250+shift, 300+shift, 380+shift, 450+shift, 540+shift)
                     for x, label in zip(columns, ("项目名称","规格型号","单位","数量","单价","金额","税率","税额")):
                         write(x, 70, label)
