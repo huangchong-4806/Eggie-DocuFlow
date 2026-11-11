@@ -2,6 +2,7 @@ import os
 import re
 import tempfile
 import unicodedata
+from bisect import bisect_right
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
@@ -73,6 +74,7 @@ class InvoiceItem:
     amount: Optional[Decimal] = None
     tax_rate: Optional[Decimal] = None
     tax_amount: Optional[Decimal] = None
+    tax_rate_text: str = ""
 
 
 @dataclass(frozen=True)
@@ -132,11 +134,12 @@ def _compact(value):
 
 def _group_lines(blocks, tolerance=5):
     grouped = []
-    for page in sorted({block.page for block in blocks}):
-        page_blocks = sorted(
-            (block for block in blocks if block.page == page and _clean_text(block.text)),
-            key=lambda block: (block.top, block.x0),
-        )
+    pages = {}
+    for block in blocks:
+        if _clean_text(block.text):
+            pages.setdefault(block.page, []).append(block)
+    for page in sorted(pages):
+        page_blocks = sorted(pages[page], key=lambda block: (block.top, block.x0))
         page_lines = []
         for block in page_blocks:
             if not page_lines or abs(page_lines[-1][0].top - block.top) > tolerance:
@@ -232,6 +235,9 @@ def _to_decimal(value, percent=False):
     return number
 
 
+_TEXT_TAX_RATES = {"免税", "不征税"}
+
+
 def _build_item(text_parts, numeric_parts, rate_token):
     numbers = [_to_decimal(token) for token in numeric_parts]
     numbers = [number for number in numbers if number is not None]
@@ -258,6 +264,7 @@ def _build_item(text_parts, numeric_parts, rate_token):
         unit_price=unit_price,
         amount=amount,
         tax_rate=rate,
+        tax_rate_text=rate_token if rate_token in _TEXT_TAX_RATES else "",
         tax_amount=tax_amount,
     )
     return item
@@ -268,7 +275,7 @@ def _extract_items(lines):
         (
             index
             for index, line in enumerate(lines)
-            if "项目名称" in _compact(line)
+            if ("项目名称" in _compact(line) or "货物或应税劳务" in _compact(line))
             and any(label in _compact(line) for label in ("金额", "数量", "税额"))
         ),
         None,
@@ -298,13 +305,13 @@ def _extract_items(lines):
 
     for line in content:
         tokens = _clean_text(line).split()
-        rates = [token for token in tokens if token.endswith("%") and _to_decimal(token, True) is not None]
+        rates = [token for token in tokens if token in _TEXT_TAX_RATES or (token.endswith("%") and _to_decimal(token, True) is not None)]
         numbers = [
             token
             for token in tokens
             if not token.endswith("%") and _to_decimal(token) is not None
         ]
-        texts = [token for token in tokens if token not in rates and token not in numbers]
+        texts = [token for token in tokens if token not in rates and token not in numbers and token != "***"]
 
         if texts and numeric_parts:
             finish()
@@ -316,34 +323,71 @@ def _extract_items(lines):
     return items
 
 
-def _column_text(line, minimum, maximum, use_start=False):
-    values = []
+_ITEM_HEADINGS = {name: name for name in ITEM_FIELDS}
+_ITEM_HEADINGS.update({"税率/征收率": "税率", "税率或征收率": "税率",
+                       "货物或应税劳务、服务名称": "项目名称", "货物或应税劳务名称": "项目名称"})
+_LEGACY_ITEM_LAYOUT = ((119, 190, 245, 310, 385, 450, 530), ITEM_FIELDS)
+
+
+def _item_layout(header, rules):
+    """Read distinct column titles, joining titles printed as separate characters."""
+    anchors = []
+    i = 0
+    while i < len(header):
+        for end in range(min(len(header), i + 4), i, -1):
+            title = _compact("".join(b.text for b in header[i:end]))
+            if title in _ITEM_HEADINGS:
+                anchors.append((_ITEM_HEADINGS[title], header[i].x0, header[end - 1].x1))
+                i = end
+                break
+        else:
+            # A flattened header has no individual column coordinates.
+            return _LEGACY_ITEM_LAYOUT
+    fields = tuple(a[0] for a in anchors)
+    if not {"项目名称", "金额", "税额"}.issubset(fields) or len(set(fields)) != len(fields):
+        return _LEGACY_ITEM_LAYOUT
+    y = min(b.top for b in header)
+    dividers = [x for x, top, bottom in rules if top <= y + 2 and bottom > y + 5]
+    bounds = []
+    for (_, _, right), (_, left, _) in zip(anchors, anchors[1:]):
+        if left < right:
+            return _LEGACY_ITEM_LAYOUT
+        middle = (right + left) / 2
+        lines = [x for x in dividers if right <= x <= left]
+        bounds.append(min(lines, key=lambda x: abs(x - middle)) if lines else middle)
+    return bounds, fields
+
+
+def _item_cells(line, layout):
+    bounds, fields = layout
+    cells = {}
     for block in line:
-        position = block.x0 if use_start else (block.x0 + block.x1) / 2
-        if minimum <= position < maximum:
-            text = _clean_text(block.text)
-            if text:
-                values.append(text)
-    return "".join(values)
+        start = fields[bisect_right(bounds, block.x0)]
+        # A long, left-aligned name or model can extend into the next column.
+        field = start
+        if start not in ("项目名称", "规格型号"):
+            field = fields[bisect_right(bounds, (block.x0 + block.x1) / 2)]
+        cells[field] = cells.get(field, "") + _clean_text(block.text)
+    return cells
 
 
-def _positioned_items(blocks):
+def _positioned_items(blocks, column_rules=None):
     items = []
     grouped = _group_lines(blocks, tolerance=3)
-    pages = sorted({block.page for block in blocks})
-    for page in pages:
-        page_lines = [line for line in grouped if line[0].page == page]
-        header_index = next(
-            (
-                index
-                for index, line in enumerate(page_lines)
-                if "项目名称" in _compact(_line_text(line))
-                and "税额" in _compact(_line_text(line))
-            ),
-            None,
-        )
+    by_page = {}
+    for line in grouped:
+        by_page.setdefault(line[0].page, []).append(line)
+    for page, page_lines in by_page.items():
+        header_index = None
+        for index, line in enumerate(page_lines):
+            title = _compact(_line_text(line))
+            if "税额" in title and ("项目名称" in title or "货物或应税劳务" in title):
+                header_index = index
+                break
         if header_index is None:
+            items.extend(_extract_items([_line_text(line) for line in page_lines]))
             continue
+        layout = _item_layout(page_lines[header_index], (column_rules or {}).get(page, ()))
         subtotal_tops = [
             min(block.top for block in line)
             for line in page_lines
@@ -356,12 +400,13 @@ def _positioned_items(blocks):
                 break
             content.append(line)
 
+        rows = [_item_cells(line, layout) for line in content]
         numeric_indexes = []
         for index, line in enumerate(content):
             line_top = min(block.top for block in line)
             if any(abs(line_top - top) <= 10 for top in subtotal_tops):
                 continue
-            amount_text = _column_text(line, 385, 450)
+            amount_text = rows[index].get("金额", "")
             # A numeric amount with multiple decimal points still identifies
             # an item row. Leave its amount blank for the existing checks.
             if _to_decimal(amount_text) is not None or (
@@ -370,54 +415,43 @@ def _positioned_items(blocks):
             ):
                 numeric_indexes.append(index)
         if not numeric_indexes:
+            items.extend(_extract_items([_line_text(line) for line in page_lines[header_index:]]))
             continue
 
-        leading_text = "".join(
-            _column_text(line, 0, 190, use_start=True)
-            for line in content[: numeric_indexes[0]]
-        ).strip()
-        leading_text = re.split(
-            r"\*(?=[\u3400-\u9fff]{1,20}\*)", leading_text, maxsplit=1
-        )[0]
-        if leading_text and items:
-            items[-1].project_name = "".join(
-                filter(None, (items[-1].project_name, leading_text))
-            )
+        leading_rows = rows[:numeric_indexes[0]]
+        if items:
+            # A category marker starts the next item. Text before it continues
+            # the previous page's item, in the original name/model column.
+            for index, row in enumerate(leading_rows):
+                name = row.get("项目名称", "")
+                marker = re.search(r"\*(?=[\u3400-\u9fff]{1,20}\*)", name)
+                if marker:
+                    items[-1].project_name += name[:marker.start()]
+                    leading_rows = [{**row, "项目名称": name[marker.start():]}, *leading_rows[index + 1:]]
+                    break
+                items[-1].project_name += name
+                items[-1].specification += row.get("规格型号", "")
+            else:
+                leading_rows = []
 
-        for position, line_index in enumerate(numeric_indexes):
-            end_index = (
-                numeric_indexes[position + 1]
-                if position + 1 < len(numeric_indexes)
-                else len(content)
-            )
-            row_lines = content[line_index:end_index]
-            first_line = row_lines[0]
-            project_name = "".join(
-                filter(
-                    None,
-                    (_column_text(line, 0, 119, use_start=True) for line in row_lines),
-                )
-            )
-            specification = "".join(
-                filter(
-                    None,
-                    (
-                        _column_text(line, 119, 190, use_start=True)
-                        for line in row_lines
-                    ),
-                )
-            )
-            item = InvoiceItem(
-                project_name=project_name,
-                specification=specification,
-                unit=_column_text(first_line, 190, 245),
-                quantity=_to_decimal(_column_text(first_line, 245, 310)),
-                unit_price=_to_decimal(_column_text(first_line, 310, 385)),
-                amount=_to_decimal(_column_text(first_line, 385, 450)),
-                tax_rate=_to_decimal(_column_text(first_line, 450, 530), percent=True),
-                tax_amount=_to_decimal(_column_text(first_line, 530, float("inf"))),
-            )
-            items.append(item)
+        for position, row_index in enumerate(numeric_indexes):
+            end = numeric_indexes[position + 1] if position + 1 < len(numeric_indexes) else len(rows)
+            row_lines = rows[row_index:end]
+            first = row_lines[0]
+            if position == 0 and leading_rows:
+                row_lines = leading_rows + row_lines
+            rate_text = first.get("税率", "")
+            items.append(InvoiceItem(
+                project_name="".join(row.get("项目名称", "") for row in row_lines),
+                specification="".join(row.get("规格型号", "") for row in row_lines),
+                unit=first.get("单位", ""),
+                quantity=_to_decimal(first.get("数量")),
+                unit_price=_to_decimal(first.get("单价")),
+                amount=_to_decimal(first.get("金额")),
+                tax_rate=_to_decimal(rate_text, percent=True),
+                tax_rate_text=rate_text if rate_text in _TEXT_TAX_RATES else "",
+                tax_amount=_to_decimal(first.get("税额")),
+            ))
     return items
 
 
@@ -575,16 +609,6 @@ def _positioned_remark(blocks, grouped):
 def _extract_header(lines):
     header = {name: "" for name in HEADER_FIELDS}
     text = "\n".join(lines)
-    header["发票代码"] = re.sub(
-        r"\s",
-        "",
-        _extract_first((r"发票代码\s*[:：]?\s*([0-9A-Z ]{8,30})",), text),
-    )
-    header["发票号码"] = re.sub(
-        r"\s",
-        "",
-        _extract_first((r"发票号码\s*[:：]?\s*([0-9A-Z ]{6,30})",), text),
-    )
     header["开票日期"] = _extract_first(
         (
             r"开票日期\s*[:：]?\s*(\d{4}[\-/.\u5e74]\d{1,2}[\-/.\u6708]\d{1,2}\u65e5?)",
@@ -610,6 +634,9 @@ def _extract_header(lines):
         if not (compact.startswith("合计") or "价税合计" in compact):
             continue
         numbers = _decimal_tokens(line)
+        if compact.startswith("合计税额"):
+            header["合计税额"] = _to_decimal(numbers[0]) if numbers else None
+            continue
         if compact.startswith("合计") and "价税合计" not in compact:
             if numbers:
                 header["合计金额（不含税）"] = _to_decimal(numbers[0])
@@ -622,18 +649,18 @@ def _extract_header(lines):
             if large:
                 header["价税合计（大写）"] = _clean_text(large.group(1))
 
-    if not header["合计金额（不含税）"]:
+    if header["合计金额（不含税）"] in ("", None):
         value = _extract_first(
-            (r"合计金额(?:（不含税）|\(不含税\))?\s*[:：]?[^数\d-]*([-+]?\d[\d,.]*)",),
+            (r"合计金额(?:（不含税）|\(不含税\))?[^\S\n]*[:：]?[^\S\n]*[￥¥]?[^\S\n]*([-+]?\d[\d,.]*)",),
             text,
         )
         header["合计金额（不含税）"] = _to_decimal(value)
-    if not header["合计税额"]:
-        value = _extract_first((r"合计税额\s*[:：]?[^数\d-]*([-+]?\d[\d,.]*)",), text)
+    if header["合计税额"] in ("", None):
+        value = _extract_first((r"合计税额[^\S\n]*[:：]?[^\S\n]*[￥¥]?[^\S\n]*([-+]?\d[\d,.]*)",), text)
         header["合计税额"] = _to_decimal(value)
-    if not header["价税合计（小写）"]:
+    if header["价税合计（小写）"] in ("", None):
         value = _extract_first(
-            (r"价税合计(?:（小写）|\(小写\))?\s*[:：]?[^数\d-]*([-+]?\d[\d,.]*)",),
+            (r"价税合计(?:（小写）|\(小写\))?[^\S\n]*[:：]?[^\S\n]*[￥¥]?[^\S\n]*([-+]?\d[\d,.]*)",),
             text,
         )
         header["价税合计（小写）"] = _to_decimal(value)
@@ -695,6 +722,12 @@ def validate_invoice(invoice):
                 item.quantity * item.unit_price if None not in (item.quantity, item.unit_price) else Decimal(0),
                 item.amount or Decimal(0),
             )
+        if item.tax_rate_text:
+            records.append(ValidationRecord(
+                invoice_number, str(index), "金额 × 税率 ≈ 税额", True, "税率",
+                note=f"票面税率为“{item.tax_rate_text}”，无法按数值税率复算，请核对原票。",
+            ))
+            continue
         add(
             str(index),
             "金额 × 税率 ≈ 税额",
@@ -734,22 +767,39 @@ def validate_invoice(invoice):
     return records
 
 
-def parse_invoice_blocks(blocks, *, boxed_remark=None):
+_INVOICE_ID = re.compile(r"(?<![\w])发票(代码|号码)\s*[:：]?\s*([0-9A-Z][0-9A-Z ]{5,29})", re.I)
+
+
+def _document_identity(grouped, lines):
+    by_page = {}
+    for row, text in zip(grouped, lines):
+        by_page.setdefault(row[0].page, []).append(text)
+    identities = set()
+    all_codes = set()
+    number = ""
+    for page_lines in by_page.values():
+        codes, numbers = set(), set()
+        for field, value in _INVOICE_ID.findall("\n".join(page_lines)):
+            value = value.replace(" ", "").upper()
+            if field == "代码" and len(value) >= 8:
+                codes.add(value)
+            elif field == "号码":
+                numbers.add(value)
+        all_codes.update(codes)
+        if numbers:
+            number = next(iter(numbers))
+            identities.update((next(iter(codes), ""), n) for n in numbers)
+        if len(all_codes) > 1 or len(identities) > 1:
+            raise ValueError("检测到多张发票，请拆分为每个 PDF 一张发票后再处理。")
+    return next(iter(all_codes), ""), number
+
+
+def parse_invoice_blocks(blocks, *, boxed_remark=None, column_rules=None):
     grouped = _group_lines(blocks)
     lines = [_line_text(line) for line in grouped]
-    lines = [line for line in lines if line]
-    invoice_numbers = {
-        re.sub(r"\s", "", match)
-        for line in lines
-        for match in re.findall(
-            r"发票号码\s*[:：]?\s*([0-9A-Z ]{6,30})",
-            line,
-            re.IGNORECASE,
-        )
-    }
-    if len(invoice_numbers) > 1:
-        raise ValueError("检测到多张发票，请拆分为每个 PDF 一张发票后再处理。")
+    code, number = _document_identity(grouped, lines)
     header = _extract_header(lines)
+    header["发票代码"], header["发票号码"] = code, number
     remark = boxed_remark if boxed_remark is not None else _positioned_remark(blocks, grouped)
     header["备注"] = remark or ""
     buyer, seller = _parties_from_blocks(blocks)
@@ -757,16 +807,7 @@ def parse_invoice_blocks(blocks, *, boxed_remark=None):
         for suffix in ("名称", "税号", "地址电话", "开户行及账号"):
             if party.get(suffix) and not header[f"{prefix}{suffix}"]:
                 header[f"{prefix}{suffix}"] = party[suffix]
-    items = _positioned_items(blocks)
-    if not items:
-        page_lines = {}
-        for line in grouped:
-            page_lines.setdefault(line[0].page, []).append(_line_text(line))
-        items = [
-            item
-            for page in sorted(page_lines)
-            for item in _extract_items(page_lines[page])
-        ]
+    items = _positioned_items(blocks, column_rules)
     invoice = InvoiceData(header=header, items=items)
     if not invoice.items:
         raise ValueError("未能识别包含“金额”的发票明细，未生成 Excel。")
@@ -803,7 +844,7 @@ def _deduplicated_text_page(page):
     return page.filter(lambda obj: id(obj) not in duplicate_ids)
 
 
-def _pdf_text_blocks(pdf_file, progress_callback=None):
+def _pdf_text_blocks(pdf_file, progress_callback=None, *, column_rules=None):
     try:
         import pdfplumber
     except ImportError as error:
@@ -836,6 +877,9 @@ def _pdf_text_blocks(pdf_file, progress_callback=None):
             if len(re.sub(r"\s", "", visible_text)) < 20 and has_page_image:
                 scanned_pages.append(page_number)
             else:
+                if column_rules is not None and words:
+                    column_rules[page_number] = [(e["x0"], e["top"], e["bottom"]) for e in page.edges
+                                                 if e["orientation"] == "v"]
                 if boxed_remark is None:
                     boxed_remark = _boxed_remark(page, words)
                 blocks.extend(
@@ -863,10 +907,11 @@ def extract_invoice(pdf_file, progress_callback=None, prefer_fast=None):
     # ``prefer_fast`` is kept only for compatibility with older callers.  A
     # flattened text stream loses the left/right columns used by Chinese VAT
     # invoices, so every platform now reads positioned text from the start.
-    blocks, scanned_pages, boxed_remark = _pdf_text_blocks(pdf_file, progress_callback)
+    column_rules = {}
+    blocks, scanned_pages, boxed_remark = _pdf_text_blocks(pdf_file, progress_callback, column_rules=column_rules)
     if scanned_pages:
         raise ScannedPdfUnsupportedError(scanned_pages)
-    return parse_invoice_blocks(blocks, boxed_remark=boxed_remark)
+    return parse_invoice_blocks(blocks, boxed_remark=boxed_remark, column_rules=column_rules)
 
 
 def _excel_value(value):
@@ -940,7 +985,8 @@ def write_invoice_workbook(invoice, output_file, overwrite=False):
     header_values["备注"] = header_values["备注"] or None
     header_sheet.append([_excel_value(header_values[field]) for field in HEADER_FIELDS])
     for column in (12, 13, 14):
-        header_sheet.cell(2, column).number_format = '#,##0.00;[Red]-#,##0.00;"-"'
+        cell = header_sheet.cell(2, column)
+        cell.number_format = '0.00' if cell.value == 0 else '#,##0.00;[Red]-#,##0.00;"-"'
     for column in (1, 2, 5, 9):
         header_sheet.cell(2, column).number_format = "@"
         header_sheet.cell(2, column).quotePrefix = True
@@ -956,14 +1002,15 @@ def write_invoice_workbook(invoice, output_file, overwrite=False):
                 _excel_value(item.quantity),
                 _excel_value(item.unit_price),
                 _excel_value(item.amount),
-                _excel_value(item.tax_rate),
+                _excel_value(item.tax_rate if item.tax_rate is not None else item.tax_rate_text or None),
                 _excel_value(item.tax_amount),
             ]
         )
     for row in range(2, item_sheet.max_row + 1):
         item_sheet.cell(row, 4).number_format = "General"
         for column in (5, 6, 8):
-            item_sheet.cell(row, column).number_format = '#,##0.00####;[Red]-#,##0.00####;"-"'
+            cell = item_sheet.cell(row, column)
+            cell.number_format = '0.00####' if cell.value == 0 else '#,##0.00####;[Red]-#,##0.00####;"-"'
         item_sheet.cell(row, 7).number_format = "0.00%"
 
     validation_sheet.append(VALIDATION_FIELDS)
