@@ -68,6 +68,35 @@ class BatchProcessingToolTests(unittest.TestCase):
         self.assertIn("OCR 平台：baidu", log_text)
         self.assertNotIn("API_KEY", log_text)
 
+    def test_execution_reads_only_the_verified_pdf_even_if_replaced_after_open(self):
+        import shutil
+        import pdfplumber
+        from openpyxl import load_workbook
+        samples = Path(__file__).resolve().parents[1] / "test_files"
+        source = Path(shutil.copy(samples / "发票测试.pdf", self.root / "one.pdf"))
+        preview = inspect_pdf_files([source])
+        original_open = pdfplumber.open
+
+        def replace_after_verification(stream):
+            self.assertTrue(hasattr(stream, "read"))
+            shutil.copyfile(samples / "表格测试.pdf", source)
+            return original_open(stream)
+
+        with patch("pdfplumber.open", side_effect=replace_after_verification) as read:
+            run = process_pdf_files([source], self.root / "out", expected_previews=preview)
+        read.assert_called_once()
+        self.assertEqual(len(run.successful), 1)
+        item, = run.successful
+        self.assertEqual(item["doc_type"], "INVOICE")
+        self.assertEqual(item["data"]["source_file"], str(source.resolve()))
+        workbook = load_workbook(item["output_file"], read_only=True)
+        try:
+            self.assertIn("明细表", workbook.sheetnames)
+            headers, values = workbook["发票头信息"].values
+            self.assertEqual(dict(zip(headers, values))["价税合计（小写）"], 113)
+        finally:
+            workbook.close()
+
     def test_stale_pdf_is_unprocessed_and_valid_peer_is_saved_once(self):
         import shutil
         sample = Path(__file__).resolve().parents[1] / "test_files" / "表格测试.pdf"

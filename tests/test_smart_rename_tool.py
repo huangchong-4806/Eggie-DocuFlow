@@ -14,6 +14,16 @@ class SmartRenameToolTests(unittest.TestCase):
     def tearDown(self):
         self.temporary_directory.cleanup()
 
+    def test_local_suggestion_uses_one_open_document_for_type_and_fields(self):
+        import pdfplumber
+        source = Path(__file__).resolve().parents[1] / "test_files" / "发票测试.pdf"
+        with patch("pdfplumber.open", wraps=pdfplumber.open) as opened:
+            result = suggest_smart_renames([source])
+        opened.assert_called_once()
+        suggestion, = result.suggestions
+        self.assertEqual(suggestion.document_type, "INVOICE")
+        self.assertEqual(suggestion.suggested_name, "20260623_销方测试_113.00.pdf")
+
     @patch("smart_rename_tool._suggest_one")
     def test_invoice_suggestion_and_duplicate_content_are_previewed(self, suggest_one):
         first = self.root / "a.pdf"

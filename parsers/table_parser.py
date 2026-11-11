@@ -40,12 +40,9 @@ def aligned_text_table(text):
 
 
 def parse_tables(pdf_file, progress_callback=None):
-    try:
-        import pdfplumber
-    except ImportError as error:
-        raise RuntimeError("缺少 PDF 或 Excel 处理组件。") from error
+    from utils.pdf_helper import open_pdf
 
-    with pdfplumber.open(pdf_file) as document:
+    with open_pdf(pdf_file) as document:
         total = len(document.pages)
         for page_number, page in enumerate(document.pages, 1):
             tables = [valid_table(table) for table in (page.extract_tables() or [])]

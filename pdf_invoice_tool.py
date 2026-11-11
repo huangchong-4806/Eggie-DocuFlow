@@ -1064,10 +1064,7 @@ def _deduplicated_text_page(page):
 
 
 def _pdf_text_blocks(pdf_file, progress_callback=None, *, column_rules=None):
-    try:
-        import pdfplumber
-    except ImportError as error:
-        raise RuntimeError("缺少 PDF 文本解析组件 pdfplumber。") from error
+    from utils.pdf_helper import open_pdf
 
     if progress_callback:
         progress_callback(0, 0, "正在读取 PDF 文件结构…")
@@ -1075,7 +1072,7 @@ def _pdf_text_blocks(pdf_file, progress_callback=None, *, column_rules=None):
     blocks = []
     scanned_pages = []
     page_remarks = {}
-    with pdfplumber.open(pdf_file) as document:
+    with open_pdf(pdf_file) as document:
         total = len(document.pages)
         if total == 0:
             raise ValueError("PDF 中没有可处理页面。")
@@ -1117,11 +1114,12 @@ def _pdf_text_blocks(pdf_file, progress_callback=None, *, column_rules=None):
 
 
 def extract_invoice(pdf_file, progress_callback=None, prefer_fast=None):
-    pdf_file = os.path.abspath(pdf_file)
-    if Path(pdf_file).suffix.lower() != ".pdf":
-        raise ValueError("只支持 PDF 文件。")
-    if not os.path.isfile(pdf_file):
-        raise FileNotFoundError("PDF 文件不存在。")
+    if isinstance(pdf_file, (str, os.PathLike)):
+        pdf_file = os.path.abspath(pdf_file)
+        if Path(pdf_file).suffix.lower() != ".pdf":
+            raise ValueError("只支持 PDF 文件。")
+        if not os.path.isfile(pdf_file):
+            raise FileNotFoundError("PDF 文件不存在。")
 
     # ``prefer_fast`` is kept only for compatibility with older callers.  A
     # flattened text stream loses the left/right columns used by Chinese VAT

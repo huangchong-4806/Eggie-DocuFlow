@@ -3,7 +3,8 @@ from datetime import datetime
 from pathlib import Path
 
 from api_layer.models import OCRApproval
-from utils.source_snapshot import PreviewChanged, source_snapshot
+from utils.pdf_helper import open_pdf
+from utils.source_snapshot import PreviewChanged, reviewed_stream
 from api_layer import inspect_pdf, process_document_with_ocr
 from core.document_router import process_document
 from utils.file_helper import available_output_path
@@ -145,8 +146,8 @@ def process_pdf_files(
                 approval = OCRApproval.from_preview(preview, provider_name) if preview else None
                 return process_document_with_ocr(pdf_file, output_dir, provider_name=provider_name, approval=approval, **kwargs)
             if preview is not None:
-                with source_snapshot(pdf_file, preview) as (copy, _):
-                    return process_document(copy, output_dir, source_label=str(pdf_file), **kwargs)
+                with reviewed_stream(pdf_file, preview) as (stream, _), open_pdf(stream) as document:
+                    return process_document(pdf_file, output_dir, reviewed_document=document, **kwargs)
             return process_document(pdf_file, output_dir, **kwargs)
         except PreviewChanged as error:
             return {"status": "unprocessed", "error_message": str(error)}
