@@ -70,6 +70,47 @@ class PdfInvoiceToolTests(unittest.TestCase):
     def tearDown(self):
         self.temp_directory.cleanup()
 
+    def test_vertical_remark_excludes_entire_signature_row(self):
+        base = [block for block in invoice_blocks() if block.top <= 240]
+        box = [TextBlock("备", 1, 20, 270, 28), TextBlock("注", 1, 20, 286, 28)]
+        for offset in (-2, 0, 2):
+            footer = [TextBlock("开票人：", 1, 50, 330, 84),
+                      TextBlock("测试员", 1, 95, 330 + offset, 122)]
+            for notes, expected in [
+                ([], ""),
+                ([TextBlock("测试员", 1, 50, 260, 78),
+                  TextBlock("请与开票人核实", 1, 50, 318, 125)], "测试员\n请与开票人核实"),
+            ]:
+                with self.subTest(offset=offset, expected=expected):
+                    invoice = parse_invoice_blocks(base + box + notes + footer)
+                    self.assertEqual(invoice.header["备注"], expected)
+
+    def test_horizontal_remark_stops_at_signatures_and_page_end(self):
+        base = [block for block in invoice_blocks() if block.top <= 240]
+        for label, following, page, expected in [
+            ("备注：", "开票人：测试员", 1, ""),
+            ("备注：", "收款人：测试员", 1, ""),
+            ("备注：", "复核：测试员", 1, ""),
+            ("备注：", "销售方", 1, ""),
+            ("备注：", "下一页标题", 2, ""),
+            ("备注：", "合同号 A-12", 1, "合同号 A-12"),
+            ("备注：请联系开票人核实", "开票人：测试员", 1, "请联系开票人核实"),
+        ]:
+            with self.subTest(label=label, following=following, page=page):
+                blocks = base + [TextBlock(label, 1, 40, 260, 150),
+                                 TextBlock(following, page, 40, 280, 160)]
+                self.assertEqual(parse_invoice_blocks(blocks).header["备注"], expected)
+
+    def test_unruled_ambiguous_signature_requests_review_instead_of_guessing(self):
+        base = [block for block in invoice_blocks() if block.top <= 240]
+        box = [TextBlock("备", 1, 20, 270, 28), TextBlock("注", 1, 20, 286, 28),
+               TextBlock("测试员", 1, 95, 315, 122)]
+        for footer in ([], [TextBlock("开票人：", 1, 50, 330, 84)]):
+            with self.subTest(footer=footer):
+                invoice = parse_invoice_blocks(base + box + footer)
+                self.assertEqual(invoice.header["备注"], "")
+                self.assertEqual([v.abnormal_fields for v in invoice.validations if v.abnormal], ["备注"])
+
     def test_malformed_header_money_cannot_pass_using_a_partial_number(self):
         for token, field in (("¥100.00", "合计金额（不含税）"),
                              ("¥13.00", "合计税额"), ("¥113.00", "价税合计（小写）")):
@@ -114,7 +155,7 @@ class PdfInvoiceToolTests(unittest.TestCase):
 
         with patch(
             "pdf_invoice_tool._pdf_text_blocks",
-            return_value=(invoice_blocks(), []),
+            return_value=(invoice_blocks(), [], None),
         ) as positioned_reader:
             invoice = extract_invoice(source, prefer_fast=True)
 
@@ -257,7 +298,7 @@ class PdfInvoiceToolTests(unittest.TestCase):
 
         fake_pdfplumber = SimpleNamespace(open=lambda _: FakeDocument())
         with patch.dict("sys.modules", {"pdfplumber": fake_pdfplumber}):
-            blocks, scanned_pages = _pdf_text_blocks("unused.pdf")
+            blocks, scanned_pages, _ = _pdf_text_blocks("unused.pdf")
 
         self.assertEqual(blocks, [])
         self.assertEqual(scanned_pages, [2])
@@ -268,7 +309,7 @@ class PdfInvoiceToolTests(unittest.TestCase):
 
         with patch(
             "pdf_invoice_tool._pdf_text_blocks",
-            return_value=([], [1, 2]),
+            return_value=([], [1, 2], None),
         ):
             with self.assertRaisesRegex(
                 ScannedPdfUnsupportedError,

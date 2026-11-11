@@ -477,37 +477,98 @@ def _parties_from_blocks(blocks):
     return extract(20, midpoint), extract(midpoint, page_width + 1)
 
 
-def _positioned_remark(blocks):
+_SIGNATURE = re.compile(r"^(?:开票人|收款人|复核人?)\s*:")
+
+
+def _boxed_remark(page, words):
+    """Return text in the ruled value cell, '' for an empty cell, or None for no box."""
+    labels = [word for word in words
+              if "备" in word["text"] and _compact(word["text"]) in ("备", "备注")]
+    if not labels:
+        return None
+    horizontal = [edge for edge in page.edges if edge["orientation"] == "h"]
+    vertical = [edge for edge in page.edges if edge["orientation"] == "v"]
+    # Some PDF producers draw the adjoining ends of two rules slightly apart.
+    # This tolerance joins ink strokes only; it never enlarges the text region.
+    join = 1.5
+    for label in labels:
+        x = (label["x0"] + label["x1"]) / 2
+        y = (label["top"] + label["bottom"]) / 2
+        crossing = [e["top"] for e in horizontal if e["x0"] <= x <= e["x1"]]
+        top = max((v for v in crossing if v < y), default=None)
+        bottom = min((v for v in crossing if v > y), default=None)
+        if top is None or bottom is None:
+            continue
+        if _compact(label["text"]) == "备" and not any(
+            word["text"] == "注" and word["x0"] <= x <= word["x1"]
+            and y < (word["top"] + word["bottom"]) / 2 < bottom for word in words
+        ):
+            continue
+        sides = sorted({e["x0"] for e in vertical
+                        if e["top"] <= top + join and e["bottom"] >= bottom - join})
+        left = max((v for v in sides if v < x), default=None)
+        right_sides = [v for v in sides if v > x]
+        if left is None or not right_sides:
+            continue
+        divider = right_sides[0]
+        right = next((v for v in right_sides if v > divider + join), None)
+        if right is None:
+            continue
+        # Both the label and its neighbour must be closed at the top and bottom.
+        if not all(any(abs(e["top"] - height) <= join and e["x0"] <= start + join
+                       and e["x1"] >= end - join for e in horizontal)
+                   for height in (top, bottom) for start, end in ((left, divider), (divider, right))):
+            continue
+        content = [TextBlock(w["text"], 1, w["x0"], w["top"], w["x1"]) for w in words
+                   if divider < (w["x0"] + w["x1"]) / 2 < right
+                   and top < (w["top"] + w["bottom"]) / 2 < bottom]
+        return "\n".join(_line_text(line) for line in _group_lines(content))
+    return None
+
+
+def _positioned_remark(blocks, grouped):
     """Read a vertical remark label's box, including text above the label.
 
     The gross-total row and signature row bound the box vertically. The label
     bounds it on the left, so seller fields beside an old-style box stay out.
     """
-    remark_pages = {block.page for block in blocks if "备" in block.text and _compact(block.text) == "备"}
-    for page in sorted(remark_pages):
-        page_blocks = [block for block in blocks if block.page == page]
-        gross = [block for block in page_blocks if "价税合计" in _compact(block.text)]
-        if not gross:
+    for first in blocks:
+        if "备" not in first.text or _compact(first.text) != "备":
             continue
-        top = max(block.top for block in gross) + 5
-        footers = [block.top for block in page_blocks
-                   if block.top > top and re.match(r"^(开票人|收款人|复核)[:：]", _clean_text(block.text))]
-        if not footers:
+        second = next((block for block in blocks if block.page == first.page
+                       and _compact(block.text) == "注" and abs(block.x0 - first.x0) <= 1
+                       and 0 < block.top - first.top <= 80), None)
+        if second is None:
             continue
-        bottom = min(footers)
-        region = [block for block in page_blocks if top < block.top < bottom]
-        for first in region:
-            if _compact(first.text) != "备":
-                continue
-            second = next((block for block in region
-                           if _compact(block.text) == "注"
-                           and abs(block.x0 - first.x0) <= 1
-                           and 0 < block.top - first.top <= 80), None)
-            if second is None:
-                continue
-            left = max(first.x1, second.x1)
-            content = [block for block in region if block.x0 > left]
-            return "\n".join(_line_text(line) for line in _group_lines(content))
+        rows = [line for line in grouped if line[0].page == first.page]
+        total_row = next((i for i in reversed(range(len(rows)))
+                          if rows[i][0].top < first.top and "价税合计" in _compact(_line_text(rows[i]))), None)
+        signature_row = next((i for i, line in enumerate(rows)
+                              if line[0].top > second.top and _SIGNATURE.match(_line_text(line))), None)
+        if total_row is None or signature_row is None:
+            return None
+        left = max(first.x1, second.x1)
+        contents = [_line_text([b for b in line if b.x0 > left])
+                    for line in rows[total_row + 1:signature_row]]
+        value = "\n".join(filter(None, contents))
+        if value and _SIGNATURE.fullmatch(_line_text(rows[signature_row])):
+            # A detached name cannot be distinguished from a note without a box.
+            return None
+        return value
+
+    # Flat text/OCR inputs may expose a horizontal field instead of a ruled box.
+    for index, line in enumerate(grouped):
+        if not any("备注" in block.text for block in line):
+            continue
+        match = re.search(r"(?:^|\s)备注\s*:?\s*(.*)$", _line_text(line))
+        if match:
+            value = match.group(1)
+            if value:
+                return value
+            if index + 1 < len(grouped) and grouped[index + 1][0].page == line[0].page:
+                following = _line_text(grouped[index + 1])
+                if not _SIGNATURE.match(following) and not following.startswith("销售方"):
+                    return following
     return ""
 
 
@@ -560,12 +621,6 @@ def _extract_header(lines):
             large = re.search(r"大写[\s:：)）]*([^\d￥¥(（]+)", line)
             if large:
                 header["价税合计（大写）"] = _clean_text(large.group(1))
-
-    remark = _extract_first(
-        (r"备注\s*[:：]?\s*(.*?)(?=\n销售方|\n收款人|$)",),
-        text,
-    )
-    header["备注"] = remark
 
     if not header["合计金额（不含税）"]:
         value = _extract_first(
@@ -679,7 +734,7 @@ def validate_invoice(invoice):
     return records
 
 
-def parse_invoice_blocks(blocks):
+def parse_invoice_blocks(blocks, *, boxed_remark=None):
     grouped = _group_lines(blocks)
     lines = [_line_text(line) for line in grouped]
     lines = [line for line in lines if line]
@@ -695,8 +750,8 @@ def parse_invoice_blocks(blocks):
     if len(invoice_numbers) > 1:
         raise ValueError("检测到多张发票，请拆分为每个 PDF 一张发票后再处理。")
     header = _extract_header(lines)
-    if not header["备注"]:
-        header["备注"] = _positioned_remark(blocks)
+    remark = boxed_remark if boxed_remark is not None else _positioned_remark(blocks, grouped)
+    header["备注"] = remark or ""
     buyer, seller = _parties_from_blocks(blocks)
     for prefix, party in (("购买方", buyer), ("销售方", seller)):
         for suffix in ("名称", "税号", "地址电话", "开户行及账号"):
@@ -716,6 +771,11 @@ def parse_invoice_blocks(blocks):
     if not invoice.items:
         raise ValueError("未能识别包含“金额”的发票明细，未生成 Excel。")
     validate_invoice(invoice)
+    if remark is None:
+        invoice.validations.append(ValidationRecord(
+            invoice_number=header["发票号码"], item_row="", check="备注识别", abnormal=True,
+            abnormal_fields="备注", note="无法确定备注与签名栏的边界，已留空，请对照原票核对。",
+        ))
     return invoice
 
 
@@ -754,6 +814,7 @@ def _pdf_text_blocks(pdf_file, progress_callback=None):
 
     blocks = []
     scanned_pages = []
+    boxed_remark = None
     with pdfplumber.open(pdf_file) as document:
         total = len(document.pages)
         if total == 0:
@@ -775,6 +836,8 @@ def _pdf_text_blocks(pdf_file, progress_callback=None):
             if len(re.sub(r"\s", "", visible_text)) < 20 and has_page_image:
                 scanned_pages.append(page_number)
             else:
+                if boxed_remark is None:
+                    boxed_remark = _boxed_remark(page, words)
                 blocks.extend(
                     TextBlock(
                         text=word.get("text", ""),
@@ -787,7 +850,7 @@ def _pdf_text_blocks(pdf_file, progress_callback=None):
                 )
             if progress_callback:
                 progress_callback(page_number, total, f"正在读取第 {page_number} 页")
-    return blocks, scanned_pages
+    return blocks, scanned_pages, boxed_remark
 
 
 def extract_invoice(pdf_file, progress_callback=None, prefer_fast=None):
@@ -800,10 +863,10 @@ def extract_invoice(pdf_file, progress_callback=None, prefer_fast=None):
     # ``prefer_fast`` is kept only for compatibility with older callers.  A
     # flattened text stream loses the left/right columns used by Chinese VAT
     # invoices, so every platform now reads positioned text from the start.
-    blocks, scanned_pages = _pdf_text_blocks(pdf_file, progress_callback)
+    blocks, scanned_pages, boxed_remark = _pdf_text_blocks(pdf_file, progress_callback)
     if scanned_pages:
         raise ScannedPdfUnsupportedError(scanned_pages)
-    return parse_invoice_blocks(blocks)
+    return parse_invoice_blocks(blocks, boxed_remark=boxed_remark)
 
 
 def _excel_value(value):
@@ -872,14 +935,10 @@ def write_invoice_workbook(invoice, output_file, overwrite=False):
     validation_sheet = workbook.create_sheet("校验结果")
 
     header_sheet.append(HEADER_FIELDS)
-    header_sheet.append(
-        [
-            _date_value(invoice.header[field])
-            if field == "开票日期"
-            else _excel_value(invoice.header[field])
-            for field in HEADER_FIELDS
-        ]
-    )
+    header_values = dict(invoice.header)
+    header_values["开票日期"] = _date_value(header_values["开票日期"])
+    header_values["备注"] = header_values["备注"] or None
+    header_sheet.append([_excel_value(header_values[field]) for field in HEADER_FIELDS])
     for column in (12, 13, 14):
         header_sheet.cell(2, column).number_format = '#,##0.00;[Red]-#,##0.00;"-"'
     for column in (1, 2, 5, 9):

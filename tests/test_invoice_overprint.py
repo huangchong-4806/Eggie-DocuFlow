@@ -23,7 +23,7 @@ from pdf_invoice_tool import (
 from ui.pages.invoice_page import InvoicePageMixin
 
 
-def make_invoice(path, copies=1, pages=1):
+def make_invoice(path, copies=1, pages=1, ruled_remark=None):
     """A repeated real item row, leading-zero ID, and invisible overprints."""
     document = pymupdf.open()
     for _ in range(pages):
@@ -53,9 +53,17 @@ def make_invoice(path, copies=1, pages=1):
                 (10, 275, "价税合计(小写)"),
                 (400, 275, str(Decimal('276.20') * pages)),
                 (10, 305, "备"), (10, 320, "注"),
-                (35, 295, "REF-2026-001"), (35, 335, "分批交付"),
-                (35, 375, "开票人:测试"),
             ])
+            if ruled_remark is None:
+                fields.extend([(35, 295, "REF-2026-001"), (35, 335, "分批交付"),
+                               (35, 375, "开票人:测试")])
+            else:
+                page.draw_rect((5, 280, 28, 345))
+                page.draw_rect((28, 280, 480, 345))
+                fields.extend(ruled_remark)
+                # Same text as a valid in-box note, above its label but outside the box.
+                fields.extend([(500, 305, "框外文字"), (90, 358, "测试员"),
+                               (35, 375, "开票人:")])
         else:
             fields.append((10, 250, "小计"))
         for x, y, text in fields:
@@ -72,6 +80,24 @@ class InvoiceOverprintTests(unittest.TestCase):
         folder = tempfile.TemporaryDirectory()
         self.addCleanup(folder.cleanup)
         self.root = Path(folder.name)
+
+    def test_ruled_remark_uses_actual_cell_even_when_footer_is_displaced(self):
+        for case, notes, expected in [
+            ("blank", [], None),
+            ("filled", [(35, 295, "测试员"), (35, 330, "备注:分批交付")], "测试员\n备注:分批交付"),
+        ]:
+            with self.subTest(case=case):
+                source = self.root / (case + ".pdf")
+                make_invoice(source, ruled_remark=notes)
+                result = convert_invoice_pdf(source, source.with_suffix(".xlsx"))
+                book = load_workbook(result.output_file)
+                try:
+                    cell = book["发票头信息"]["P2"]
+                    self.assertEqual(cell.value, expected)
+                    if expected is None:
+                        self.assertEqual(cell.data_type, "n")
+                finally:
+                    book.close()
 
     def test_exact_overprints_match_plain_invoice_without_merging_real_rows(self):
         plain = self.root / 'plain.pdf'
