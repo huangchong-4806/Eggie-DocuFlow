@@ -1,4 +1,5 @@
 """Convert plain data sheets in memory for the existing category splitter."""
+import codecs
 import csv
 from io import BytesIO, StringIO
 from pathlib import Path
@@ -10,8 +11,11 @@ from openpyxl.utils import get_column_letter
 
 
 def csv_rows(raw, encoding, delimiter):
-    reader = csv.reader(StringIO(raw.decode(encoding, errors="strict"), newline=""),
-                        delimiter=delimiter, strict=True)
+    yield from iter_csv_rows(StringIO(raw.decode(encoding, errors="strict"), newline=""), delimiter)
+
+
+def iter_csv_rows(stream, delimiter):
+    reader = csv.reader(stream, delimiter=delimiter, strict=True)
     width = None
     for row in reader:
         if not row:
@@ -26,10 +30,10 @@ def csv_rows(raw, encoding, delimiter):
         yield row
 
 
-def guess_csv(raw):
+def guess_csv(raw, *, partial=False):
     for encoding in ("utf-8-sig","gbk"):
         try:
-            text = raw.decode(encoding)
+            text = codecs.getincrementaldecoder(encoding)().decode(raw, final=not partial)
         except UnicodeDecodeError:
             continue
         try:

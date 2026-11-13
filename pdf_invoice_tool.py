@@ -1313,7 +1313,7 @@ def _ledger_log_path(output_folder):
     return available_output_path(Path(output_folder) / f"发票批量汇总日志_{stamp}.txt")
 
 
-def _write_invoice_ledger_log(log_file, results, failures, ledger_file, duplicate_counts):
+def _write_invoice_ledger_log(log_file, results, failures, ledger_file, duplicate_counts, unprocessed):
     total_items = sum(result.item_count for result in results)
     total_abnormal = sum(result.abnormal_count for result in results)
     with Path(log_file).open("w", encoding="utf-8") as handle:
@@ -1333,6 +1333,9 @@ def _write_invoice_ledger_log(log_file, results, failures, ledger_file, duplicat
             )
         for source_file, error in failures:
             handle.write(f"失败 source_file={source_file} error={error}\n")
+        for path in unprocessed:
+            handle.write(f"已停止，未处理 source_file={path}\n")
+        handle.write(f"未处理发票数={len(unprocessed)}\n")
         handle.write("\n计算过程：\n")
         repeated = [n for n in duplicate_counts.values() if n > 1]
         handle.write(f"重复组数={len(repeated)} 涉及张数={sum(repeated)} 多出张数={sum(repeated)-len(repeated)}\n")
@@ -1347,7 +1350,7 @@ def _write_invoice_ledger_log(log_file, results, failures, ledger_file, duplicat
         handle.write(f"log_file={log_file}\n")
 
 
-def write_invoice_ledger(results, failures, output_folder):
+def write_invoice_ledger(results, failures, output_folder, *, unprocessed=()):
     if not results:
         raise ValueError("没有可汇总的发票。")
     output_folder = Path(output_folder).expanduser().resolve()
@@ -1387,6 +1390,12 @@ def write_invoice_ledger(results, failures, output_folder):
         sheet,
         [32, 26, 16, 36, 36, 14, 14, 14, 12, 64, 24, 18, 18, 16, 14, 64],
     )
+    if unprocessed:
+        stopped = workbook.create_sheet("未处理")
+        stopped.append(["本批已停止", "来源路径"])
+        for source in unprocessed:
+            stopped.append(["未处理", str(source)])
+        _style_sheet(stopped,[18,64])
     file_descriptor, temporary_file = tempfile.mkstemp(
         prefix=f".{Path(ledger_file).stem}-",
         suffix=".xlsx",
@@ -1409,7 +1418,7 @@ def write_invoice_ledger(results, failures, output_folder):
 
     try:
         log_file = _ledger_log_path(output_folder)
-        _write_invoice_ledger_log(log_file, results, failures, ledger_file, counts)
+        _write_invoice_ledger_log(log_file, results, failures, ledger_file, counts, unprocessed)
     except Exception as error:
         return InvoiceLedgerResult(
             str(ledger_file),
@@ -1524,7 +1533,7 @@ def run_invoice_batch_task(source_files, output_folder, result_queue, stop_event
                 "正在生成发票汇总结果和处理日志…",
             )
             try:
-                ledger_result = write_invoice_ledger(results, failures, output_folder)
+                ledger_result = write_invoice_ledger(results, failures, output_folder, unprocessed=source_files[len(results)+len(failures):])
             except Exception as error:
                 ledger_error = str(error)
         result_queue.put(("completed", (results, failures, ledger_result, ledger_error)))

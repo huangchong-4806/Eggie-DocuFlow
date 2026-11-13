@@ -356,6 +356,7 @@ class InvoicePageMixin:
                         results,
                         failures,
                         output_folder,
+                        unprocessed=source_files[len(results)+len(failures):],
                     )
                 except Exception as error:
                     ledger_error = str(error)

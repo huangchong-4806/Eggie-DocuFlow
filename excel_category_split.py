@@ -451,6 +451,9 @@ def export_split(preview, progress_callback=None, stop_event=None):
         if actual!=expected_count or len(row_map)!=actual:
             raise ValueError('导出行数核对不一致，已停止交付。')
         if not files and remaining:
+            if output is not None:
+                output.close()
+                output=None
             folder.rmdir()
         return ExportResult(tuple(files),actual,tuple(row_map),folder,remaining)
     except Exception:

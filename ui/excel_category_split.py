@@ -3,7 +3,7 @@ from dataclasses import replace
 from itertools import islice
 from threading import Event
 import csv
-from split_import import csv_rows, guess_csv, workbook_bytes
+from split_import import iter_csv_rows, guess_csv, workbook_bytes
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QUrl
@@ -142,7 +142,8 @@ class CategorySplitPage(QWidget):
         try:
             path=Path(self.source_edit.text().strip())
             if path.suffix.lower()!=".csv" or not path.is_file():return
-            rows=list(islice(csv_rows(path.read_bytes(),self.csv_encoding.currentData(),self.csv_delimiter.currentData()),6))
+            with path.open(encoding=self.csv_encoding.currentData(), newline="") as stream:
+                rows=list(islice(iter_csv_rows(stream, self.csv_delimiter.currentData()), 6))
             self.csv_preview.setColumnCount(max((len(row) for row in rows),default=0))
             self.csv_preview.setRowCount(len(rows))
             for i,row in enumerate(rows):
@@ -157,7 +158,9 @@ class CategorySplitPage(QWidget):
         self.csv_panel.setVisible(path.suffix.lower()==".csv")
         if path.suffix.lower()==".csv" and path.is_file():
             try:
-                encoding,delimiter=guess_csv(path.read_bytes())
+                with path.open("rb") as stream:
+                    sample=stream.read(65537)
+                encoding,delimiter=guess_csv(sample[:65536],partial=len(sample)>65536)
                 for combo,value in ((self.csv_encoding,encoding),(self.csv_delimiter,delimiter)):
                     combo.blockSignals(True)
                     combo.setCurrentIndex(combo.findData(value))
@@ -196,7 +199,10 @@ class CategorySplitPage(QWidget):
         self._thread=BackgroundTaskThread(worker,self)
         self._thread.completed.connect(self._got_payload)
         self._thread.failed.connect(self._got_error)
-        self._thread.progress.connect(lambda a,b,text:self.status_label.setText(text))
+        def progress_update(a,b,text):
+            if stop_event is None or not stop_event.is_set():
+                self.status_label.setText(text)
+        self._thread.progress.connect(progress_update)
         def finished():
             thread=self._thread;self._thread=None;self.busy=False;self.setEnabled(True)
             if stop_event is not None:
@@ -224,6 +230,11 @@ class CategorySplitPage(QWidget):
         # Only names here: sheets with one title row still need to be selectable.
         encoding,delimiter=self.csv_encoding.currentData(),self.csv_delimiter.currentData()
         def load(progress):
+            if Path(path).suffix.lower()==".csv":
+                with Path(path).open(encoding=encoding,newline="") as stream:
+                    if next(iter_csv_rows(stream,delimiter),None) is None:
+                        raise ValueError("CSV 文件为空。")
+                return ("CSV",)
             from excel_category_split import _read_bytes, _open
             wb=_open(workbook_bytes(path,_read_bytes(path),encoding,delimiter),read_only=True,data_only=True)
             try:return tuple(wb.sheetnames)

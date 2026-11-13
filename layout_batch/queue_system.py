@@ -50,7 +50,7 @@ class TaskQueue:
                 if progress_callback:
                     progress_callback(index,total,f"等待处理：{Path(task.source_file).name}")
                 if stopping():break
-                result = self._run_one(task)
+                result = self._run_one(task,stop_event)
                 finished += 1
                 complete(index,result)
         else:
@@ -62,7 +62,7 @@ class TaskQueue:
                 next_index = 0
                 while futures or next_index < total:
                     while len(futures) < workers and next_index < total and not stopping():
-                        futures[executor.submit(self._run_one,task_list[next_index])] = next_index
+                        futures[executor.submit(self._run_one,task_list[next_index],stop_event)] = next_index
                         next_index += 1
                     if not futures:break
                     done,_ = wait(futures,return_when=FIRST_COMPLETED)
@@ -75,7 +75,7 @@ class TaskQueue:
                                                   "error_message":"用户已停止后续处理。"}, task_list[index].source_file)
         return results
 
-    def _run_one(self, task):
+    def _run_one(self, task, stop_event=None):
         started = time.monotonic()
         warnings = []
 
@@ -114,13 +114,18 @@ class TaskQueue:
             except Exception as error:
                 last_error = f"{type(error).__name__}: {error}"
             record(self._log_error, task, attempt, last_error)
+            if stop_event is not None and stop_event.is_set():
+                break
             if attempt <= self.max_retries and self.retry_delay:
-                time.sleep(self.retry_delay)
+                if stop_event is None:
+                    time.sleep(self.retry_delay)
+                elif stop_event.wait(self.retry_delay):
+                    break
         failed = {
             "doc_type": "UNKNOWN",
             "data": {
                 "source_file": task.source_file,
-                "attempts": self.max_retries + 1,
+                "attempts": attempt,
                 "error_message": last_error,
             },
             "output_file": "",
@@ -129,7 +134,7 @@ class TaskQueue:
         record(
             self._log_event, task,
             "failed",
-            attempts=self.max_retries + 1,
+            attempts=attempt,
             elapsed=f"{time.monotonic() - started:.2f}s",
             error=last_error,
         )

@@ -82,8 +82,19 @@ class WindowTasksMixin:
         )
         if request_stop:
             def stop_after_current():
+                can_force = allow_force_stop and hasattr(thread, "force_stop")
+                if progress.property("stopRequested"):
+                    if can_force:
+                        self.request_force_stop_background_task(thread, on_cancel)
+                        if self.background_task_thread is thread:
+                            progress.show()
+                    return
+                progress.setProperty("stopRequested",True)
                 request_stop()
-                progress.setCancelButton(None)
+                if can_force:
+                    progress.setCancelButtonText("卡住时强制结束…")
+                else:
+                    progress.setCancelButton(None)
                 progress.setLabelText("已请求停止，正在完成当前安全处理。")
                 progress.show()
                 if status_label is not None:
@@ -130,6 +141,8 @@ class WindowTasksMixin:
             return
         progress = self.background_task_progress
         if progress is not None:
+            if progress.property("stopRequested"):
+                return
             if total > 0:
                 progress.setRange(0, total)
                 progress.setValue(max(0, min(value, total)))

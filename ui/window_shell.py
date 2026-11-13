@@ -192,7 +192,7 @@ class WindowShellMixin:
     def show_invoice_tool(self):
         self.stack.setCurrentWidget(self.invoice_page)
         self.set_active_navigation("invoice")
-        self.setWindowTitle(f"{self.app_name} - PDF发票解析工具")
+        self.setWindowTitle(f"{self.app_name} - 发票解析")
 
     def show_document_tool(self):
         self.stack.setCurrentWidget(self.document_page)
