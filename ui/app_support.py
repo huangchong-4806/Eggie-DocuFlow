@@ -39,6 +39,8 @@ def resource_path(relative_path):
 
 
 def application_icon_path():
+    if sys.platform == "darwin" and getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent.parent / "Resources" / "app_icon.icns"
     icon_name = "app_icon.ico" if sys.platform == "win32" else "app_icon.icns"
     return resource_path(f"assets/{icon_name}")
 

@@ -1,6 +1,6 @@
 {
-  "candidate": "V1.5.2 release candidate",
-  "build": "2026110503",
+  "candidate": "V1.6.0 local release candidate",
+  "build": "2026111301",
   "engine": "1.28.5",
   "binding": "1.28.2",
   "environment_records": "BUILD_RELEASE.md and packaging/rebuild/requirements-mac-portable.txt / requirements-windows-portable.txt",
