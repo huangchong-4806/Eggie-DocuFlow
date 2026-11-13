@@ -40,6 +40,9 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [InstallDelete]
 #include "retired_2026110401.iss"
+; Retired from the 1.5.2 release. Preserve locally modified copies.
+Type: files; Name: "{app}\_internal\assets\software_logo.png"; Check: OriginalFile('_internal\assets\software_logo.png', 'f45f54eaffe2d79ea1bc0e073a2962f7c7f17f0c7d311d11749dac1ff9e78f2e')
+Type: files; Name: "{app}\_internal\release_notes_v1.5.2.md"; Check: OriginalFile('_internal\release_notes_v1.5.2.md', 'b35fe0fa1a60c4a6a7ab41f80ad6634feb4c4d0fbfae71cb29d4db07678d055f')
 
 [Files]
 Source: "{#MyAppSourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
