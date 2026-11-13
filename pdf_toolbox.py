@@ -588,10 +588,14 @@ def write_raster_compressed_pdf(source, output_file, preset):
             raise ValueError("这个 PDF 没有可压缩的页面。")
         def raster_pages():
             for index in range(len(document)):
-                with closing(document[index]) as page, closing(page.render(scale=scale)) as bitmap:
-                    with closing(bitmap.to_pil()) as rendered, closing(rendered.convert("RGB")) as image:
-                        yield image
-        _write_image_pages(raster_pages(), output_file, resolution=72*scale, quality=quality)
+                # Keep the original renderer's color blending; its default bitmap
+                # already converts to RGB in to_pil(), including transparent artwork.
+                with closing(document[index]) as page, closing(
+                    page.render(scale=scale)
+                ) as bitmap, closing(bitmap.to_pil()) as image:
+                    yield image
+        with closing(raster_pages()) as pages:
+            _write_image_pages(pages, output_file, len(document), resolution=72 * scale, quality=quality)
     finally:
         document.close()
 
@@ -671,33 +675,33 @@ def compress_pdf(pdf_file, output_file, preset="standard", *, allow_raster=False
     return replace(result, log_file=log_file, compression_note=note)
 
 
-def _write_image_pages(images, path, **options):
-    """Only the current RGB page is live. Encoded JPEG streams stay compressed."""
-    from pypdf import PdfWriter
-    from pypdf.generic import (DecodedStreamObject, DictionaryObject,
-                               EncodedStreamObject, NameObject, NumberObject)
+def _write_image_pages(images, path, count, *, resolution=72, quality=None):
+    """Stream each JPEG directly to the PDF; only page references stay in memory."""
     from io import BytesIO
+    from PIL.PdfParser import PdfDict, PdfName, PdfParser
 
-    writer=PdfWriter()
-    for image in images:
-        width,height=image.size
-        scale=72/options.get("resolution",72)
-        page=writer.add_blank_page(width=width*scale,height=height*scale)
-        with BytesIO() as encoded:
-            image.save(encoded,format="JPEG",**({"quality":options["quality"]} if "quality" in options else {}))
-            stream=EncodedStreamObject()
-            stream._data=encoded.getvalue()
-        stream.update({NameObject("/Type"):NameObject("/XObject"),NameObject("/Subtype"):NameObject("/Image"),
-                       NameObject("/Width"):NumberObject(width),NameObject("/Height"):NumberObject(height),
-                       NameObject("/ColorSpace"):NameObject("/DeviceRGB"),NameObject("/BitsPerComponent"):NumberObject(8),
-                       NameObject("/Filter"):NameObject("/DCTDecode")})
-        page[NameObject("/Resources")]=DictionaryObject({NameObject("/XObject"):DictionaryObject({
-            NameObject("/Im0"):writer._add_object(stream)})})
-        instructions=DecodedStreamObject()
-        instructions.set_data(f"q {width*scale:.8f} 0 0 {height*scale:.8f} 0 0 cm /Im0 Do Q".encode("ascii"))
-        page[NameObject("/Contents")]=writer._add_object(instructions)
-    with path.open("wb") as handle:
-        writer.write(handle)
+    jpeg_options = {} if quality is None else {"quality": quality}
+    with path.open("w+b") as handle, closing(PdfParser(f=handle)) as pdf:
+        pdf.start_writing()
+        pdf.write_header()
+        pdf.pages.extend(pdf.next_object_id(0) for _ in range(count))
+        pdf.write_catalog()
+        for page_ref, image in zip(pdf.pages, images, strict=True):
+            with BytesIO() as encoded:
+                image.save(encoded, format="JPEG", **jpeg_options)
+                image_ref = pdf.write_obj(
+                    None, Type=PdfName("XObject"), Subtype=PdfName("Image"),
+                    Width=image.width, Height=image.height, ColorSpace=PdfName("DeviceRGB"),
+                    BitsPerComponent=8, Filter=PdfName("DCTDecode"), stream=encoded.getvalue(),
+                )
+            width, height = (side * 72 / resolution for side in image.size)
+            contents = f"q {width:.8f} 0 0 {height:.8f} 0 0 cm /Im0 Do Q".encode("ascii")
+            pdf.write_page(
+                page_ref, MediaBox=[0, 0, width, height],
+                Resources=PdfDict(XObject=PdfDict(Im0=image_ref)),
+                Contents=pdf.write_obj(None, stream=contents),
+            )
+        pdf.write_xref_and_trailer()
 
 
 def images_to_pdf(image_files, output_file):
@@ -738,7 +742,7 @@ def images_to_pdf(image_files, output_file):
             if len(image_files)==1:
                 next(images).save(temporary_file, format="PDF")
             else:
-                _write_image_pages(images,temporary_file)
+                _write_image_pages(images, temporary_file, len(image_files))
         output_file=Path(publish_output(temporary_file,output_file))
     finally:
         temporary_file.unlink(missing_ok=True)
