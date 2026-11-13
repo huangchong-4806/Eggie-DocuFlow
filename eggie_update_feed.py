@@ -15,8 +15,6 @@ from urllib.parse import urlsplit
 from urllib.request import HTTPSHandler, HTTPRedirectHandler, Request, build_opener
 
 import certifi
-from cryptography.exceptions import InvalidSignature
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 from update_check import RELEASES_URL, VERSION_PATTERN, Release, UpdateCheckError
 
@@ -87,6 +85,9 @@ def asset_url(target, filename):
 
 def verify_manifest(envelope: bytes, public_key: bytes, expected: Release) -> tuple[UpdateAsset, ...]:
     """Authenticate the exact signed payload before trusting its release or filenames."""
+    from cryptography.exceptions import InvalidSignature
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
     try:
         if len(envelope) > MAX_MANIFEST_SIZE or len(public_key) != 32:
             raise ValueError("size")

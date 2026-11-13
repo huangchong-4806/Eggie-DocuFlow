@@ -135,11 +135,9 @@ class ExcelMergerWindow(
         if self.accent_name not in ACCENT_PALETTES:
             self.accent_name = "green"
         application = QApplication.instance()
-        self.system_locale = getattr(
-            application,
-            "preferred_locale",
-            preferred_system_locale(),
-        )
+        self.system_locale = getattr(application, "preferred_locale", None)
+        if self.system_locale is None:
+            self.system_locale = preferred_system_locale()
         self.app_name = localized_app_name(self.system_locale)
         self.app_icon = QIcon(str(application_icon_path()))
         if not self.app_icon.isNull():
@@ -181,7 +179,6 @@ class ExcelMergerWindow(
         self.stack.addWidget(self.rename_page)
         self.stack.addWidget(self.pdf_page)
         self.set_active_navigation("home")
-        self.update_home_responsive_layout()
 
         self.setup_merge_page()
         self.apply_theme()

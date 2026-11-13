@@ -34,7 +34,8 @@ def localized_app_name(locale):
 
 
 def resource_path(relative_path):
-    base_path = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
+    bundled_root = getattr(sys, "_MEIPASS", None)
+    base_path = Path(bundled_root) if bundled_root is not None else Path(__file__).resolve().parents[1]
     return base_path / relative_path
 
 
