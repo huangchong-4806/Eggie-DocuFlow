@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 from pathlib import Path
 from threading import Lock
 import time
@@ -25,7 +25,7 @@ class TaskQueue:
         self.log_file = Path(log_file).expanduser().resolve() if log_file else None
         self._log_lock = Lock()
 
-    def run(self, tasks, progress_callback=None):
+    def run(self, tasks, progress_callback=None, stop_event=None):
         task_list = [
             task if isinstance(task, QueueTask) else QueueTask(str(task))
             for task in tasks
@@ -35,32 +35,44 @@ class TaskQueue:
         if not task_list:
             return []
 
-        if self.max_workers == 1 or total == 1:
-            for index, task in enumerate(task_list, 1):
-                if progress_callback:
-                    progress_callback(index - 1, total, f"等待处理：{Path(task.source_file).name}")
-                result = self._run_one(task)
-                results[index - 1] = result
-                if progress_callback:
-                    progress_callback(index, total, f"完成：{Path(task.source_file).name}，{result['status']}")
-            return results
+        def stopping():
+            return stop_event is not None and stop_event.is_set()
 
-        if progress_callback:
-            workers = min(self.max_workers, total)
-            progress_callback(0, total, f"开始批量处理：{total} 个文件，同时处理 {workers} 个")
-        with ThreadPoolExecutor(max_workers=min(self.max_workers, total)) as executor:
-            futures = {
-                executor.submit(self._run_one, task): (index, task)
-                for index, task in enumerate(task_list)
-            }
-            finished = 0
-            for future in as_completed(futures):
-                index, task = futures[future]
-                result = future.result()
-                results[index] = result
-                finished += 1
+        def complete(index, result):
+            results[index] = result
+            if progress_callback:
+                progress_callback(finished, total, f"已完成 {finished}/{total}：{Path(task_list[index].source_file).name}，{result['status']}")
+
+        finished = 0
+        if self.max_workers == 1 or total == 1:
+            for index, task in enumerate(task_list):
+                if stopping():break
                 if progress_callback:
-                    progress_callback(finished, total, f"已完成 {finished}/{total}：{Path(task.source_file).name}，{result['status']}")
+                    progress_callback(index,total,f"等待处理：{Path(task.source_file).name}")
+                if stopping():break
+                result = self._run_one(task)
+                finished += 1
+                complete(index,result)
+        else:
+            workers = min(self.max_workers,total)
+            if progress_callback:
+                progress_callback(0,total,f"开始批量处理：{total} 个文件，同时处理 {workers} 个")
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+                futures = {}
+                next_index = 0
+                while futures or next_index < total:
+                    while len(futures) < workers and next_index < total and not stopping():
+                        futures[executor.submit(self._run_one,task_list[next_index])] = next_index
+                        next_index += 1
+                    if not futures:break
+                    done,_ = wait(futures,return_when=FIRST_COMPLETED)
+                    for future in done:
+                        finished += 1
+                        complete(futures.pop(future),future.result())
+        for index, result in enumerate(results):
+            if result is None:
+                results[index] = self._normalize({"status":"unprocessed","data":{"stopped":True},
+                                                  "error_message":"用户已停止后续处理。"}, task_list[index].source_file)
         return results
 
     def _run_one(self, task):

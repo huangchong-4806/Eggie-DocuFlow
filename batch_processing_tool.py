@@ -127,6 +127,7 @@ def process_pdf_files(
     provider_name="baidu",
     progress_callback=None,
     expected_previews=None,
+    stop_event=None,
 ):
     files = tuple(Path(path).expanduser().resolve() for path in pdf_files)
     if not files:
@@ -160,6 +161,7 @@ def process_pdf_files(
         files,
         output_folder,
         progress_callback=progress_callback,
+        stop_event=stop_event,
     )
     try:
         log_file = _batch_log(output_folder, results, use_ocr, provider_name)

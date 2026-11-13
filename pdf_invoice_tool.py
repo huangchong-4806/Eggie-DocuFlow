@@ -3,6 +3,7 @@ import re
 import tempfile
 import unicodedata
 from bisect import bisect_right
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
@@ -111,6 +112,7 @@ class PdfInvoiceResult:
     amount: Optional[Decimal] = None
     tax_amount: Optional[Decimal] = None
     total_amount: Optional[Decimal] = None
+    invoice_code: str = ""
 
 
 @dataclass(frozen=True)
@@ -118,6 +120,9 @@ class InvoiceLedgerResult:
     output_file: str
     log_file: str
     log_error: str = ""
+    duplicate_groups: int = 0
+    duplicate_invoices: int = 0
+    duplicate_extra: int = 0
 
 
 def _clean_text(value):
@@ -1116,8 +1121,11 @@ def _pdf_text_blocks(pdf_file, progress_callback=None, *, column_rules=None):
 def extract_invoice(pdf_file, progress_callback=None, prefer_fast=None):
     if isinstance(pdf_file, (str, os.PathLike)):
         pdf_file = os.path.abspath(pdf_file)
+        if Path(pdf_file).suffix.lower() == ".ofd":
+            from ofd_invoice import extract_ofd_invoice
+            return extract_ofd_invoice(pdf_file, progress_callback)
         if Path(pdf_file).suffix.lower() != ".pdf":
-            raise ValueError("只支持 PDF 文件。")
+            raise ValueError("只支持 PDF 和数电发票 OFD 文件。")
         if not os.path.isfile(pdf_file):
             raise FileNotFoundError("PDF 文件不存在。")
 
@@ -1291,8 +1299,13 @@ LEDGER_FIELDS = (
     "价税合计",
     "异常数量",
     "结果文件路径",
-    "处理状态",
+    "处理状态", "发票代码", "比较依据", "重复状态", "同组张数", "来源路径",
 )
+
+
+def _identity(record):
+    number = record.invoice_number.strip()
+    return (record.invoice_code.strip(), number) if number else None
 
 
 def _ledger_log_path(output_folder):
@@ -1300,7 +1313,7 @@ def _ledger_log_path(output_folder):
     return available_output_path(Path(output_folder) / f"发票批量汇总日志_{stamp}.txt")
 
 
-def _write_invoice_ledger_log(log_file, results, failures, ledger_file):
+def _write_invoice_ledger_log(log_file, results, failures, ledger_file, duplicate_counts):
     total_items = sum(result.item_count for result in results)
     total_abnormal = sum(result.abnormal_count for result in results)
     with Path(log_file).open("w", encoding="utf-8") as handle:
@@ -1313,7 +1326,7 @@ def _write_invoice_ledger_log(log_file, results, failures, ledger_file):
             handle.write(
                 f"{status} "
                 f"source_file={result.source_file} "
-                f"invoice_number={result.invoice_number} "
+                f"invoice_code={result.invoice_code} invoice_number={result.invoice_number} 同组张数={duplicate_counts.get(_identity(result), 0)} "
                 f"seller_name={result.seller_name} "
                 f"seller_tax_id={result.seller_tax_id} "
                 f"output_file={result.output_file}\n"
@@ -1321,6 +1334,8 @@ def _write_invoice_ledger_log(log_file, results, failures, ledger_file):
         for source_file, error in failures:
             handle.write(f"失败 source_file={source_file} error={error}\n")
         handle.write("\n计算过程：\n")
+        repeated = [n for n in duplicate_counts.values() if n > 1]
+        handle.write(f"重复组数={len(repeated)} 涉及张数={sum(repeated)} 多出张数={sum(repeated)-len(repeated)}\n")
         handle.write(f"已生成发票数={len(results)}\n")
         handle.write(f"校验通过发票数={sum(result.abnormal_count == 0 for result in results)}\n")
         handle.write(f"需核对发票数={sum(result.abnormal_count > 0 for result in results)}\n")
@@ -1345,7 +1360,12 @@ def write_invoice_ledger(results, failures, output_folder):
     sheet = workbook.active
     sheet.title = "发票汇总"
     sheet.append(LEDGER_FIELDS)
+    counts = Counter(key for r in results if (key := _identity(r)) is not None)
+    repeated = [n for n in counts.values() if n > 1]
+    stats = (len(repeated), sum(repeated), sum(repeated) - len(repeated))
     for result in results:
+        key = _identity(result)
+        copies = counts.get(key, 0)
         sheet.append(
             [
                 Path(result.source_file or result.output_file).name,
@@ -1359,11 +1379,13 @@ def write_invoice_ledger(results, failures, output_folder):
                 result.abnormal_count,
                 result.output_file,
                 "已生成，需核对" if result.abnormal_count else "已生成，校验通过",
+                result.invoice_code, ("代码＋号码" if key[0] else "号码") if key else "空号",
+                ("重复" if copies > 1 else "未重复") if key else "不参与", copies, result.source_file,
             ]
         )
     _style_sheet(
         sheet,
-        [32, 26, 16, 36, 36, 14, 14, 14, 12, 64, 24],
+        [32, 26, 16, 36, 36, 14, 14, 14, 12, 64, 24, 18, 18, 16, 14, 64],
     )
     file_descriptor, temporary_file = tempfile.mkstemp(
         prefix=f".{Path(ledger_file).stem}-",
@@ -1387,14 +1409,14 @@ def write_invoice_ledger(results, failures, output_folder):
 
     try:
         log_file = _ledger_log_path(output_folder)
-        _write_invoice_ledger_log(log_file, results, failures, ledger_file)
+        _write_invoice_ledger_log(log_file, results, failures, ledger_file, counts)
     except Exception as error:
         return InvoiceLedgerResult(
             str(ledger_file),
             "",
-            f"{type(error).__name__}: {error}",
+            f"{type(error).__name__}: {error}", *stats,
         )
-    return InvoiceLedgerResult(str(ledger_file), str(log_file))
+    return InvoiceLedgerResult(str(ledger_file), str(log_file), "", *stats)
 
 
 def convert_invoice_pdf(pdf_file, output_file, progress_callback=None, overwrite=False):
@@ -1419,6 +1441,7 @@ def convert_invoice_pdf(pdf_file, output_file, progress_callback=None, overwrite
         abnormal_count=sum(record.abnormal for record in invoice.validations),
         source_file=os.path.abspath(pdf_file),
         invoice_number=header.get("发票号码", ""),
+        invoice_code=header.get("发票代码", ""),
         invoice_date=header.get("开票日期", ""),
         buyer_name=header.get("购买方名称", ""),
         seller_name=header.get("销售方名称", ""),
@@ -1429,7 +1452,7 @@ def convert_invoice_pdf(pdf_file, output_file, progress_callback=None, overwrite
     )
 
 
-def convert_invoice_pdfs(pdf_files, output_folder, progress_callback=None):
+def convert_invoice_pdfs(pdf_files, output_folder, progress_callback=None, stop_event=None):
     output_folder = os.path.abspath(output_folder)
     if not os.path.isdir(output_folder):
         raise ValueError("Excel 保存文件夹不存在。")
@@ -1439,6 +1462,8 @@ def convert_invoice_pdfs(pdf_files, output_folder, progress_callback=None):
     total = len(pdf_files)
     progress_total = max(total * 100, 1)
     for index, pdf_file in enumerate(pdf_files, 1):
+        if stop_event is not None and stop_event.is_set():
+            break
         if progress_callback:
             progress_callback(
                 (index - 1) * 100,
@@ -1478,7 +1503,7 @@ def convert_invoice_pdfs(pdf_files, output_folder, progress_callback=None):
     return results, failures
 
 
-def run_invoice_batch_task(source_files, output_folder, result_queue):
+def run_invoice_batch_task(source_files, output_folder, result_queue, stop_event=None):
     """Run one invoice batch separately so the desktop app can safely stop it."""
     try:
         def progress(value, total, message):
@@ -1488,6 +1513,7 @@ def run_invoice_batch_task(source_files, output_folder, result_queue):
             source_files,
             output_folder,
             progress_callback=progress,
+            stop_event=stop_event,
         )
         ledger_result = None
         ledger_error = ""

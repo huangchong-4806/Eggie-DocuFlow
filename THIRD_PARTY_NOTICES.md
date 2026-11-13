@@ -54,3 +54,5 @@ PyMuPDF 1.28.2 is built against MuPDF 1.28.5. Both are under AGPL-3.0; this non-
 含本修复的 Mac 包使用 Qt 6.10.3 官方源码，仅回移上游 `8148c48deb8e4345bacb797cb75c011df6f797fa`（QTBUG-149612）的三个文件，重建 Cocoa 平台插件。它修复表格辅助功能接口被重复释放导致的崩溃；这份回移二进制由本项目构建，不是 Qt 官方发布的新版本。
 
 补丁、构建配方、来源及打包前组件摘要随包位于 `licenses/qt-cocoa/`，项目中位于 `packaging/macos/qt-cocoa/`，构建脚本为 `scripts/build_mac_cocoa.py`。对应 Qt Base 6.10.3 完整源码归档 SHA-256 为 `383dc907816338f0cba72088a524c07458dfc69ce684ca9132fcc4fe91c24b0b`；与项目源码及补丁一起保留并在正式分发时提供，不能只提供补丁文件。Windows 使用原有 Qt 组件，不应用这份 Mac 补丁。其他依赖的源码材料与许可要求继续适用。
+
+Legacy XLS input uses xlrd 2.0.2. Its license notices are included in the bundled xlrd distribution metadata.

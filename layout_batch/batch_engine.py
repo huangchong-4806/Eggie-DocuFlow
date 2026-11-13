@@ -59,6 +59,7 @@ class BatchEngine:
         recursive=False,
         progress_callback=None,
         log_root=None,
+        stop_event=None,
     ):
         input_folder = Path(input_folder).expanduser().resolve()
         output_dir = (
@@ -77,6 +78,7 @@ class BatchEngine:
             output_dir,
             progress_callback=progress_callback,
             log_root=log_root,
+            stop_event=stop_event,
         )
 
     def process_files(
@@ -85,6 +87,7 @@ class BatchEngine:
         output_dir,
         progress_callback=None,
         log_root=None,
+        stop_event=None,
     ):
         output_dir = Path(output_dir).expanduser().resolve()
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -106,7 +109,7 @@ class BatchEngine:
             log_file=self.log_file or output_dir / "queue_errors.log",
             max_workers=self.max_workers,
         )
-        return queue.run(pdf_files, progress_callback=progress_callback)
+        return queue.run(pdf_files, progress_callback=progress_callback, stop_event=stop_event)
 
 
 def process_batch(input_folder, output_dir=None, progress_callback=None):

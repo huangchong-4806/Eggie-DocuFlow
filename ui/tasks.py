@@ -90,6 +90,7 @@ class InvoiceBatchProcessThread(QThread):
         self.source_files = tuple(str(path) for path in source_files)
         self.output_folder = str(output_folder)
         self._force_stop_requested = False
+        self.stop_event = multiprocessing.get_context("spawn").Event()
 
     def force_stop(self):
         self._force_stop_requested = True
@@ -124,7 +125,7 @@ class InvoiceBatchProcessThread(QThread):
             result_queue = context.Queue()
             process = context.Process(
                 target=run_invoice_batch_task,
-                args=(self.source_files, self.output_folder, result_queue),
+                args=(self.source_files, self.output_folder, result_queue, self.stop_event),
             )
             process.start()
             finished = False
