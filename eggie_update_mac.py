@@ -221,6 +221,13 @@ def confirm_healthy_startup():
             marker = os.open("ready", os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW,
                              0o600, dir_fd=fd)
             with os.fdopen(marker, "w", encoding="ascii") as receipt:
+                # V1.5.2 leaves its empty full-package extraction directory here.
+                # Remove only an empty directory before acknowledging to that old
+                # helper; rmdir neither follows links nor deletes user content.
+                try:
+                    os.rmdir("archive", dir_fd=fd)
+                except OSError:
+                    pass
                 receipt.write(match.group(2))
         finally:
             os.close(fd)

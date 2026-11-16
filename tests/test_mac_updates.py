@@ -129,6 +129,76 @@ class MacUpdateTests(unittest.TestCase):
         self.assertEqual(list(directory.iterdir()), [extra])
         self.assertEqual(extra.read_bytes(), b"keep")
 
+    @unittest.skipUnless(sys.platform == "darwin", "Mac acknowledgment uses a private POSIX directory")
+    def test_legacy_full_update_empty_archive_is_removed_before_acknowledgment(self):
+        stage = self.root / "Eggie 更新恢复-abcdefgh.noindex"
+        stage.mkdir(mode=0o700)
+        archive = stage / "archive"
+        archive.mkdir()
+        nonce = "abcabcab-0000-1111-2222-123456789abc"
+        with patch("eggie_update_mac.installed_bundle", return_value=self.app), \
+             patch.object(sys, "argv", ["app", "--eggie-update-health=abcdefgh:" + nonce]):
+            confirm_healthy_startup()
+        self.assertFalse(archive.exists())
+        self.assertEqual((stage / "ready").read_text(), nonce)
+
+    @unittest.skipUnless(sys.platform == "darwin", "Mac acknowledgment uses a private POSIX directory")
+    def test_acknowledgment_preserves_nonempty_archive_files_and_links(self):
+        stage = self.root / "Eggie 更新恢复-abcdefgh.noindex"
+        stage.mkdir(mode=0o700)
+        outside = self.root / "unrelated"
+        outside.mkdir()
+        (outside / "keep.txt").write_bytes(b"unrelated content")
+        empty_outside = self.root / "unrelated-empty"
+        empty_outside.mkdir()
+        archive = stage / "archive"
+        nonce = "abcabcab-0000-1111-2222-123456789abc"
+        for kind in ("directory", "file", "link", "empty_link"):
+            with self.subTest(kind=kind):
+                if kind == "directory":
+                    archive.mkdir()
+                    (archive / "keep.txt").write_bytes(b"user content")
+                elif kind == "file":
+                    archive.write_bytes(b"user content")
+                else:
+                    archive.symlink_to(empty_outside if kind == "empty_link" else outside,
+                                       target_is_directory=True)
+                with patch("eggie_update_mac.installed_bundle", return_value=self.app), \
+                     patch.object(sys, "argv", ["app", "--eggie-update-health=abcdefgh:" + nonce]):
+                    confirm_healthy_startup()
+                self.assertEqual((stage / "ready").read_text(), nonce)
+                self.assertEqual((outside / "keep.txt").read_bytes(), b"unrelated content")
+                self.assertTrue(empty_outside.is_dir())
+                if kind == "directory":
+                    self.assertEqual((archive / "keep.txt").read_bytes(), b"user content")
+                    shutil.rmtree(archive)
+                else:
+                    if kind == "file":
+                        self.assertEqual(archive.read_bytes(), b"user content")
+                    else:
+                        self.assertTrue(archive.is_symlink())
+                    archive.unlink()
+                (stage / "ready").unlink()
+
+    @unittest.skipUnless(sys.platform == "darwin", "Mac acknowledgment uses a private POSIX directory")
+    def test_normal_startup_or_untrusted_directory_never_cleans_archive(self):
+        stage = self.root / "Eggie 更新恢复-abcdefgh.noindex"
+        stage.mkdir(mode=0o700)
+        archive = stage / "archive"
+        archive.mkdir()
+        option = "--eggie-update-health=abcdefgh:abcabcab-0000-1111-2222-123456789abc"
+        with patch("eggie_update_mac.installed_bundle", return_value=self.app):
+            for argv in (["app"], ["app", "--eggie-update-health=invalid"]):
+                with patch.object(sys, "argv", argv):
+                    confirm_healthy_startup()
+                self.assertTrue(archive.is_dir())
+                self.assertFalse((stage / "ready").exists())
+            os.chmod(stage, 0o755)
+            with patch.object(sys, "argv", ["app", option]):
+                confirm_healthy_startup()
+            self.assertTrue(archive.is_dir())
+            self.assertFalse((stage / "ready").exists())
+
     def test_discard_keeps_unrelated_siblings(self):
         unrelated = self.root / "other"
         unrelated.mkdir()
