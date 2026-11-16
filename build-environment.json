@@ -1,11 +1,11 @@
 {
-  "candidate": "V1.6.0 local release candidate",
-  "build": "2026111301",
+  "candidate": "V1.6.0 local release candidate with Excel compatibility and Mac update cleanup fixes",
+  "build": "2026111602",
   "engine": "1.28.5",
   "binding": "1.28.2",
   "environment_records": "BUILD_RELEASE.md and packaging/rebuild/requirements-mac-portable.txt / requirements-windows-portable.txt",
   "mac_build_host": "macOS 27.2, arm64, Python 3.12.13",
-  "windows_build_host": "Windows 11 ARM64 VM, x64 Python 3.12; fresh candidate acceptance pending",
+  "windows_build_host": "Windows 11 ARM64 VM, x64 Python 3.12.10",
   "qt": "6.10.3",
   "mac_cocoa_fix": "8148c48deb8e4345bacb797cb75c011df6f797fa"
 }
