@@ -1,6 +1,9 @@
 import os
 os.environ.setdefault('QT_QPA_PLATFORM','offscreen')
 import tempfile
+from io import BytesIO
+import re
+from zipfile import ZipFile, ZIP_DEFLATED
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -42,6 +45,31 @@ class CategoryUiTests(unittest.TestCase):
         with patch.object(self.page,'ask_visibility',return_value=visible):
             QTest.mouseClick(self.page.next_button,Qt.LeftButton);self.wait_idle()
         self.assertEqual(self.page.steps.currentIndex(),2)
+
+    def test_business_export_without_default_style_or_valid_dimensions(self):
+        original = self.source.read_bytes()
+        with ZipFile(BytesIO(original)) as src, ZipFile(self.source, 'w', ZIP_DEFLATED) as dst:
+            for name in src.namelist():
+                data = src.read(name)
+                if name == 'xl/styles.xml':
+                    data = re.sub(b'<cellStyles.*?</cellStyles>', b'', data)
+                elif name == 'xl/worksheets/sheet1.xml':
+                    data = re.sub(b'<dimension [^>]*/>', b'<dimension ref="A1"/>', data)
+                dst.writestr(name, data)
+        unchanged = self.source.read_bytes()
+        self.prepare()
+        self.assertEqual(self.page.column_list.count(), 2)
+        self.assertEqual(self.page.preview.counts.exported, 3)
+        with patch.object(self.page, 'ask_confirmation', return_value=True):
+            QTest.mouseClick(self.page.confirm_button, Qt.LeftButton)
+            self.wait_idle()
+        self.assertEqual(self.page.result.exported_rows, 3)
+        self.assertEqual(self.source.read_bytes(), unchanged)
+        book = load_workbook(self.page.result.output_files[0], read_only=True)
+        try:
+            self.assertEqual(list(book.active.values), [('供应商', '金额'), ('A', 10), ('A', 30)])
+        finally:
+            book.close()
 
     def test_cancel_confirmation_writes_nothing_and_retains_selection(self):
         self.prepare()

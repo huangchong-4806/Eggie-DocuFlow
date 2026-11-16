@@ -1,4 +1,7 @@
 import hashlib
+from io import BytesIO
+import re
+from zipfile import ZipFile, ZIP_DEFLATED
 import tempfile
 import unittest
 from dataclasses import replace
@@ -11,7 +14,7 @@ from openpyxl.worksheet.filters import AutoFilter
 from openpyxl.worksheet.table import Table
 
 from excel_category_split import (
-    SplitOptions, inspect_source, build_preview, select_groups, export_split,
+    SplitOptions, inspect_source, build_preview, select_groups, export_split, source_info,
 )
 
 
@@ -36,6 +39,54 @@ class CategorySplitTests(unittest.TestCase):
 
     def preview(self, opts):
         return build_preview(inspect_source(opts), opts)
+
+    def rewrite_parts(self, edits):
+        previous = BytesIO(self.source.read_bytes())
+        with ZipFile(previous) as src, ZipFile(self.source, 'w', ZIP_DEFLATED) as dst:
+            for name in src.namelist():
+                value = src.read(name)
+                dst.writestr(name, edits[name](value) if name in edits else value)
+
+    def test_real_export_shape_with_missing_default_style(self):
+        identifier = '00001234567890123456'
+        for dim in [b'<dimension ref="A1"/>', b'']:
+            with self.subTest(dim=dim):
+                opts = self.make([['客户', '编号'], ['甲', identifier], ['乙', identifier]])
+                self.rewrite_parts({
+                    'xl/styles.xml': lambda data: re.sub(b'<cellStyles.*?</cellStyles>', b'', data),
+                    'xl/worksheets/sheet1.xml': lambda data: re.sub(b'<dimension [^>]*/>', dim, data),
+                })
+                _, columns, _ = source_info(self.source)
+                self.assertEqual(columns[-1], (2, 'B列 — 编号'))
+                result = export_split(self.preview(replace(opts, output_mode='sheets')))
+                self.assertEqual(result.exported_rows, 2)
+                book = load_workbook(result.output_files[0], read_only=True)
+                try:
+                    self.assertEqual(book.sheetnames, ['甲', '乙'])
+                    self.assertEqual(book['乙']['B2'].value, identifier)
+                finally:
+                    book.close()
+
+    def test_missing_default_style_does_not_hide_another_extension_warning(self):
+        opts = self.make([['客户'], ['甲']])
+        self.rewrite_parts({
+            'xl/styles.xml': lambda data: re.sub(b'<cellStyles.*?</cellStyles>', b'', data),
+            'xl/worksheets/sheet1.xml': lambda data: data.replace(
+                b'</worksheet>', b'<extLst><ext uri="unsupported"/></extLst></worksheet>'),
+        })
+        with self.assertRaisesRegex(ValueError, '扩展'):
+            self.preview(opts)
+
+    def test_a1_only_and_underreported_oversized_sheet(self):
+        self.make([['标题']])
+        with self.assertRaisesRegex(ValueError, '表头之后'):
+            source_info(self.source)
+        self.make([['客户'], ['小组']], lambda ws: setattr(ws['XFD125'], 'value', '尾列'))
+        self.rewrite_parts({'xl/worksheets/sheet1.xml':
+                            lambda data: re.sub(b'<dimension [^>]*/>', b'<dimension ref="A1"/>', data)})
+        with self.assertRaisesRegex(ValueError, '200 万'):
+            source_info(self.source)
+        self.assertEqual(len(source_info(self.source, area='A1:A2')[1]), 1)
 
     def test_noncontiguous_groups_and_duplicate_rows_are_preserved(self):
         opts = self.make([['供应商', '金额'], ['A', 10], ['B', 20], ['A', 10], [None, 5]])
