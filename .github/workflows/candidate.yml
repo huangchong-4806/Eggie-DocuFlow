@@ -8,6 +8,7 @@ on:
       - release_notes_v1.6.0.md
       - packaging/**
       - scripts/*build*
+      - scripts/publish_installer.py
       - scripts/check_candidate_install.ps1
       - .github/workflows/candidate.yml
 permissions:

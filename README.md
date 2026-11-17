@@ -395,7 +395,7 @@ PDF 工具箱： / PDF toolbox:
 Developers can run the project from source with the commands below. Regular
 users do not need to follow these steps.
 
-当前开发分支为 V1.6.0 候选版（2026111602），尚未合入或发布。四阶段分别保留纯重构、可靠性修复、功能补齐、打包与实测的分支边界，草稿 PR 为 #22—#25。主窗口入口在 `app.py`，页面方法在 `ui/pages/`，窗口导航与公共任务在 `ui/window_shell.py`、`ui/window_tasks.py`。原 `v2` 版面与批量处理包现名为 `layout_batch`，例如命令行入口为 `python -m layout_batch.batch_engine --help`。双端候选安装与升级、本地业务样本验收已有记录；最终整版远端测试、凭证扫描和两端候选构建亦已通过。逐项状态、Windows 并行打包偶发问题及仍待补充的真实大图片验证见 [V1.6 本地开发与验收](docs/superpowers/plans/2026-11-10-v1.6-refactor.md)。
+当前开发分支为 V1.6.0 候选版（2026111602），尚未合入或发布。四阶段分别保留纯重构、可靠性修复、功能补齐、打包与实测的分支边界，草稿 PR 为 #22—#25。主窗口入口在 `app.py`，页面方法在 `ui/pages/`，窗口导航与公共任务在 `ui/window_shell.py`、`ui/window_tasks.py`。原 `v2` 版面与批量处理包现名为 `layout_batch`，例如命令行入口为 `python -m layout_batch.batch_engine --help`。双端候选安装与升级、本地业务样本验收已有记录；整版远端测试、凭证扫描和两端候选构建已有通过记录。后续补充了 Windows 打包遇到短暂占用时的处理，最新提交检查与产物见 [PR #25](https://github.com/huangchong-4806/Eggie-DocuFlow/pull/25)。逐项状态、构建修复及仍待补充的真实大图片验证见 [V1.6 本地开发与验收](docs/superpowers/plans/2026-11-10-v1.6-refactor.md)。
 
 准确重建本版请先阅读 [BUILD_RELEASE.md](BUILD_RELEASE.md)，准备定制MuPDF1.28.5引擎。下列pip命令只提供开发环境，默认依赖不等同于发布包。<br>
 For a release-equivalent build, follow [BUILD_RELEASE.md](BUILD_RELEASE.md), including the custom MuPDF 1.28.5 engine. The pip commands below set up a development environment; default dependencies do not reproduce the release package.
