@@ -3,7 +3,7 @@ on:
   push:
     branches: [main, master]
   pull_request:
-    branches: [main, master]
+    branches: [main, master, 'codex/v1.6-*']
 
 permissions:
   contents: read
