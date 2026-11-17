@@ -1,5 +1,6 @@
 """Local, immutable-preview Excel category splitting. Never edits the input."""
 from __future__ import annotations
+from split_import import workbook_bytes
 
 from copy import copy
 from dataclasses import dataclass, replace
@@ -28,6 +29,8 @@ class SplitOptions:
     visible_only: bool = False
     output_mode: str = 'files'
     output_dir: Path = Path('.')
+    csv_encoding: str = 'utf-8-sig'
+    csv_delimiter: str = ','
 
 
 @dataclass(frozen=True)
@@ -84,12 +87,13 @@ class ExportResult:
     exported_rows: int
     row_map: tuple[tuple[int, str, str, int], ...]
     output_folder: Path
+    unprocessed: tuple[str, ...] = ()
 
 
 def _read_bytes(source):
     source = Path(source)
-    if source.suffix.lower() != '.xlsx':
-        raise ValueError('分类拆分目前只支持 .xlsx 文件。')
+    if source.suffix.lower() not in ('.xlsx','.xls','.csv'):
+        raise ValueError('分类拆分支持 .xlsx、.xls 和 .csv 文件。')
     if not source.is_file():
         raise ValueError('源文件不存在，请重新选择。')
     return source.read_bytes()
@@ -106,10 +110,10 @@ def _open(data, **kwargs):
     return wb
 
 
-def source_info(source, sheet=None, area=None, header_rows=1):
+def source_info(source, sheet=None, area=None, header_rows=1, csv_encoding='utf-8-sig', csv_delimiter=','):
     """Return sheet names and actual source-column labels without changing data."""
     data = _read_bytes(source)
-    wb = _open(data, read_only=True, data_only=True)
+    wb = _open(workbook_bytes(source,data,csv_encoding,csv_delimiter), read_only=True, data_only=True)
     try:
         names = tuple(wb.sheetnames)
         ws = wb[sheet or names[0]]
@@ -162,7 +166,8 @@ def _filter_active(af, bounds):
 
 
 def inspect_source(options):
-    data = _read_bytes(options.source)
+    raw = _read_bytes(options.source)
+    data = workbook_bytes(options.source,raw,options.csv_encoding,options.csv_delimiter)
     wb = _open(data, data_only=False)
     cached = None
     try:
@@ -217,7 +222,7 @@ def inspect_source(options):
                 values.append(value)
             item = SourceRow(row,tuple(values),hidden,all(v is None or v == '' for v in values))
             (headers if row <= header_end else rows).append(item)
-        return SourceSnapshot(sha256(data).hexdigest(),tuple(rows),bool(has_filter),
+        return SourceSnapshot(sha256(raw).hexdigest(),tuple(rows),bool(has_filter),
                               any(r.hidden for r in rows),tuple(dict.fromkeys(issues)),options,bounds,tuple(headers))
     finally:
         wb.close()
@@ -334,7 +339,7 @@ def plan_names(preview):
     return tuple(preview.names[g.id] for g in preview.groups if g.id in preview.selected_ids)
 
 
-def export_split(preview, progress_callback=None):
+def export_split(preview, progress_callback=None, stop_event=None):
     if not preview.selected_ids:
         raise ValueError('请至少选择一个类别。')
     options=preview.options
@@ -349,7 +354,7 @@ def export_split(preview, progress_callback=None):
         raise ValueError('分类或名称已变化，请重新预览。')
     if snapshot.issues:
         raise ValueError('\n'.join(snapshot.issues))
-    source=_open(data,data_only=False)
+    source=_open(workbook_bytes(options.source,data,options.csv_encoding,options.csv_delimiter),data_only=False)
     folder=preview.result_folder
     created=False; files=[]; row_map=[]; output=None; expected_rows={}
     try:
@@ -364,7 +369,11 @@ def export_split(preview, progress_callback=None):
         selected=[g for g in preview.groups if g.id in preview.selected_ids]
         if options.output_mode=='sheets':
             output=Workbook(); output.loaded_theme=source.loaded_theme; output.remove(output.active)
+        remaining = ()
         for index,g in enumerate(selected):
+            if stop_event is not None and stop_event.is_set():
+                remaining=tuple(preview.names[v.id] for v in selected[index:])
+                break
             if options.output_mode=='files':
                 output=Workbook(); output.loaded_theme=source.loaded_theme; target=output.active; target.title='分类结果'
                 path=folder/preview.names[g.id]
@@ -414,7 +423,11 @@ def export_split(preview, progress_callback=None):
             if progress_callback:
                 progress_callback(index+1,len(selected),f'正在生成：{preview.names[g.id]}')
         if options.output_mode=='sheets':
-            output.save(path);output.close();output=None;files.append(path)
+            if stop_event is not None and stop_event.is_set():
+                remaining=tuple(preview.names[v.id] for v in selected)
+                row_map.clear()
+            else:
+                output.save(path);output.close();output=None;files.append(path)
         if sha256(_read_bytes(options.source)).hexdigest()!=preview.source_sha256:
             raise ValueError('处理期间源文件已变化，本次结果已撤回，请重新预览。')
         # Independently read actual outputs before announcing success.
@@ -434,9 +447,15 @@ def export_split(preview, progress_callback=None):
                             raise ValueError(f'{sheet.title} 第 {row[0].row} 行内容核对不一致，已停止交付。')
             finally:
                 check.close()
-        if actual!=preview.counts.exported or len(row_map)!=actual:
+        expected_count = sum(len(g.source_rows) for g in selected if preview.names[g.id] not in remaining)
+        if actual!=expected_count or len(row_map)!=actual:
             raise ValueError('导出行数核对不一致，已停止交付。')
-        return ExportResult(tuple(files),actual,tuple(row_map),folder)
+        if not files and remaining:
+            if output is not None:
+                output.close()
+                output=None
+            folder.rmdir()
+        return ExportResult(tuple(files),actual,tuple(row_map),folder,remaining)
     except Exception:
         if created:
             shutil.rmtree(folder,ignore_errors=True)

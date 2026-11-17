@@ -1,3 +1,4 @@
+from threading import Event
 import os
 from pathlib import Path
 from PySide6.QtCore import Qt, QUrl
@@ -357,11 +358,13 @@ class BatchPageMixin:
             return
         self._set_batch_rows_waiting(files)
 
+        stop_event = Event()
         def worker(progress_callback):
             return process_pdf_files(
                 files,
                 folder,
                 expected_previews=previews,
+                stop_event=stop_event,
                 use_ocr=use_ocr,
                 provider_name=provider,
                 progress_callback=progress_callback,
@@ -372,6 +375,7 @@ class BatchPageMixin:
             f"准备处理 {len(files)} 个 PDF…",
             worker,
             self.batch_processing_completed,
+            request_stop=stop_event.set,
             total=len(files),
             status_label=self.batch_status_label,
         )
@@ -408,13 +412,14 @@ class BatchPageMixin:
                 row.setText(5, status)
                 row.setToolTip(5, tooltip)
         self.batch_last_log_file = result.log_file
+        state = "已停止" if any(r["data"].get("stopped") for r in result.unprocessed) else "处理完成"
         self.batch_status_label.setText(
-            f"处理完成：成功 {len(result.successful)} 个，失败 {len(result.failed)} 个，未处理 {len(result.unprocessed)} 个；"
+            f"{state}：成功 {len(result.successful)} 个，失败 {len(result.failed)} 个，未处理 {len(result.unprocessed)} 个；"
             f"日志：{result.warning or result.log_file}"
         )
         self.update_batch_button_states()
         message = QMessageBox(self)
-        message.setWindowTitle("批量处理完成")
+        message.setWindowTitle("批量" + state)
         message.setIcon(QMessageBox.Warning if result.failed or result.unprocessed or result.warning else QMessageBox.Information)
         message.setText(
             f"成功 {len(result.successful)} 个，失败 {len(result.failed)} 个，未处理 {len(result.unprocessed)} 个"

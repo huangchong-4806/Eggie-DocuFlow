@@ -1,5 +1,9 @@
 """Three-step category splitter; background work never changes an unconfirmed source."""
 from dataclasses import replace
+from itertools import islice
+from threading import Event
+import csv
+from split_import import iter_csv_rows, guess_csv, workbook_bytes
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QUrl
@@ -35,11 +39,33 @@ class CategorySplitPage(QWidget):
         self.step_label=QLabel();self.step_label.setProperty('role','subtitle');self.step_label.hide()
         self.steps=QStackedWidget();layout.addWidget(self.steps,1)
         first=QWidget();form=QFormLayout(first);form.setSpacing(14);form.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
-        self.source_edit=QLineEdit();self.source_edit.setPlaceholderText('选择本地 .xlsx 文件')
+        self.source_edit=QLineEdit();self.source_edit.setPlaceholderText('选择 .xlsx、.xls 或 .csv 文件')
         browse=QPushButton('选择文件');browse.clicked.connect(self.choose_source)
         self.load_button=QPushButton('重新读取');self.load_button.clicked.connect(self.load_source)
         row=QHBoxLayout();row.addWidget(self.source_edit,1);row.addWidget(browse);row.addWidget(self.load_button)
         form.addRow('源文件',row)
+        self.csv_panel=QWidget()
+        csv_layout=QVBoxLayout(self.csv_panel)
+        csv_layout.setContentsMargins(0,0,0,0)
+        choices=QHBoxLayout()
+        self.csv_encoding=SelectionComboBox()
+        self.csv_encoding.addItem("UTF-8","utf-8-sig")
+        self.csv_encoding.addItem("GBK","gbk")
+        self.csv_delimiter=SelectionComboBox()
+        for label,separator in (("逗号",","),("制表符","\t"),("分号",";")):
+            self.csv_delimiter.addItem(label,separator)
+        for title,combo in (("编码",self.csv_encoding),("分隔符",self.csv_delimiter)):
+            choices.addWidget(QLabel(title))
+            choices.addWidget(combo)
+            combo.currentIndexChanged.connect(self.csv_settings_changed)
+        csv_layout.addLayout(choices)
+        self.csv_preview=QTableWidget()
+        self.csv_preview.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.csv_preview.setMaximumHeight(145)
+        csv_layout.addWidget(self.csv_preview)
+        csv_layout.addWidget(QLabel("CSV 各列按文字输出，包括金额。核对预览后点“重新读取”。"))
+        self.csv_panel.hide()
+        form.addRow(self.csv_panel)
         self.sheet_combo=SelectionComboBox();form.addRow('工作表',self.sheet_combo)
         self.range_combo=SelectionComboBox();self.range_combo.addItems(['整个工作表','指定区域'])
         self.area_edit=QLineEdit();self.area_edit.setPlaceholderText('例如 A3:H500');self.area_edit.setEnabled(False)
@@ -108,7 +134,39 @@ class CategorySplitPage(QWidget):
         scroll=QScrollArea();scroll.setWidgetResizable(True);scroll.setFrameShape(QFrame.NoFrame)
         scroll.setWidget(card);self.steps.addWidget(scroll)
 
+    def csv_settings_changed(self, *_):
+        self._loaded_source=None
+        self.sheet_combo.clear()
+        self.invalidate()
+        self.csv_preview.setRowCount(0)
+        try:
+            path=Path(self.source_edit.text().strip())
+            if path.suffix.lower()!=".csv" or not path.is_file():return
+            with path.open(encoding=self.csv_encoding.currentData(), newline="") as stream:
+                rows=list(islice(iter_csv_rows(stream, self.csv_delimiter.currentData()), 6))
+            self.csv_preview.setColumnCount(max((len(row) for row in rows),default=0))
+            self.csv_preview.setRowCount(len(rows))
+            for i,row in enumerate(rows):
+                for j,value in enumerate(row):
+                    self.csv_preview.setItem(i,j,QTableWidgetItem(value))
+            self.status_label.setText("请核对中文与列数。")
+        except (ValueError,OSError,csv.Error) as exc:
+            self.show_error(f"请调整编码或分隔符：{exc}")
+
     def source_changed(self):
+        path=Path(self.source_edit.text().strip())
+        self.csv_panel.setVisible(path.suffix.lower()==".csv")
+        if path.suffix.lower()==".csv" and path.is_file():
+            try:
+                with path.open("rb") as stream:
+                    sample=stream.read(65537)
+                encoding,delimiter=guess_csv(sample[:65536],partial=len(sample)>65536)
+                for combo,value in ((self.csv_encoding,encoding),(self.csv_delimiter,delimiter)):
+                    combo.blockSignals(True)
+                    combo.setCurrentIndex(combo.findData(value))
+                    combo.blockSignals(False)
+                self.csv_settings_changed()
+            except OSError as exc:self.show_error(str(exc))
         self._loaded_source=None;self._column_signature=None;self.sheet_combo.clear();self.invalidate()
 
     def invalidate(self, *_):
@@ -116,22 +174,41 @@ class CategorySplitPage(QWidget):
         self.confirm_button.setEnabled(False);self.open_button.hide()
 
     def choose_source(self):
-        path,_=QFileDialog.getOpenFileName(self,'选择 Excel 文件','','Excel 文件 (*.xlsx)')
+        path,_=QFileDialog.getOpenFileName(self,'选择 Excel 文件','','表格文件 (*.xlsx *.xls *.csv *.XLSX *.XLS *.CSV)')
         if path:self.source_edit.setText(path);self.load_source()
 
     def choose_output(self):
         path=QFileDialog.getExistingDirectory(self,'选择结果保存文件夹',self.output_edit.text())
         if path:self.output_edit.setText(path)
 
-    def run_job(self, worker, completed):
+    def run_job(self, worker, completed, stop_event=None):
         if self.busy:return
-        self.busy=True;self.setEnabled(False);self._payload=None;self._error=None
+        self.busy=True;self._payload=None;self._error=None
+        self.setEnabled(stop_event is not None)
+        if stop_event is not None:
+            self.steps.setEnabled(False)
+            self.back_button.setEnabled(False)
+            self.confirm_button.setEnabled(False)
+            self.stop_button=QPushButton("停止后续拆分",self)
+            self.confirm_button.parentWidget().layout().insertWidget(1,self.stop_button)
+            def stop():
+                stop_event.set()
+                self.stop_button.setEnabled(False)
+                self.status_label.setText("已请求停止，正在完成当前安全处理。")
+            self.stop_button.clicked.connect(stop)
         self._thread=BackgroundTaskThread(worker,self)
         self._thread.completed.connect(self._got_payload)
         self._thread.failed.connect(self._got_error)
-        self._thread.progress.connect(lambda a,b,text:self.status_label.setText(text))
+        def progress_update(a,b,text):
+            if stop_event is None or not stop_event.is_set():
+                self.status_label.setText(text)
+        self._thread.progress.connect(progress_update)
         def finished():
             thread=self._thread;self._thread=None;self.busy=False;self.setEnabled(True)
+            if stop_event is not None:
+                self.steps.setEnabled(True)
+                self.back_button.setEnabled(True)
+                self.stop_button.deleteLater()
             thread.deleteLater()
             if self._error:self.show_error(self._error)
             else:
@@ -151,9 +228,15 @@ class CategorySplitPage(QWidget):
         if not path:self.show_error('请先选择文件。');return
         self.invalidate();self.status_label.setText('正在读取工作表…')
         # Only names here: sheets with one title row still need to be selectable.
+        encoding,delimiter=self.csv_encoding.currentData(),self.csv_delimiter.currentData()
         def load(progress):
+            if Path(path).suffix.lower()==".csv":
+                with Path(path).open(encoding=encoding,newline="") as stream:
+                    if next(iter_csv_rows(stream,delimiter),None) is None:
+                        raise ValueError("CSV 文件为空。")
+                return ("CSV",)
             from excel_category_split import _read_bytes, _open
-            wb=_open(_read_bytes(path),read_only=True,data_only=True)
+            wb=_open(workbook_bytes(path,_read_bytes(path),encoding,delimiter),read_only=True,data_only=True)
             try:return tuple(wb.sheetnames)
             finally:wb.close()
         def done(names):
@@ -172,7 +255,7 @@ class CategorySplitPage(QWidget):
         return SplitOptions(Path(self._loaded_source),self.sheet_combo.currentText(),
                             self.area_edit.text().strip() if self.range_combo.currentIndex()==1 else None,
                             self.header_spin.value(),keys,self.trim_check.isChecked(),False,
-                            self.mode_combo.currentData(),Path(self.output_edit.text().strip()))
+                            self.mode_combo.currentData(),Path(self.output_edit.text().strip()),self.csv_encoding.currentData(),self.csv_delimiter.currentData())
 
     def go_next(self):
         if self.busy:return
@@ -189,7 +272,7 @@ class CategorySplitPage(QWidget):
                     item.setFlags(item.flags()|Qt.ItemIsUserCheckable);item.setCheckState(Qt.Checked if col in old else Qt.Unchecked)
                     self.column_list.addItem(item)
                 self._column_signature=signature;self.steps.setCurrentIndex(1);self.update_step()
-            self.run_job(lambda progress:source_info(options.source,options.sheet,options.area,options.header_rows),done)
+            self.run_job(lambda progress:source_info(options.source,options.sheet,options.area,options.header_rows,options.csv_encoding,options.csv_delimiter),done)
         else:
             if not options.key_columns:self.show_error('请至少勾选一个分类列。');return
             if not self.output_edit.text().strip():self.show_error('请选择保存文件夹。');return
@@ -278,8 +361,14 @@ class CategorySplitPage(QWidget):
         self.status_label.setText('正在生成并核对结果…')
         def done(result):
             self.result=result;self.status_label.setText(f'拆分完成：{result.exported_rows} 条记录，{len(result.output_files)} 个文件。\n{result.output_folder}')
-            self.confirm_button.setEnabled(False);self.open_button.show()
-        self.run_job(lambda progress:self.export_fn(confirmed,progress),done)
+            if result.unprocessed:
+                self.status_label.setText(f"已停止：已导出 {result.exported_rows} 条，{len(result.output_files)} 个文件。未导出类别："+"、".join(result.unprocessed))
+            self.confirm_button.setEnabled(False);self.open_button.setVisible(bool(result.output_files))
+        event=Event()
+        if self.export_fn is export_split:
+            self.run_job(lambda progress:self.export_fn(confirmed,progress,event),done,event)
+        else:
+            self.run_job(lambda progress:self.export_fn(confirmed,progress),done)
 
     def go_back(self):
         if self.busy:return

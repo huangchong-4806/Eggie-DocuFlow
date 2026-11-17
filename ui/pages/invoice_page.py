@@ -1,4 +1,5 @@
 import os
+from threading import Event
 from pathlib import Path
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont
@@ -51,7 +52,7 @@ class InvoicePageMixin:
 
         source_button_layout = QHBoxLayout()
         source_button_layout.setSpacing(10)
-        self.choose_invoice_source_button = QPushButton("添加 PDF 发票")
+        self.choose_invoice_source_button = QPushButton("添加 PDF / OFD 发票")
         self.delete_invoice_source_button = QPushButton("移出列表")
         self.delete_invoice_source_button.setToolTip("从待处理列表移除，不删除原文件")
         self.clear_invoice_source_button = QPushButton("清空列表")
@@ -67,7 +68,7 @@ class InvoicePageMixin:
         source_button_layout.addStretch()
         layout.addLayout(source_button_layout)
 
-        source_group = QGroupBox("待解析 PDF 发票")
+        source_group = QGroupBox("待解析发票")
         source_layout = QVBoxLayout(source_group)
         source_layout.setContentsMargins(10, 14, 10, 10)
         source_layout.setSpacing(8)
@@ -112,7 +113,7 @@ class InvoicePageMixin:
         layout.addWidget(output_group)
 
         hint = QLabel(
-            "每张 PDF 独立生成一个 Excel；单个失败不影响其他发票。扫描图片型 PDF 暂不支持。"
+            "PDF 或数电发票 OFD 均可添加，每张票独立生成一个 Excel；单个失败不影响其他发票。扫描图片型 PDF 暂不支持。"
         )
         hint.setAlignment(Qt.AlignLeft)
         hint.setProperty("role", "hint")
@@ -143,7 +144,7 @@ class InvoicePageMixin:
         self.invoice_file_table.clear()
         if not self.invoice_source_files:
             empty_item = QTreeWidgetItem(
-                ["", "暂无文件，请添加 PDF 发票", "", ""]
+                ["", "暂无文件，请添加 PDF / OFD 发票", "", ""]
             )
             empty_item.setFlags(Qt.NoItemFlags)
             self.invoice_file_table.addTopLevelItem(empty_item)
@@ -165,7 +166,7 @@ class InvoicePageMixin:
                 item.setToolTip(3, filename)
                 self.invoice_file_table.addTopLevelItem(item)
             self.invoice_file_status_label.setText(
-                f"已添加 {len(self.invoice_source_files)} 个 PDF 发票"
+                f"已添加 {len(self.invoice_source_files)} 个发票文件"
             )
         self.update_invoice_button_states()
 
@@ -184,9 +185,9 @@ class InvoicePageMixin:
     def add_invoice_files(self):
         filenames, _ = QFileDialog.getOpenFileNames(
             self,
-            "选择一个或多个 PDF 发票",
+            "选择一个或多个发票文件",
             self.dialog_folder("open"),
-            "PDF 文件 (*.pdf)",
+            "发票文件 (*.pdf *.ofd *.PDF *.OFD)",
         )
         if not filenames:
             return
@@ -231,9 +232,10 @@ class InvoicePageMixin:
         self.invoice_output_path_edit.setToolTip(self.invoice_output_folder)
         self.update_invoice_button_states()
 
-    def show_invoice_complete_message(self, results, failures, ledger_result=None):
+    def show_invoice_complete_message(self, results, failures, ledger_result=None, unprocessed=()):
         message = QMessageBox(self)
-        message.setWindowTitle("批量发票解析完成")
+        remaining = len(unprocessed)
+        message.setWindowTitle("批量发票解析已停止" if remaining else "批量发票解析完成")
         warning_count = sum(result.abnormal_count > 0 for result in results)
         message.setIcon(QMessageBox.Warning if failures or warning_count else QMessageBox.Information)
         message.setText(_invoice_result_summary(results, failures))
@@ -243,12 +245,17 @@ class InvoicePageMixin:
             f"保存文件夹：\n{self.invoice_output_folder}\n\n"
             f"明细行数：{item_count}\n校验异常：{abnormal_count} 项"
         )
+        if remaining:
+            detail += f"\n本批已停止，未处理 {remaining} 张。"
+            detail += "\n" + "\n".join(Path(p).name for p in unprocessed)
         if warning_count:
             detail += "\n请先查看结果文件的“校验结果”，核对异常后再使用。"
         if ledger_result:
             detail += (
                 f"\n\n汇总结果：\n{ledger_result.output_file}"
             )
+            detail += (f"\n重复 {ledger_result.duplicate_groups} 组，涉及 {ledger_result.duplicate_invoices} 张，"
+                       f"多出 {ledger_result.duplicate_extra} 张")
             if ledger_result.log_file:
                 detail += f"\n\n日志文件：\n{ledger_result.log_file}"
             elif ledger_result.log_error:
@@ -269,7 +276,7 @@ class InvoicePageMixin:
 
     def convert_invoice(self):
         if not self.invoice_source_files or not self.invoice_output_folder:
-            QMessageBox.warning(self, "尚未完成设置", "请先选择 PDF 发票和 Excel 保存文件夹。")
+            QMessageBox.warning(self, "尚未完成设置", "请先选择发票和 Excel 保存文件夹。")
             return
         source_files = tuple(self.invoice_source_files)
         output_folder = self.invoice_output_folder
@@ -277,6 +284,9 @@ class InvoicePageMixin:
         def invoices_completed(result):
             results, failures, ledger_result, ledger_error = result
             status = _invoice_result_summary(results, failures)
+            remaining = len(source_files)-len(results)-len(failures)
+            if remaining:
+                status = f"已停止，未处理 {remaining} 张；" + status
             if ledger_error:
                 status += "；汇总未生成"
             elif ledger_result and ledger_result.log_error:
@@ -295,7 +305,9 @@ class InvoicePageMixin:
                     "单张发票 Excel 和汇总结果均已生成，"
                     f"但处理日志未生成：\n{ledger_result.log_error}",
                 )
-            if results or failures:
+            if remaining:
+                self.show_invoice_complete_message(results, failures, ledger_result, source_files[-remaining:])
+            elif results or failures:
                 self.show_invoice_complete_message(results, failures, ledger_result)
 
         def failure_message(error):
@@ -307,29 +319,29 @@ class InvoicePageMixin:
             QMessageBox.information(self, "任务已结束", "已强制结束当前发票任务。未完成的发票没有生成不完整 Excel；已经完成的结果会保留。")
 
         if os.name == "nt":
+            task = InvoiceBatchProcessThread(source_files, output_folder, parent=self)
             self.start_background_task(
                 "正在批量解析发票",
-                f"准备解析 {len(source_files)} 个 PDF 发票…",
+                f"准备解析 {len(source_files)} 个发票文件…",
                 None,
                 invoices_completed,
                 failure_message,
                 total=len(source_files),
                 status_label=self.invoice_file_status_label,
-                task_thread=InvoiceBatchProcessThread(
-                    source_files,
-                    output_folder,
-                    parent=self,
-                ),
+                task_thread=task,
+                request_stop=task.stop_event.set,
                 allow_force_stop=True,
                 on_cancel=cancelled,
             )
             return
 
+        stop_event = Event()
         def process_invoices(progress_callback):
             results, failures = convert_invoice_pdfs(
                 source_files,
                 output_folder,
                 progress_callback=progress_callback,
+                stop_event=stop_event,
             )
             ledger_result = None
             ledger_error = ""
@@ -344,6 +356,7 @@ class InvoicePageMixin:
                         results,
                         failures,
                         output_folder,
+                        unprocessed=source_files[len(results)+len(failures):],
                     )
                 except Exception as error:
                     ledger_error = str(error)
@@ -351,10 +364,11 @@ class InvoicePageMixin:
 
         self.start_background_task(
             "正在批量解析发票",
-            f"准备解析 {len(source_files)} 个 PDF 发票…",
+            f"准备解析 {len(source_files)} 个发票文件…",
             process_invoices,
             invoices_completed,
             failure_message,
             total=len(source_files),
+            request_stop=stop_event.set,
             status_label=self.invoice_file_status_label,
         )

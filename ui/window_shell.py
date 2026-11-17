@@ -1,8 +1,9 @@
 from pathlib import Path
-from PySide6.QtCore import QSize, Qt
-from PySide6.QtGui import QPixmap
+import platform
+from PySide6.QtCore import QSize, Qt, QUrl
+from PySide6.QtGui import QPixmap, QDesktopServices
 from PySide6.QtWidgets import (
-    QDialog,
+    QDialog, QApplication, QPlainTextEdit,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -98,6 +99,10 @@ class WindowShellMixin:
             layout.addWidget(release_type)
         self.update_check_button = UpdateCheckButton(self)
         layout.addWidget(self.update_check_button)
+        feedback = QPushButton("反馈／报问题")
+        feedback.setProperty("variant", "homeNav")
+        feedback.clicked.connect(self.show_feedback)
+        layout.addWidget(feedback)
         settings_button = QPushButton("设置")
         settings_button.setMinimumHeight(38)
         settings_button.setIcon(tool_icon("settings"))
@@ -187,7 +192,7 @@ class WindowShellMixin:
     def show_invoice_tool(self):
         self.stack.setCurrentWidget(self.invoice_page)
         self.set_active_navigation("invoice")
-        self.setWindowTitle(f"{self.app_name} - PDF发票解析工具")
+        self.setWindowTitle(f"{self.app_name} - 发票解析")
 
     def show_document_tool(self):
         self.stack.setCurrentWidget(self.document_page)
@@ -208,6 +213,37 @@ class WindowShellMixin:
         self.stack.setCurrentWidget(self.pdf_page)
         self.set_active_navigation("pdf")
         self.setWindowTitle(f"{self.app_name} - PDF 工具箱")
+
+    def show_feedback(self):
+        email = "448223855@qq.com"
+        dialog = QDialog(self)
+        dialog.setWindowTitle("反馈／报问题")
+        layout = QVBoxLayout(dialog)
+        layout.addWidget(QLabel(f"反馈邮箱　{email}"))
+        layout.addWidget(QLabel("请核对问题信息后自行发送。软件不会自动上传文件。"))
+        names = {"invoice_page":"发票解析","split_page":"分类拆分","excel_page":"Excel 工具",
+                 "cleanup_page":"数据清理","pdf_page":"PDF 工具箱","batch_page":"批量处理",
+                 "rename_page":"文件改名","document_page":"文档解析","home_page":"首页"}
+        current = next((name for key,name in names.items() if getattr(self,key,None) is self.stack.currentWidget()),"其他")
+        info = QPlainTextEdit(dialog)
+        info.setPlainText(f"版本 {APP_VERSION}（{BUILD_NUMBER}）\n系统 {platform.system()} {platform.release()}\n功能 {current}\n问题现象（请补充，隐去业务信息）：")
+        layout.addWidget(info)
+        row=QHBoxLayout()
+        layout.addLayout(row)
+        status=QLabel()
+        def copy(value):
+            QApplication.clipboard().setText(value)
+            status.setText("已复制")
+        def open_mail():
+            if not QDesktopServices.openUrl(QUrl("mailto:"+email)):
+                status.setText("未找到邮件客户端，可复制邮箱。")
+        for name,action in (("打开邮件",open_mail),("复制邮箱",lambda:copy(email)),
+                            ("复制问题信息",lambda:copy(info.toPlainText()))):
+            button=QPushButton(name)
+            button.clicked.connect(action)
+            row.addWidget(button)
+        layout.addWidget(status)
+        dialog.exec()
 
     def show_settings(self, initial_provider=None):
         if initial_provider not in PROVIDER_LABELS:

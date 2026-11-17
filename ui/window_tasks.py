@@ -28,6 +28,7 @@ class WindowTasksMixin:
         task_thread=None,
         allow_force_stop=False,
         on_cancel=None,
+        request_stop=None,
     ):
         if self.task_is_running():
             QMessageBox.information(
@@ -45,7 +46,11 @@ class WindowTasksMixin:
             self,
         )
         progress.setWindowTitle(title)
-        if allow_force_stop:
+        if request_stop:
+            progress.setAutoClose(False)
+            progress.setAutoReset(False)
+            progress.setCancelButtonText("停止后续处理")
+        elif allow_force_stop:
             progress.setCancelButtonText("强制结束当前任务")
         else:
             progress.setCancelButton(None)
@@ -75,7 +80,27 @@ class WindowTasksMixin:
                 task, error, on_failure
             )
         )
-        if allow_force_stop and hasattr(thread, "force_stop"):
+        if request_stop:
+            def stop_after_current():
+                can_force = allow_force_stop and hasattr(thread, "force_stop")
+                if progress.property("stopRequested"):
+                    if can_force:
+                        self.request_force_stop_background_task(thread, on_cancel)
+                        if self.background_task_thread is thread:
+                            progress.show()
+                    return
+                progress.setProperty("stopRequested",True)
+                request_stop()
+                if can_force:
+                    progress.setCancelButtonText("卡住时强制结束…")
+                else:
+                    progress.setCancelButton(None)
+                progress.setLabelText("已请求停止，正在完成当前安全处理。")
+                progress.show()
+                if status_label is not None:
+                    status_label.setText("已请求停止，正在完成当前安全处理。")
+            progress.canceled.connect(stop_after_current)
+        elif allow_force_stop and hasattr(thread, "force_stop"):
             progress.canceled.connect(
                 lambda task=thread: self.request_force_stop_background_task(
                     task,
@@ -116,6 +141,8 @@ class WindowTasksMixin:
             return
         progress = self.background_task_progress
         if progress is not None:
+            if progress.property("stopRequested"):
+                return
             if total > 0:
                 progress.setRange(0, total)
                 progress.setValue(max(0, min(value, total)))
