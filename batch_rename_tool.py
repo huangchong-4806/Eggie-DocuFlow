@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from utils.source_snapshot import copy_digest
+
 
 MACOS_ILLEGAL_NAME_CHARS = {"/", "\0", ":"}
 WINDOWS_ILLEGAL_NAME_CHARS = {"/", "\\", "\0", ":", "*", "?", '"', "<", ">", "|"}
@@ -55,6 +57,7 @@ class RenamePreview:
     message: str
     will_rename: bool
     blocked: bool
+    digest: str = ""
 
 
 @dataclass(frozen=True)
@@ -69,6 +72,11 @@ class RenameAction:
 class RenameApplyResult:
     log_file: str
     actions: tuple
+    warning: str = ""
+
+    @property
+    def unprocessed_count(self):
+        return sum(action.status == "未处理" for action in self.actions)
 
     @property
     def success_count(self):
@@ -383,52 +391,66 @@ def apply_renames(
         raise ValueError("没有需要处理的文件。")
 
     log_folder = Path(log_folder or Path(previews[0].source_path).parent)
-    log_folder.mkdir(parents=True, exist_ok=True)
-    log_file, log_handle = _open_action_log(log_folder)
     actions = []
-
-    with log_handle as handle:
-        handle.write("批量改名操作日志\n")
-        handle.write(f"生成时间：{datetime.now().isoformat(timespec='seconds')}\n")
-        handle.write(f"文件数量：{len(previews)}\n")
-        handle.write("=" * 60 + "\n")
-        for index, preview in enumerate(previews, start=1):
-            if progress_callback:
-                progress_callback(
-                    index - 1,
-                    len(previews),
-                    f"正在处理第 {index} / {len(previews)} 个："
-                    f"{Path(preview.source_path).name}",
-                )
-            status = "跳过"
-            error = ""
-            if preview.will_rename:
-                try:
-                    _rename_without_overwrite(
-                        preview.source_path,
-                        preview.target_path,
+    log_file = ""
+    warning = ""
+    try:
+        log_folder.mkdir(parents=True, exist_ok=True)
+        log_file, log_handle = _open_action_log(log_folder)
+        with log_handle as handle:
+            handle.write("批量改名操作日志\n")
+            handle.write(f"生成时间：{datetime.now().isoformat(timespec='seconds')}\n")
+            handle.write(f"文件数量：{len(previews)}\n")
+            handle.write("=" * 60 + "\n")
+            handle.flush()
+            for index, preview in enumerate(previews, start=1):
+                if progress_callback:
+                    progress_callback(
+                        index - 1,
+                        len(previews),
+                        f"正在处理第 {index} / {len(previews)} 个："
+                        f"{Path(preview.source_path).name}",
                     )
-                    status = "成功"
-                except OSError as rename_error:
-                    status = "失败"
-                    error = str(rename_error)
+                status = "跳过"
+                error = ""
+                if preview.will_rename:
+                    try:
+                        if preview.digest and copy_digest(preview.source_path) != preview.digest:
+                            raise ValueError("文件内容已变化，请重新生成智能命名预览。")
+                        _rename_without_overwrite(
+                            preview.source_path,
+                            preview.target_path,
+                        )
+                        status = "成功"
+                    except ValueError as changed:
+                        status = "未处理"
+                        error = str(changed)
+                    except OSError as rename_error:
+                        status = "失败"
+                        error = str(rename_error)
 
-            _write_action_log(
-                handle,
-                index,
-                preview,
-                status,
-                error,
-                (metadata_by_source or {}).get(preview.source_path),
-            )
-            actions.append(
-                RenameAction(preview.source_path, preview.target_path, status, error)
-            )
-            if progress_callback:
-                progress_callback(
-                    index,
-                    len(previews),
-                    f"已处理 {index} / {len(previews)} 个文件",
+                actions.append(
+                    RenameAction(preview.source_path, preview.target_path, status, error)
                 )
+                _write_action_log(
+                    handle,
+                    index,
+                    preview,
+                    status,
+                    error,
+                    (metadata_by_source or {}).get(preview.source_path),
+                )
+                handle.flush()
+                if progress_callback:
+                    progress_callback(
+                        index,
+                        len(previews),
+                        f"已处理 {index} / {len(previews)} 个文件",
+                    )
 
-    return RenameApplyResult(str(log_file), tuple(actions))
+    except OSError as error:
+        warning = f"改名日志未能完整写入，后续改名已暂停：{error}"
+        for preview in previews[len(actions):]:
+            actions.append(RenameAction(preview.source_path, preview.target_path, "未处理", warning))
+
+    return RenameApplyResult(str(log_file), tuple(actions), warning)

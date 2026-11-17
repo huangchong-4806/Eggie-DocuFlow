@@ -22,6 +22,12 @@ from pdf_invoice_tool import convert_invoice_pdfs, write_invoice_ledger
 from ui.tasks import InvoiceBatchProcessThread
 
 
+def _invoice_result_summary(results, failures):
+    warnings = sum(result.abnormal_count > 0 for result in results)
+    return (f"已生成 {len(results)} 个（校验通过 {len(results) - warnings} 个，"
+            f"需核对 {warnings} 个），失败 {len(failures)} 个")
+
+
 class InvoicePageMixin:
     """Existing window methods; initialization remains in the window."""
 
@@ -228,14 +234,17 @@ class InvoicePageMixin:
     def show_invoice_complete_message(self, results, failures, ledger_result=None):
         message = QMessageBox(self)
         message.setWindowTitle("批量发票解析完成")
-        message.setIcon(QMessageBox.Warning if failures else QMessageBox.Information)
-        message.setText(f"成功 {len(results)} 个，失败 {len(failures)} 个")
+        warning_count = sum(result.abnormal_count > 0 for result in results)
+        message.setIcon(QMessageBox.Warning if failures or warning_count else QMessageBox.Information)
+        message.setText(_invoice_result_summary(results, failures))
         item_count = sum(result.item_count for result in results)
         abnormal_count = sum(result.abnormal_count for result in results)
         detail = (
             f"保存文件夹：\n{self.invoice_output_folder}\n\n"
             f"明细行数：{item_count}\n校验异常：{abnormal_count} 项"
         )
+        if warning_count:
+            detail += "\n请先查看结果文件的“校验结果”，核对异常后再使用。"
         if ledger_result:
             detail += (
                 f"\n\n汇总结果：\n{ledger_result.output_file}"
@@ -267,6 +276,12 @@ class InvoicePageMixin:
 
         def invoices_completed(result):
             results, failures, ledger_result, ledger_error = result
+            status = _invoice_result_summary(results, failures)
+            if ledger_error:
+                status += "；汇总未生成"
+            elif ledger_result and ledger_result.log_error:
+                status += "；日志未生成"
+            self.invoice_file_status_label.setText(status)
             if ledger_error:
                 QMessageBox.warning(
                     self,
@@ -283,11 +298,14 @@ class InvoicePageMixin:
             if results or failures:
                 self.show_invoice_complete_message(results, failures, ledger_result)
 
-        failure_message = lambda error: QMessageBox.critical(
-            self,
-            "发票识别失败",
-            f"{error}\n\n未完成的发票不会生成不完整 Excel。",
-        )
+        def failure_message(error):
+            self.invoice_file_status_label.setText("发票解析失败")
+            QMessageBox.critical(self, "发票识别失败", f"{error}\n\n未完成的发票不会生成不完整 Excel。")
+
+        def cancelled():
+            self.invoice_file_status_label.setText("发票解析已停止，已生成的文件已保留")
+            QMessageBox.information(self, "任务已结束", "已强制结束当前发票任务。未完成的发票没有生成不完整 Excel；已经完成的结果会保留。")
+
         if os.name == "nt":
             self.start_background_task(
                 "正在批量解析发票",
@@ -303,12 +321,7 @@ class InvoicePageMixin:
                     parent=self,
                 ),
                 allow_force_stop=True,
-                on_cancel=lambda: QMessageBox.information(
-                    self,
-                    "任务已结束",
-                    "已强制结束当前发票任务。未完成的发票没有生成不完整 Excel；"
-                    "已经完成的结果会保留。",
-                ),
+                on_cancel=cancelled,
             )
             return
 

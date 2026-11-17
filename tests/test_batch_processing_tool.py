@@ -68,6 +68,66 @@ class BatchProcessingToolTests(unittest.TestCase):
         self.assertIn("OCR 平台：baidu", log_text)
         self.assertNotIn("API_KEY", log_text)
 
+    def test_execution_reads_only_the_verified_pdf_even_if_replaced_after_open(self):
+        import shutil
+        import pdfplumber
+        from openpyxl import load_workbook
+        samples = Path(__file__).resolve().parents[1] / "test_files"
+        source = Path(shutil.copy(samples / "发票测试.pdf", self.root / "one.pdf"))
+        preview = inspect_pdf_files([source])
+        original_open = pdfplumber.open
+
+        def replace_after_verification(stream):
+            self.assertTrue(hasattr(stream, "read"))
+            shutil.copyfile(samples / "表格测试.pdf", source)
+            return original_open(stream)
+
+        with patch("pdfplumber.open", side_effect=replace_after_verification) as read:
+            run = process_pdf_files([source], self.root / "out", expected_previews=preview)
+        read.assert_called_once()
+        self.assertEqual(len(run.successful), 1)
+        item, = run.successful
+        self.assertEqual(item["doc_type"], "INVOICE")
+        self.assertEqual(item["data"]["source_file"], str(source.resolve()))
+        workbook = load_workbook(item["output_file"], read_only=True)
+        try:
+            self.assertIn("明细表", workbook.sheetnames)
+            headers, values = workbook["发票头信息"].values
+            self.assertEqual(dict(zip(headers, values))["价税合计（小写）"], 113)
+        finally:
+            workbook.close()
+
+    def test_stale_pdf_is_unprocessed_and_valid_peer_is_saved_once(self):
+        import shutil
+        sample = Path(__file__).resolve().parents[1] / "test_files" / "表格测试.pdf"
+        first = Path(shutil.copy(sample, self.root / "a.pdf"))
+        second = Path(shutil.copy(sample, self.root / "b.pdf"))
+        previews = inspect_pdf_files([first, second])
+        first.write_bytes(b"replacement")
+        with patch("batch_processing_tool._batch_log", side_effect=PermissionError("log")), patch("core.document_router.SessionLogger"):
+            result = process_pdf_files([first, second], self.root / "out", expected_previews=previews)
+        self.assertEqual((len(result.successful), len(result.unprocessed), len(result.failed)), (1, 1, 0))
+        self.assertEqual(result.unprocessed[0]["data"]["source_file"], str(first.resolve()))
+        self.assertTrue(Path(result.successful[0]["output_file"]).is_file())
+        self.assertEqual(result.log_file, "")
+        self.assertIn("日志未写入", result.warning)
+
+    def test_queue_log_failure_and_uncertain_output_cannot_replay_worker(self):
+        from unittest.mock import Mock
+        from layout_batch.queue_system import TaskQueue
+        output = self.root / "completed.txt"
+        output.write_text("result")
+        for status in ("success", "failed"):
+            worker = Mock(return_value={"status": status, "output_file": str(output)})
+            queue = TaskQueue(worker, max_retries=2)
+            with patch.object(queue, "_write_log", side_effect=PermissionError("log")):
+                item, = queue.run([str(self.root / "a.pdf")])
+            worker.assert_called_once()
+            self.assertEqual(item["output_file"], str(output))
+            self.assertIn("日志未写入", item["data"]["warning"])
+            if status == "failed":
+                self.assertFalse(item["data"]["retryable"])
+
 
 if __name__ == "__main__":
     unittest.main()

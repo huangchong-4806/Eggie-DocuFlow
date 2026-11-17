@@ -1,3 +1,4 @@
+from dataclasses import replace
 import io
 import json
 import os
@@ -15,6 +16,7 @@ from api_layer.models import (
     TextBlock,
 )
 from api_layer.providers import OCRProviderError, create_provider
+from utils.source_snapshot import reviewed_stream, source_snapshot
 from utils.file_helper import publish_new_file
 from utils.pdf_helper import MAX_PAGES, is_scanned_page, validate_pdf
 
@@ -30,7 +32,7 @@ def inspect_pdf(pdf_file):
         raise RuntimeError("缺少 PDF 文字解析组件 pdfplumber。") from error
     source = validate_pdf(pdf_file)
     scanned_pages = []
-    with pdfplumber.open(source) as document:
+    with reviewed_stream(source) as (stream, digest), pdfplumber.open(stream) as document:
         page_count = len(document.pages)
         if page_count == 0:
             raise ValueError("PDF 中没有可处理页面。")
@@ -40,7 +42,7 @@ def inspect_pdf(pdf_file):
             text = page.extract_text(layout=True) or ""
             if is_scanned_page(page, text):
                 scanned_pages.append(page_number)
-    return PdfInspection(str(source), page_count, tuple(scanned_pages))
+    return PdfInspection(str(source), page_count, tuple(scanned_pages), digest)
 
 
 def _local_page(page, page_number, text, elapsed_seconds):
@@ -157,7 +159,7 @@ def _recognize_with_retry(provider, image_bytes, page_number, width, height):
             time.sleep(0.8)
 
 
-def extract_document(pdf_file, provider_name, progress_callback=None):
+def extract_document(pdf_file, provider_name, progress_callback=None, *, allowed_pages=None):
     try:
         import pdfplumber
         import pypdfium2 as pdfium
@@ -181,6 +183,8 @@ def extract_document(pdf_file, provider_name, progress_callback=None):
                 page_started = time.monotonic()
                 text = page.extract_text(layout=True) or ""
                 if is_scanned_page(page, text):
+                    if allowed_pages is not None and page_number not in allowed_pages:
+                        raise ValueError("扫描页范围与确认内容不同，请重新预览。")
                     if provider is None:
                         provider = create_provider(provider_name)
                     if progress_callback:
@@ -319,17 +323,8 @@ def _write_extraction_bundle(extraction, text_path, json_path, log_path):
             temporary_paths[1],
             json.dumps(extraction.to_dict(), ensure_ascii=False, indent=2) + "\n",
         )
-        _atomic_write(
-            temporary_paths[2],
-            _log_text(
-                extraction,
-                str(final_paths[0]),
-                str(final_paths[1]),
-                str(final_paths[2]),
-            ),
-        )
         try:
-            for temporary_path, final_path in zip(temporary_paths, final_paths):
+            for temporary_path, final_path in zip(temporary_paths[:2], final_paths[:2]):
                 publish_new_file(temporary_path, final_path)
                 published.append(final_path)
         except Exception:
@@ -337,11 +332,20 @@ def _write_extraction_bundle(extraction, text_path, json_path, log_path):
                 final_path.unlink(missing_ok=True)
             raise
 
+    warning = ""
+    log_file = str(final_paths[2])
+    try:
+        _atomic_write(final_paths[2], _log_text(extraction, *map(str, final_paths)))
+    except OSError as error:
+        log_file = ""
+        warning = f"文字和位置结果已保存，日志未写入：{error}"
+
     return ExtractionFiles(
         source_file=extraction.source_file,
         text_file=str(final_paths[0]),
         json_file=str(final_paths[1]),
-        log_file=str(final_paths[2]),
+        log_file=log_file,
+        warning=warning,
         provider=extraction.provider,
         page_count=extraction.page_count,
         local_page_count=extraction.local_page_count,
@@ -350,8 +354,14 @@ def _write_extraction_bundle(extraction, text_path, json_path, log_path):
     )
 
 
-def extract_document_to_files(pdf_file, output_folder, provider_name, progress_callback=None):
-    extraction = extract_document(pdf_file, provider_name, progress_callback)
+def extract_document_to_files(pdf_file, output_folder, provider_name, progress_callback=None, *, approval=None):
+    if approval is None:
+        extraction = extract_document(pdf_file, provider_name, progress_callback)
+    else:
+        approval.check_provider(provider_name)
+        with source_snapshot(pdf_file, approval) as (copy, _):
+            extraction = extract_document(copy, provider_name, progress_callback, allowed_pages=approval.scanned_pages)
+        extraction = replace(extraction, source_file=approval.source_file)
     text_path, json_path, log_path = _output_paths(
         output_folder,
         Path(extraction.source_file).stem,
@@ -360,11 +370,12 @@ def extract_document_to_files(pdf_file, output_folder, provider_name, progress_c
 
 
 class UnifiedDocumentExtractor:
-    def __init__(self, provider_name):
+    def __init__(self, provider_name, allowed_pages=None):
         self.provider_name = provider_name
+        self.allowed_pages = allowed_pages
 
     def __call__(self, pdf_file, text_file, progress_callback=None):
-        extraction = extract_document(pdf_file, self.provider_name, progress_callback)
+        extraction = extract_document(pdf_file, self.provider_name, progress_callback, allowed_pages=self.allowed_pages)
         Path(text_file).write_text(extraction.full_text, encoding="utf-8")
         return extraction
 
@@ -375,9 +386,18 @@ def process_document_with_ocr(
     provider_name="baidu",
     progress_callback=None,
     log_root=None,
+    *, approval=None,
 ):
     from core.document_router import process_document
 
+    if approval is not None:
+        approval.check_provider(provider_name)
+        with source_snapshot(pdf_file, approval) as (copy, _):
+            return process_document(
+                copy, output_dir or Path(pdf_file).resolve().parent, progress_callback, log_root,
+                extractor=UnifiedDocumentExtractor(provider_name, approval.scanned_pages),
+                source_label=approval.source_file,
+            )
     return process_document(
         pdf_file,
         output_dir,

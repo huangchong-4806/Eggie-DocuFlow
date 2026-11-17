@@ -385,6 +385,69 @@ class APILayerTests(unittest.TestCase):
         self.assertIn("request_id=request-test-1", log_text)
         self.assertNotIn("采购合同", log_text)
 
+    def test_cloud_approval_rejects_replacement_page_or_provider_before_upload(self):
+        from dataclasses import replace
+        from api_layer.models import OCRApproval
+        source = self._scanned_pdf()
+        approval = OCRApproval.from_preview(document_module.inspect_pdf(source), "baidu")
+        with patch("api_layer.document.create_provider") as provider:
+            with self.assertRaisesRegex(ValueError, "平台已变化"):
+                extract_document_to_files(source, self.root, "alibaba", approval=approval)
+            with self.assertRaisesRegex(ValueError, "扫描页范围"):
+                extract_document_to_files(source, self.root, "baidu", approval=replace(approval, scanned_pages=()))
+            source.write_bytes(b"replacement")
+            with self.assertRaisesRegex(ValueError, "重新预览"):
+                extract_document_to_files(source, self.root, "baidu", approval=approval)
+            provider.assert_not_called()
+
+    def test_cloud_reads_approved_bytes_if_original_changes_during_processing(self):
+        from api_layer.models import OCRApproval
+        source = self._scanned_pdf()
+        preview = document_module.inspect_pdf(source)
+        approval = OCRApproval.from_preview(preview, "baidu")
+        provider = _FakeProvider("示例")
+        def start_provider(_name):
+            with Image.new("RGB", (900, 1200), "black") as black:
+                black.save(source, "PDF", resolution=150)
+            return provider
+
+        def recognize(payload, number, width, height):
+            with Image.open(io.BytesIO(payload)) as page:
+                lo, hi = page.convert("L").getextrema()
+                self.assertGreater(lo, 245, "uploaded a replacement page")
+            return _FakeProvider.recognize_image(provider, payload, number, width, height)
+
+        with patch("api_layer.document.create_provider", side_effect=start_provider), patch.object(provider, "recognize_image", side_effect=recognize):
+            result = extract_document_to_files(source, self.root, "baidu", approval=approval)
+        self.assertEqual(provider.calls, 1)
+        self.assertEqual(result.source_file, str(source.resolve()))
+        self.assertEqual(json.loads(Path(result.json_file).read_text(encoding="utf-8"))["source_file"], str(source.resolve()))
+
+    def test_unstructured_ocr_invoice_is_labeled_text_only(self):
+        from api_layer.models import OCRApproval
+        source = self._scanned_pdf()
+        approval = OCRApproval.from_preview(document_module.inspect_pdf(source), "baidu")
+        with patch("api_layer.document.create_provider", return_value=_FakeProvider("发票")), patch("core.document_router.detect_doc_type", return_value="INVOICE"):
+            result = process_document_with_ocr(source, self.root, approval=approval, log_root=self.root / "logs")
+        self.assertEqual(result["status"], "success")
+        self.assertTrue(result["text_only"])
+        self.assertEqual(Path(result["output_file"]).suffix, ".txt")
+
+    def test_only_extraction_log_fails_both_results_remain(self):
+        source = self._scanned_pdf()
+        provider = _FakeProvider("示例")
+        original = document_module._atomic_write
+        def write(path, content):
+            if str(path).endswith("_日志.txt"):
+                raise PermissionError("denied")
+            return original(path, content)
+        with patch("api_layer.document.create_provider", return_value=provider), patch.object(document_module, "_atomic_write", side_effect=write):
+            result = extract_document_to_files(source, self.root, "baidu")
+        self.assertEqual(result.log_file, "")
+        self.assertIn("日志未写入", result.warning)
+        self.assertIn("示例", Path(result.text_file).read_text(encoding="utf-8"))
+        self.assertEqual(len(json.loads(Path(result.json_file).read_text(encoding="utf-8"))["pages"]), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

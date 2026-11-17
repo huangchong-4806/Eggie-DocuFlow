@@ -12,6 +12,7 @@ from openpyxl.utils.cell import coordinate_from_string
 from openpyxl.worksheet.views import Selection
 
 from utils.file_helper import available_output_path, publish_output, temporary_output
+from utils.source_snapshot import PreviewChanged, reviewed_stream
 
 
 SUPPORTED_SUFFIXES = {".xlsx", ".xlsm"}
@@ -43,6 +44,8 @@ class CleanupPreview:
     number_cells: int
     formula_cells: int
     blocked_reason: str = ""
+    digest: str = ""
+    options: CleanupOptions = None
 
 
 @dataclass(frozen=True)
@@ -52,6 +55,7 @@ class CleanupResult:
     preview: CleanupPreview
     final_rows: int
     removed_rows: int
+    warning: str = ""
 
 
 def _source_path(source_file):
@@ -176,24 +180,26 @@ def _sheet_preview(source, sheet, options):
     ), remove_rows
 
 
-def _load_cleanup_workbook(source):
+def _load_cleanup_workbook(source, stream):
     # openpyxl reports some unreadable drawings only as warnings, then omits them on save.
     try:
-        with warnings.catch_warnings(), source.open("rb") as handle:
+        with warnings.catch_warnings():
+            stream.seek(0)
             warnings.filterwarnings("error", category=UserWarning, module=r"openpyxl\.reader\.drawings")
-            return load_workbook(handle, data_only=False, keep_vba=source.suffix.lower() == ".xlsm")
+            return load_workbook(stream, data_only=False, keep_vba=source.suffix.lower() == ".xlsm")
     except UserWarning:
         raise ValueError("工作簿包含无法完整读取的图片或图表，请在 Excel 中处理，以保留原件中的对象。") from None
 
 
 def preview_cleanup(source_file, options):
     source = _source_path(source_file)
-    workbook = load_workbook(
-        source,
-        read_only=True,
-        data_only=False,
-        keep_vba=source.suffix.lower() == ".xlsm",
-    )
+    with reviewed_stream(source) as (copy, digest):
+        preview = _preview_copy(source, copy, options)
+    return replace(preview, digest=digest, options=options)
+
+
+def _preview_copy(source, copy, options):
+    workbook = load_workbook(copy, read_only=True, data_only=False, keep_vba=source.suffix.lower() == ".xlsm")
     try:
         if options.sheet_name not in workbook.sheetnames:
             raise ValueError("选择的工作表不存在。")
@@ -204,7 +210,7 @@ def preview_cleanup(source_file, options):
     if remove_rows:
         # Streaming sheets omit drawings, print settings and other reference-bearing objects.
         try:
-            full = _load_cleanup_workbook(source)
+            full = _load_cleanup_workbook(source, copy)
             try:
                 _delete_rows_safely(full[options.sheet_name], remove_rows, check_only=True)
             finally:
@@ -436,11 +442,15 @@ def clean_workbook(
     output_folder,
     options,
     progress_callback=None,
+    expected_preview=None,
 ):
     source = _source_path(source_file)
     output_folder = Path(output_folder).expanduser().resolve()
     output_folder.mkdir(parents=True, exist_ok=True)
-    workbook = _load_cleanup_workbook(source)
+    if expected_preview is not None and expected_preview.options != options:
+        raise PreviewChanged("清理规则已变化，请重新预览。")
+    with reviewed_stream(source, expected_preview) as (copy, _):
+        workbook = _load_cleanup_workbook(source, copy)
     temporary_file = None
     try:
         if options.sheet_name not in workbook.sheetnames:
@@ -460,20 +470,26 @@ def clean_workbook(
         if temporary_file:
             Path(temporary_file).unlink(missing_ok=True)
 
-    log_file = available_output_path(output_file.with_name(f"{output_file.stem}_日志.txt"))
-    _write_log(
-        log_file,
-        source,
-        options,
-        preview,
-        output_file,
-        final_rows,
-        removed_rows,
-    )
+    warning = ""
+    try:
+        log_file = available_output_path(output_file.with_name(f"{output_file.stem}_日志.txt"))
+        _write_log(
+            log_file,
+            source,
+            options,
+            preview,
+            output_file,
+            final_rows,
+            removed_rows,
+        )
+    except OSError as error:
+        warning = f"Excel 已保存，日志未写入：{error}"
+        log_file = ""
     return CleanupResult(
         str(output_file),
         str(log_file),
         preview,
         final_rows,
         removed_rows,
+        warning,
     )

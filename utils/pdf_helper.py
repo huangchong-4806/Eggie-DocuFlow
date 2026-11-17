@@ -1,4 +1,6 @@
 import re
+from contextlib import nullcontext
+from os import PathLike
 from pathlib import Path
 
 
@@ -26,26 +28,37 @@ def is_scanned_page(page, text):
     )
 
 
-def extract_text(pdf_file, text_file, progress_callback=None):
+def open_pdf(source):
+    """Borrow an already-open PDF or open the supplied path or binary stream."""
     try:
         import pdfplumber
     except ImportError as error:
         raise RuntimeError("缺少 PDF 文本解析组件 pdfplumber。") from error
 
-    sample_parts = []
-    with pdfplumber.open(pdf_file) as document, open(text_file, "w", encoding="utf-8") as output:
-        total = len(document.pages)
-        if total == 0:
-            raise ValueError("PDF 中没有可处理页面。")
-        if total > MAX_PAGES:
-            raise ValueError(f"PDF 超过 {MAX_PAGES} 页，请拆分后再处理。")
+    if not isinstance(source, (str, PathLike)) and isinstance(source, pdfplumber.PDF):
+        return nullcontext(source)
+    return pdfplumber.open(source)
 
-        for page_number, page in enumerate(document.pages, 1):
-            page_text = page.extract_text(layout=True) or ""
-            if is_scanned_page(page, page_text):
-                page_text = f"{SCANNED_MARKER}{page_number}]]\n当前页无可提取文字，未启用 OCR。"
-            output.write(f"\n\n=== 第 {page_number} 页 ===\n\n{page_text.rstrip()}\n")
-            sample_parts.append(page_text[:4000])
-            if progress_callback:
-                progress_callback(page_number, total, f"正在读取第 {page_number} 页")
+
+def extract_text(pdf_file, text_file, progress_callback=None):
+    with open_pdf(pdf_file) as document, open(text_file, "w", encoding="utf-8") as output:
+        return write_document_text(document, output, progress_callback)
+
+
+def write_document_text(document, output, progress_callback=None):
+    sample_parts = []
+    total = len(document.pages)
+    if total == 0:
+        raise ValueError("PDF 中没有可处理页面。")
+    if total > MAX_PAGES:
+        raise ValueError(f"PDF 超过 {MAX_PAGES} 页，请拆分后再处理。")
+
+    for page_number, page in enumerate(document.pages, 1):
+        page_text = page.extract_text(layout=True) or ""
+        if is_scanned_page(page, page_text):
+            page_text = f"{SCANNED_MARKER}{page_number}]]\n当前页无可提取文字，未启用 OCR。"
+        output.write(f"\n\n=== 第 {page_number} 页 ===\n\n{page_text.rstrip()}\n")
+        sample_parts.append(page_text[:4000])
+        if progress_callback:
+            progress_callback(page_number, total, f"正在读取第 {page_number} 页")
     return "\f".join(sample_parts), total

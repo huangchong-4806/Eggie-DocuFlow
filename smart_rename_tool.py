@@ -1,16 +1,16 @@
-import hashlib
 import re
-import tempfile
+from io import StringIO
 import unicodedata
 from dataclasses import dataclass, replace
 from pathlib import Path
 
+from utils.source_snapshot import reviewed_stream, source_snapshot
 from api_layer.document import extract_document
 from batch_rename_tool import preview_explicit_renames
 from core.classifier import CONTRACT, INVOICE, UNKNOWN, detect_doc_type
 from core.document_router import invoice_from_extraction
 from pdf_invoice_tool import extract_invoice
-from utils.pdf_helper import extract_text
+from utils.pdf_helper import open_pdf, write_document_text
 
 
 @dataclass(frozen=True)
@@ -37,14 +37,6 @@ class SmartRenameResult:
             }
             for suggestion in self.suggestions
         }
-
-
-def _file_hash(path):
-    digest = hashlib.sha256()
-    with Path(path).open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _safe_component(value, limit=48):
@@ -89,21 +81,16 @@ def _contract_parts(text):
     return title, date_value
 
 
-def _local_text(source):
-    with tempfile.TemporaryDirectory(prefix="eggie-smart-rename-") as folder:
-        text_file = Path(folder) / "text.txt"
-        classification_text, _page_count = extract_text(source, text_file)
-        return classification_text, text_file.read_text(encoding="utf-8")
-
-
-def _suggest_one(source, use_ocr, provider_name):
-    extraction = None
+def _suggest_one(source, use_ocr, provider_name, allowed_pages=None):
     if use_ocr:
-        extraction = extract_document(source, provider_name)
-        classification_text = extraction.classification_text
-        full_text = extraction.full_text
-    else:
-        classification_text, full_text = _local_text(source)
+        extraction = extract_document(source, provider_name, allowed_pages=allowed_pages)
+        return _name_from_text(extraction.classification_text, extraction.full_text, source, extraction)
+    with open_pdf(source) as document, StringIO() as output:
+        classification_text, _ = write_document_text(document, output)
+        return _name_from_text(classification_text, output.getvalue(), document)
+
+
+def _name_from_text(classification_text, full_text, source, extraction=None):
     document_type = detect_doc_type(classification_text)
 
     if document_type == INVOICE:
@@ -131,11 +118,13 @@ def suggest_smart_renames(
     use_ocr=False,
     provider_name="baidu",
     progress_callback=None,
+    approvals=None,
 ):
     sources = tuple(Path(path).expanduser().resolve() for path in files)
     seen_hashes = {}
     suggestions = []
     pairs = []
+    digests = []
     for index, source in enumerate(sources, 1):
         if progress_callback:
             progress_callback(index - 1, len(sources), f"正在识别：{source.name}")
@@ -143,18 +132,29 @@ def suggest_smart_renames(
         reason = ""
         document_type = UNKNOWN
         stem = ""
+        digest = ""
         try:
             if source.suffix.lower() != ".pdf":
                 raise ValueError("智能识别命名当前只支持 PDF")
-            digest = _file_hash(source)
+            approval = None
+            if use_ocr and approvals is not None:
+                approval = approvals.get(str(source))
+                if approval is None:
+                    raise ValueError("文件未通过本次扫描页检查，请重新预览")
+                approval.check_provider(provider_name)
+            snapshot = source_snapshot if use_ocr else reviewed_stream
+            with snapshot(source, approval) as (copy, digest):
+                document_type, stem, reason = _suggest_one(
+                    copy, use_ocr, provider_name, approval.scanned_pages if approval else None
+                )
             if digest in seen_hashes:
                 duplicate_of = str(seen_hashes[digest])
             else:
                 seen_hashes[digest] = source
-            document_type, stem, reason = _suggest_one(source, use_ocr, provider_name)
         except Exception as error:
             reason = f"{type(error).__name__}: {error}，已保持原文件名"
         target = source.with_name(f"{_safe_component(stem)}{source.suffix}") if stem else source
+        digests.append(digest)
         pairs.append((str(source), str(target)))
         suggestions.append(
             SmartRenameSuggestion(
@@ -170,7 +170,7 @@ def suggest_smart_renames(
 
     previews = list(preview_explicit_renames(pairs))
     for index, suggestion in enumerate(suggestions):
-        preview = previews[index]
+        preview = previews[index] = replace(previews[index], digest=digests[index])
         message_parts = [part for part in (preview.message, suggestion.reason) if part]
         if suggestion.duplicate_of:
             message_parts.append(f"内容与 {Path(suggestion.duplicate_of).name} 相同")

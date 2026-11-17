@@ -632,8 +632,9 @@ class PdfConversionMixin:
                 QMessageBox.critical(
                     self,
                     "PDF 转换失败",
-                    f"所有 PDF 都转换失败，未生成图片。\n\n"
-                    f"详细原因已记录在日志中：\n{result.log_file}",
+                    "所有 PDF 都转换失败，未生成图片。\n\n" +
+                    (f"详细原因已记录在日志中：\n{result.log_file}" if result.log_file else
+                     result.warning + "\n" + "\n".join(f"{Path(path).name}：{reason}" for path, reason in result.failures)),
                 )
                 return
             self.pdf_export_status_label.setText(

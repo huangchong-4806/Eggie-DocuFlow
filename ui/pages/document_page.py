@@ -28,6 +28,11 @@ from ui.app_support import (
 )
 
 
+from contextlib import nullcontext
+from utils.source_snapshot import source_snapshot
+from api_layer.models import OCRApproval
+
+
 class DocumentPageMixin:
     """Existing window methods; initialization remains in the window."""
 
@@ -240,11 +245,14 @@ class DocumentPageMixin:
         )
 
     def document_inspection_completed(self, action, inspection):
+        if Path(self.document_source_file).resolve() != Path(inspection.source_file):
+            self.document_ocr_status_label.setText("文件已变化，请重新检查。")
+            return
         if not inspection.scanned_pages:
             if action == "extract":
                 self.start_document_ocr_task("extract", inspection)
             else:
-                self.start_document_local_processing()
+                self.start_document_local_processing(inspection)
             return
 
         provider = self.current_document_ocr_provider()
@@ -284,9 +292,13 @@ class DocumentPageMixin:
             self.document_result_file = ""
             self.document_result_path_edit.clear()
             self.document_status_label.setText("正在识别扫描页并处理文档…")
-        self.start_document_ocr_task(action, inspection)
+        self.start_document_ocr_task(action, inspection, provider)
 
-    def start_document_ocr_task(self, task_kind, inspection):
+    def start_document_ocr_task(self, task_kind, inspection, provider=None):
+        provider = provider or self.current_document_ocr_provider()
+        if self.current_document_ocr_provider() != provider or Path(self.document_source_file).resolve() != Path(inspection.source_file):
+            self.document_ocr_status_label.setText("文件或 OCR 平台已变化，请重新检查。")
+            return
         if self.document_ocr_thread is not None or self.task_is_running():
             return
         self.document_ocr_task_kind = task_kind
@@ -308,8 +320,9 @@ class DocumentPageMixin:
             task_kind,
             self.document_source_file,
             self.document_output_folder,
-            self.current_document_ocr_provider(),
+            provider,
             self,
+            approval=OCRApproval.from_preview(inspection, provider),
         )
         self.document_ocr_thread.progress.connect(self.document_ocr_progress_changed)
         self.document_ocr_thread.completed.connect(self.document_ocr_completed)
@@ -349,7 +362,7 @@ class DocumentPageMixin:
         message.setInformativeText(
             f"文字结果：\n{result.text_file}\n\n"
             f"保留位置的结果：\n{result.json_file}\n\n"
-            f"处理日志：\n{result.log_file}"
+            f"处理日志：\n{result.warning or result.log_file}"
         )
         open_button = message.addButton("打开文字结果", QMessageBox.ActionRole)
         ok_button = message.addButton("确定", QMessageBox.AcceptRole)
@@ -481,7 +494,7 @@ class DocumentPageMixin:
             return
         self.start_document_local_processing()
 
-    def start_document_local_processing(self):
+    def start_document_local_processing(self, inspection=None):
         source_file = self.document_source_file
         output_folder = self.document_output_folder
         enhanced_layout = self.document_enhanced_layout_checkbox.isChecked()
@@ -491,18 +504,21 @@ class DocumentPageMixin:
         self.update_document_button_states()
 
         def process_local(progress_callback):
-            if enhanced_layout:
-                return process_layout_document(
-                    source_file,
+            snapshot = source_snapshot(source_file, inspection) if inspection else nullcontext((source_file, None))
+            with snapshot as (source, _):
+                if enhanced_layout:
+                    return process_layout_document(
+                        source,
+                        output_folder,
+                        progress_callback=progress_callback,
+                        style_template="formal_contract",
+                    )
+                return process_document(
+                    source,
                     output_folder,
                     progress_callback=progress_callback,
-                    style_template="formal_contract",
+                    source_label=source_file,
                 )
-            return process_document(
-                source_file,
-                output_folder,
-                progress_callback=progress_callback,
-            )
 
         def process_failed(error):
             self.finish_document_processing(
@@ -547,6 +563,8 @@ class DocumentPageMixin:
         doc_type_label = DOCUMENT_TYPE_LABELS.get(
             result["doc_type"], result["doc_type"]
         )
+        if result.get("text_only"):
+            doc_type_label += " · 仅提取文字"
         confidence = result.get("confidence")
         if confidence is None:
             confidence = result.get("data", {}).get("confidence")
@@ -563,7 +581,10 @@ class DocumentPageMixin:
         message.setWindowTitle("处理完成")
         message.setIcon(QMessageBox.Information)
         message.setText(f"已识别为：{doc_type_label}")
-        message.setInformativeText(f"结果保存位置：\n{self.document_result_file}")
+        warning = result.get("warning", "")
+        if warning:
+            self.document_status_label.setText(self.document_status_label.text() + "；" + warning)
+        message.setInformativeText(f"结果保存位置：\n{self.document_result_file}\n{warning}".rstrip())
         open_button = message.addButton("打开结果", QMessageBox.ActionRole)
         ok_button = message.addButton("确定", QMessageBox.AcceptRole)
         for button in (ok_button, open_button):
