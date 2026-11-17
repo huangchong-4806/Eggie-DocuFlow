@@ -856,9 +856,15 @@ with tempfile.TemporaryDirectory() as folder:
         with patch.object(self.window, "refresh_rename_file_list") as refresh:
             self.window.rename_rule_primary_edit.setText("A")
             self.window.rename_rule_primary_edit.setText("AB")
-            QTest.qWait(320)
+            refresh.assert_not_called()
+            # Wait for delivery, not an exact wall-clock deadline: a busy CI
+            # runner may schedule the 250 ms timer after a fixed 320 ms wait.
+            deadline = time.monotonic() + 2
+            while not refresh.called and time.monotonic() < deadline:
+                QTest.qWait(10)
 
         refresh.assert_called_once()
+        self.assertFalse(self.window.rename_preview_timer.isActive())
 
     def test_stale_rename_preview_cannot_be_reenabled_by_selecting_a_row(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
