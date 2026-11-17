@@ -50,7 +50,7 @@ def build(inputs, output, cmake, ninja):
                         "-DCMAKE_OSX_ARCHITECTURES=arm64", "-DCMAKE_OSX_DEPLOYMENT_TARGET=14.0"], check=True)
         subprocess.run([cmake, "--build", build_dir, "--parallel", "6"], check=True)
         library = build_dir / "platforms/libqcocoa.dylib"
-        subprocess.run(["/usr/bin/lipo", "-verify_arch", "arm64", library], check=True)
+        subprocess.run(["/usr/bin/lipo", library, "-verify_arch", "arm64"], check=True)
         # PyInstaller rewrites framework dependencies and removes this SDK rpath
         # in its binary collection step; only the built app is runnable.
         metadata = {
