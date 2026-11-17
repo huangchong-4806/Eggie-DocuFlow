@@ -1037,11 +1037,22 @@ with tempfile.TemporaryDirectory() as folder:
         ) as completed:
             self.window.start_document_inspection("process")
             self.assertIsNotNone(self.window.background_task_thread)
-            for _ in range(50):
+            self.assertFalse(completed.called)
+            deadline = time.monotonic() + 2
+            while time.monotonic() < deadline:
                 self.application.processEvents()
-                if self.window.background_task_thread is None:
+                # The result callback clears background_task_thread before run()
+                # returns. Wait for the worker to finish as well: closeEvent()
+                # correctly protects the window while any child thread is running.
+                if self.window.background_task_thread is None and not any(
+                    thread.isRunning() for thread in self.window.findChildren(QThread)
+                ):
                     break
                 QTest.qWait(10)
+            self.assertIsNone(self.window.background_task_thread)
+            self.assertFalse(any(
+                thread.isRunning() for thread in self.window.findChildren(QThread)
+            ))
 
         completed.assert_called_once_with("process", inspection)
 

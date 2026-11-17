@@ -1,6 +1,6 @@
 # 开源说明与第三方组件
 
-Eggie DocuFlow / Eggie文档处理系统。本文适用于当前 V1.5.2 候选版源码与打包材料；旧 V1.5.1 及既有候选包的原始声明保留在各自归档中。
+Eggie DocuFlow / Eggie文档处理系统。本文适用于当前 V1.6.0 源码与打包材料；历史版本及既有候选包的原始声明保留在各自归档中。
 
 ## 项目代码及完整许可文本
 
@@ -33,7 +33,7 @@ Eggie DocuFlow / Eggie文档处理系统。本文适用于当前 V1.5.2 候选�
 
 ## 源代码与分发要求
 
-项目源代码仓库：[huangchong-4806/Eggie-DocuFlow](https://github.com/huangchong-4806/Eggie-DocuFlow)。本版源码对应v1.5.1标签；同一发布页提供准确的项目源码、第三方源码材料及SHA256清单。旧V1.4.0源码不是本版的对应源码。
+项目源代码仓库：[huangchong-4806/Eggie-DocuFlow](https://github.com/huangchong-4806/Eggie-DocuFlow)。本轮准备 V1.6.0，尚未正式发布。本版项目源码归档与实际构建输入一致；正式分发时提供本版项目源码、校验清单及第三方源码材料。未变化的第三方依赖沿用 V1.5.1 配套源码，Mac Qt 修复源码沿用 V1.5.2 材料，新增 xlrd 2.0.2 源码单独附上。历史项目源码不能代替本版项目源码。
 
 同一发布位置提供本版项目源码、依赖源码材料、构建与安装脚本、本文件和许可证。重建入口见 BUILD_RELEASE.md 及 packaging/rebuild/；实际MuPDF1.28.5源码与其thirdparty目录完整保留。requirements.txt用于开发，准确重建须按说明准备定制引擎。
 
@@ -49,7 +49,7 @@ PyMuPDF 1.28.2 is built against MuPDF 1.28.5. Both are under AGPL-3.0; this non-
 
 定制 PDF 引擎保持原组合。构建 2026110402 的依赖更新与配套来源记录见第三方源码包及其清单。
 
-## Mac Cocoa 辅助功能修复（V1.5.2 候选版）
+## Mac Cocoa 辅助功能修复（沿用 V1.5.2）
 
 含本修复的 Mac 包使用 Qt 6.10.3 官方源码，仅回移上游 `8148c48deb8e4345bacb797cb75c011df6f797fa`（QTBUG-149612）的三个文件，重建 Cocoa 平台插件。它修复表格辅助功能接口被重复释放导致的崩溃；这份回移二进制由本项目构建，不是 Qt 官方发布的新版本。
 

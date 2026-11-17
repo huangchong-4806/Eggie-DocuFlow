@@ -1,6 +1,6 @@
 {
-  "candidate": "V1.6.0 local release candidate with Excel compatibility and Mac update cleanup fixes",
-  "build": "2026111602",
+  "candidate": "V1.6.0 formal release build prepared locally; not published",
+  "build": "2026111702",
   "engine": "1.28.5",
   "binding": "1.28.2",
   "environment_records": "BUILD_RELEASE.md and packaging/rebuild/requirements-mac-portable.txt / requirements-windows-portable.txt",
