@@ -6,17 +6,17 @@
 免费的 Excel、PDF 与文件处理工具，无需安装 Python。支持 Excel 合并、拆分与清理，PDF 编辑、发票解析和批量改名。<br>
 A free desktop toolkit for Excel, PDF and file workflows. Merge, split and clean Excel files, edit PDFs, extract invoice data and rename files in batches. No Python installation required.
 
-## V1.6.0 下载准备 / V1.6.0 download preparation
+## V1.6.0 下载 / Download V1.6.0
 
-**V1.6.0 · 编号 2026111702，尚未发布。以下链接将在正式发布后生效；目前可用版本仍为 [V1.5.2](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/tag/v1.5.2)。**<br>
-**V1.6.0 · Build 2026111702, not published yet. The links below become available after release; V1.5.2 remains the currently available release.**
+**[V1.6.0 · 编号 2026111702](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/tag/v1.6.0)，已于 2026-11-17 正式发布。**<br>
+**V1.6.0 · Build 2026111702, released on November 17, 2026.**
 
-发布后，V1.5.2（2026110601）可在软件内更新至本版；V1.5.1 或更早版本需使用完整安装包。安装后可在侧栏底部核对版本和编号。<br>
-After release, V1.5.2 (2026110601) can update in-app. Users of V1.5.1 or earlier should use the full installer. Check the version and build at the bottom of the sidebar.
+V1.5.2（2026110601）可在软件内更新至本版；V1.5.1 或更早版本需使用完整安装包。安装后可在侧栏底部核对版本和编号。<br>
+V1.5.2 (2026110601) can update in-app. Users of V1.5.1 or earlier should use the full installer. Check the version and build at the bottom of the sidebar.
 
-- [Mac 完整包（待发布） / Mac full package (pending)](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/download/v1.6.0/EggieDocuFlow_V1.6.0_mac_arm64.zip)
-- [Windows 完整包（待发布） / Windows full package (pending)](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/download/v1.6.0/EggieDocuFlow_V1.6.0_Windows_x64_Setup.exe)
-- [源码与校验清单（待发布） / Source and checksums (pending)](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/tag/v1.6.0)
+- [Mac 完整包 / Mac full package](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/download/v1.6.0/EggieDocuFlow_V1.6.0_mac_arm64.zip)
+- [Windows 完整包 / Windows full package](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/download/v1.6.0/EggieDocuFlow_V1.6.0_Windows_x64_Setup.exe)
+- [源码与校验清单 / Source and checksums](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/tag/v1.6.0)
 
 **普通用户只需下载对应系统的安装包，无需下载或安装项目源码、第三方源码包及 GitHub 的 Source code 归档；不下载源码包也不影响软件使用。校验清单可按需下载。**<br>
 **For normal use, download only the installer for your operating system. Project source, third-party source packages and GitHub's Source code archives are not required to install or use the app. Checksums are optional.**
@@ -70,7 +70,7 @@ Excel and PDF processing runs locally and saves new output files. File renaming 
 
 ## 历史版本 / Previous release
 
-- [V1.5.2 下载与说明 / Current available release](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/tag/v1.5.2)
+- [V1.5.2 下载与说明 / Previous stable release](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/tag/v1.5.2)
 
 - [V1.5.1 下载与说明 / Previous stable release](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/tag/v1.5.1)
 
@@ -409,7 +409,7 @@ PDF 工具箱： / PDF toolbox:
 Developers can run the project from source with the commands below. Regular
 users do not need to follow these steps.
 
-V1.6.0 的四个 PR 已合入 main（27bd87b），现于本地准备正式标识的 2026111702，尚未正式发布。以下 2026111602 候选包的验收记录保留，1702 成品另行验收。用户已授权按纯重构、可靠性修复、功能补齐、打包与实测的顺序合入 main，四阶段结果分别见 [#22](https://github.com/huangchong-4806/Eggie-DocuFlow/pull/22)、[#23](https://github.com/huangchong-4806/Eggie-DocuFlow/pull/23)、[#24](https://github.com/huangchong-4806/Eggie-DocuFlow/pull/24)、[#25](https://github.com/huangchong-4806/Eggie-DocuFlow/pull/25)。主窗口入口在 `app.py`，页面方法在 `ui/pages/`，窗口导航与公共任务在 `ui/window_shell.py`、`ui/window_tasks.py`。原 `v2` 版面与批量处理包现名为 `layout_batch`，例如命令行入口为 `python -m layout_batch.batch_engine --help`。双端候选安装与升级、本地业务样本验收已有记录；整版远端测试、凭证扫描和两端候选构建已有通过记录。后续补充了 Windows 打包遇到短暂占用时的处理，最新提交检查与产物见 [PR #25](https://github.com/huangchong-4806/Eggie-DocuFlow/pull/25)。用户确认本次不追加 DNG 原片支持和真实大图测试；构造图片结果有效，真实大图仍未实测。逐项状态、构建修复及验证边界见 [V1.6 本地开发与验收](docs/superpowers/plans/2026-11-10-v1.6-refactor.md)。
+V1.6.0（2026111702）已正式发布，发布标签固定于已验收提交 `b853810`。四个功能 PR 及发布准备 PR #26 均已合入；两端正式成品的自检、完整与增量升级和同机复开已验收。以下 2026111602 候选包的记录作为历史保留。用户已授权按纯重构、可靠性修复、功能补齐、打包与实测的顺序合入 main，四阶段结果分别见 [#22](https://github.com/huangchong-4806/Eggie-DocuFlow/pull/22)、[#23](https://github.com/huangchong-4806/Eggie-DocuFlow/pull/23)、[#24](https://github.com/huangchong-4806/Eggie-DocuFlow/pull/24)、[#25](https://github.com/huangchong-4806/Eggie-DocuFlow/pull/25)。主窗口入口在 `app.py`，页面方法在 `ui/pages/`，窗口导航与公共任务在 `ui/window_shell.py`、`ui/window_tasks.py`。原 `v2` 版面与批量处理包现名为 `layout_batch`，例如命令行入口为 `python -m layout_batch.batch_engine --help`。双端候选安装与升级、本地业务样本验收已有记录；整版远端测试、凭证扫描和两端候选构建已有通过记录。后续补充了 Windows 打包遇到短暂占用时的处理，最新提交检查与产物见 [PR #25](https://github.com/huangchong-4806/Eggie-DocuFlow/pull/25)。用户确认本次不追加 DNG 原片支持和真实大图测试；构造图片结果有效，真实大图仍未实测。逐项状态、构建修复及验证边界见 [V1.6 本地开发与验收](docs/superpowers/plans/2026-11-10-v1.6-refactor.md)。
 
 准确重建本版请先阅读 [BUILD_RELEASE.md](BUILD_RELEASE.md)，准备定制MuPDF1.28.5引擎。下列pip命令只提供开发环境，默认依赖不等同于发布包。<br>
 For a release-equivalent build, follow [BUILD_RELEASE.md](BUILD_RELEASE.md), including the custom MuPDF 1.28.5 engine. The pip commands below set up a development environment; default dependencies do not reproduce the release package.

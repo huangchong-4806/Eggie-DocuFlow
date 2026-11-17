@@ -33,7 +33,7 @@ Eggie DocuFlow / Eggie文档处理系统。本文适用于当前 V1.6.0 源码�
 
 ## 源代码与分发要求
 
-项目源代码仓库：[huangchong-4806/Eggie-DocuFlow](https://github.com/huangchong-4806/Eggie-DocuFlow)。本轮准备 V1.6.0，尚未正式发布。本版项目源码归档与实际构建输入一致；正式分发时提供本版项目源码、校验清单及第三方源码材料。未变化的第三方依赖沿用 V1.5.1 配套源码，Mac Qt 修复源码沿用 V1.5.2 材料，新增 xlrd 2.0.2 源码单独附上。历史项目源码不能代替本版项目源码。
+项目源代码仓库：[huangchong-4806/Eggie-DocuFlow](https://github.com/huangchong-4806/Eggie-DocuFlow)。[V1.6.0 已正式发布](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/tag/v1.6.0)。本版项目源码归档与发布标签 `v1.6.0`（`b853810`）及实际构建输入一致；发布页提供本版项目源码、校验清单及第三方源码材料。未变化的第三方依赖沿用 V1.5.1 配套源码，Mac Qt 修复源码沿用 V1.5.2 材料，新增 xlrd 2.0.2 源码单独附上。历史项目源码不能代替本版项目源码。
 
 同一发布位置提供本版项目源码、依赖源码材料、构建与安装脚本、本文件和许可证。重建入口见 BUILD_RELEASE.md 及 packaging/rebuild/；实际MuPDF1.28.5源码与其thirdparty目录完整保留。requirements.txt用于开发，准确重建须按说明准备定制引擎。
 
