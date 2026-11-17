@@ -583,27 +583,20 @@ def write_raster_compressed_pdf(source, output_file, preset):
         raise ValueError("当前压缩档位不需要图片式压缩。")
 
     document = pdfium.PdfDocument(str(source))
-    images = []
     try:
-        for index in range(len(document)):
-            page = document[index]
-            bitmap = page.render(scale=scale)
-            image = bitmap.to_pil().convert("RGB")
-            page.close()
-            images.append(image)
-        if not images:
+        if not len(document):
             raise ValueError("这个 PDF 没有可压缩的页面。")
-        images[0].save(
-            output_file,
-            "PDF",
-            save_all=True,
-            append_images=images[1:],
-            resolution=72 * scale,
-            quality=quality,
-        )
+        def raster_pages():
+            for index in range(len(document)):
+                # Keep the original renderer's color blending; its default bitmap
+                # already converts to RGB in to_pil(), including transparent artwork.
+                with closing(document[index]) as page, closing(
+                    page.render(scale=scale)
+                ) as bitmap, closing(bitmap.to_pil()) as image:
+                    yield image
+        with closing(raster_pages()) as pages:
+            _write_image_pages(pages, output_file, len(document), resolution=72 * scale, quality=quality)
     finally:
-        for image in images:
-            image.close()
         document.close()
 
 
@@ -682,38 +675,77 @@ def compress_pdf(pdf_file, output_file, preset="standard", *, allow_raster=False
     return replace(result, log_file=log_file, compression_note=note)
 
 
+def _write_image_pages(images, path, count, *, resolution=72, quality=None):
+    """Stream each JPEG directly to the PDF; only page references stay in memory."""
+    from io import BytesIO
+    from PIL.PdfParser import PdfDict, PdfName, PdfParser
+
+    jpeg_options = {} if quality is None else {"quality": quality}
+    with path.open("w+b") as handle, closing(PdfParser(f=handle)) as pdf:
+        pdf.start_writing()
+        pdf.write_header()
+        pdf.pages.extend(pdf.next_object_id(0) for _ in range(count))
+        pdf.write_catalog()
+        for page_ref, image in zip(pdf.pages, images, strict=True):
+            with BytesIO() as encoded:
+                image.save(encoded, format="JPEG", **jpeg_options)
+                image_ref = pdf.write_obj(
+                    None, Type=PdfName("XObject"), Subtype=PdfName("Image"),
+                    Width=image.width, Height=image.height, ColorSpace=PdfName("DeviceRGB"),
+                    BitsPerComponent=8, Filter=PdfName("DCTDecode"), stream=encoded.getvalue(),
+                )
+            width, height = (side * 72 / resolution for side in image.size)
+            contents = f"q {width:.8f} 0 0 {height:.8f} 0 0 cm /Im0 Do Q".encode("ascii")
+            pdf.write_page(
+                page_ref, MediaBox=[0, 0, width, height],
+                Resources=PdfDict(XObject=PdfDict(Im0=image_ref)),
+                Contents=pdf.write_obj(None, stream=contents),
+            )
+        pdf.write_xref_and_trailer()
+
+
 def images_to_pdf(image_files, output_file):
     from PIL import Image, ImageOps
-    import PIL.JpegImagePlugin  # noqa: F401
 
-    image_files = tuple(image_files)
+    image_files=tuple(image_files)
     if not image_files:
         raise ValueError("请先选择图片。")
 
-    with ExitStack() as resources:
-        converted = []
+    def converted_pages():
         for image_file in image_files:
-            source = Path(image_file).expanduser().resolve()
+            source=Path(image_file).expanduser().resolve()
             if not is_supported_image_file(source):
                 raise ValueError(f"不支持的图片格式：{source.name}")
-            with Image.open(source) as image, closing(ImageOps.exif_transpose(image)) as oriented:
+            with ExitStack() as resources:
+                image=resources.enter_context(Image.open(source))
+                # The usual RGB JPEG is already oriented. Avoid copying its entire pixel buffer twice.
+                rotation=image.getexif().get(274,1)
+                oriented=(resources.enter_context(closing(ImageOps.exif_transpose(image)))
+                          if rotation not in (1,None) else image)
                 if "A" in oriented.getbands() or "transparency" in oriented.info:
-                    rgb = resources.enter_context(closing(Image.new("RGB", oriented.size, "white")))
+                    rgb=resources.enter_context(closing(Image.new("RGB",oriented.size,"white")))
                     with closing(oriented.convert("RGBA")) as rgba, closing(rgba.getchannel("A")) as alpha:
-                        rgb.paste(rgba, mask=alpha)
+                        rgb.paste(rgba,mask=alpha)
+                elif oriented.mode=="RGB" and oriented.format=="JPEG":
+                    rgb=oriented
                 else:
-                    rgb = resources.enter_context(closing(oriented.convert("RGB")))
-                converted.append(rgb)
+                    rgb=resources.enter_context(closing(oriented.convert("RGB")))
+                yield rgb
 
-        output_file = Path(output_file).expanduser().resolve()
-        output_file.parent.mkdir(parents=True, exist_ok=True)
-        output_file = available_output_path(output_file)
-        temporary_file = temporary_output(output_file)
-        try:
-            converted[0].save(temporary_file, format="PDF", save_all=True, append_images=converted[1:])
-            output_file = Path(publish_output(temporary_file, output_file))
-        finally:
-            Path(temporary_file).unlink(missing_ok=True)
+    output_file=Path(output_file).expanduser().resolve()
+    output_file.parent.mkdir(parents=True,exist_ok=True)
+    output_file=available_output_path(output_file)
+    temporary_file=Path(temporary_output(output_file))
+    try:
+        # The existing single-image writer also handles failure before publishing the file.
+        with closing(converted_pages()) as images:
+            if len(image_files)==1:
+                next(images).save(temporary_file, format="PDF")
+            else:
+                _write_image_pages(images, temporary_file, len(image_files))
+        output_file=Path(publish_output(temporary_file,output_file))
+    finally:
+        temporary_file.unlink(missing_ok=True)
 
     source_size = sum(Path(image_file).stat().st_size for image_file in image_files)
     log_file, warning = result_log(

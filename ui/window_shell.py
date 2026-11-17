@@ -38,13 +38,13 @@ class WindowShellMixin:
 
         brand = QHBoxLayout()
         brand.setSpacing(10)
-        self.home_logo_pixmap = QPixmap(str(resource_path("assets/app_icon.png")))
+        logo_pixmap = QPixmap(str(resource_path("assets/app_icon.png")))
         self.home_logo_label = QLabel()
         self.home_logo_label.setFixedSize(32, 32)
         self.home_logo_label.setAlignment(Qt.AlignCenter)
-        if not self.home_logo_pixmap.isNull():
+        if not logo_pixmap.isNull():
             self.home_logo_label.setPixmap(
-                self.home_logo_pixmap.scaled(
+                logo_pixmap.scaled(
                     QSize(32, 32),
                     Qt.KeepAspectRatio,
                     Qt.SmoothTransformation,
@@ -140,32 +140,12 @@ class WindowShellMixin:
         root.addWidget(panel); root.addStretch(1)
         return page
 
-    def update_home_responsive_layout(self):
-        if not hasattr(self, "home_logo_label"):
-            return
-
-        height = max(self.home_page.height(), self.height())
-        logo_size = 32
-        if not self.home_logo_pixmap.isNull():
-            self.home_logo_label.setPixmap(
-                self.home_logo_pixmap.scaled(
-                    QSize(logo_size, logo_size),
-                    Qt.KeepAspectRatio,
-                    Qt.SmoothTransformation,
-                )
-            )
-        self.home_logo_label.setFixedSize(logo_size, logo_size)
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self.update_home_responsive_layout()
-
     def set_active_navigation(self, active_key):
         for key, button in self.nav_buttons.items():
-            button.setProperty(
-                "variant",
-                "homeNavActive" if key == active_key else "homeNav",
-            )
+            variant = "homeNavActive" if key == active_key else "homeNav"
+            if button.property("variant") == variant:
+                continue
+            button.setProperty("variant", variant)
             button.style().unpolish(button)
             button.style().polish(button)
 

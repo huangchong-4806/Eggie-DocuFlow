@@ -55,8 +55,14 @@ def load_startup_paths(window, paths):
 def main():
     multiprocessing.freeze_support()
     if sys.argv[1:] == ["--check-install"]:
-        from core.install_check import check_install
-        check_install()
+        try:
+            from core.install_check import check_install
+            check_install()
+        except Exception as error:
+            # Windowed installers wait for this exit code without a console or dialog.
+            if sys.stderr is not None:
+                print(f"Installation check failed: {error}", file=sys.stderr)
+            raise SystemExit(1) from error
         return
     if "--version" in sys.argv[1:]:
         print(APP_VERSION)

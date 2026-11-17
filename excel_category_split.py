@@ -103,6 +103,11 @@ def _open(data, **kwargs):
     # Unsupported Excel extension warnings must never silently lose content.
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always', UserWarning)
+        # Some business exports omit the named Normal style. openpyxl supplies
+        # its default; cell-specific styles are still read from the workbook.
+        warnings.filterwarnings('ignore', category=UserWarning,
+                                message=r"^Workbook contains no default style, apply openpyxl's default$",
+                                module=r'^openpyxl\.styles\.stylesheet$')
         wb = load_workbook(BytesIO(data), keep_links=False, **kwargs)
     if caught:
         wb.close()
@@ -117,7 +122,7 @@ def source_info(source, sheet=None, area=None, header_rows=1, csv_encoding='utf-
     try:
         names = tuple(wb.sheetnames)
         ws = wb[sheet or names[0]]
-        bounds = _bounds(ws, area, header_rows)
+        bounds = _bounds(ws, area, header_rows, check_readonly_extent=True)
         left, top, right, bottom = bounds
         labels = []
         values = next(ws.iter_rows(min_row=top + max(header_rows-1, 0),
@@ -133,21 +138,35 @@ def source_info(source, sheet=None, area=None, header_rows=1, csv_encoding='utf-
         wb.close()
 
 
-def _bounds(ws, area, header_rows):
+def _check_area_size(width, height):
+    if width * height > 2_000_000:
+        raise ValueError('所选区域超过 200 万单元格，请缩小处理区域。')
+
+
+def _bounds(ws, area, header_rows, *, check_readonly_extent=False):
     if area:
         if not re.fullmatch(r'\$?[A-Za-z]{1,3}\$?[1-9]\d*:\$?[A-Za-z]{1,3}\$?[1-9]\d*', area.strip()):
             raise ValueError('区域请填写完整矩形，例如 A3:H500。')
         bounds = range_boundaries(area.strip())
     else:
-        bounds = (1, 1, ws.max_column or 1, ws.max_row or 1)
+        width, height = ws.max_column, ws.max_row
+        if check_readonly_extent and (width is None or height is None or (width, height) == (1, 1)):
+            # A few exporters declare just A1 (or no extent) even on large sheets.
+            # Scan only this exceptional case, without expanding the sheet into a grid.
+            ws.reset_dimensions()
+            width = height = 1
+            for number, row in enumerate(ws.iter_rows(values_only=True), 1):
+                if row:
+                    width, height = max(width, len(row)), number
+                    _check_area_size(width, height)
+        bounds = (1, 1, width or 1, height or 1)
     left, top, right, bottom = bounds
     if not (1 <= left <= right <= 16384 and 1 <= top <= bottom <= 1048576):
         raise ValueError('区域超出 Excel 范围或起止顺序不正确。')
     if header_rows < 0 or header_rows >= bottom-top+1:
         raise ValueError('表头之后没有可拆分数据，请检查表头行数和区域。')
     # Bound memory before normal worksheet iteration creates empty cells.
-    if (right-left+1)*(bottom-top+1) > 2_000_000:
-        raise ValueError('所选区域超过 200 万单元格，请缩小处理区域。')
+    _check_area_size(right-left+1, bottom-top+1)
     return bounds
 
 
@@ -180,8 +199,6 @@ def inspect_source(options):
             raise ValueError('分类列必须位于所选区域内。')
         if ws._charts or ws._images or ws._pivots or len(ws.conditional_formatting) or ws.data_validations.count:
             raise ValueError(f'{ws.title} 包含图表、图片、透视表、条件格式或数据验证，当前不能完整保留；请先另存普通明细表。')
-        cached = _open(data, data_only=True)
-        value_ws = cached[options.sheet]
         issues = []
         merged_sources = {}
         header_end = top + options.header_rows - 1
@@ -215,6 +232,10 @@ def inspect_source(options):
                 cell = ws.cell(rr,cc)
                 value = cell.value
                 if cell.data_type == 'f':
+                    # Plain large exports need no second workbook in memory.
+                    if cached is None:
+                        cached = _open(data, data_only=True)
+                        value_ws = cached[options.sheet]
                     result = value_ws.cell(rr,cc)
                     if included and (result.value is None or result.data_type == 'e'):
                         issues.append(f'{ws.title}!{cell.coordinate} 公式缺少已保存结果或结果错误，请用 Excel 计算并保存后重新读取。')

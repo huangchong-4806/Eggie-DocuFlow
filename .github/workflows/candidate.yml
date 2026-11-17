@@ -1,0 +1,109 @@
+name: Candidate packages
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main, 'codex/v1.6-*']
+    paths:
+      - version.py
+      - release_notes_v1.6.0.md
+      - packaging/**
+      - scripts/*build*
+      - scripts/publish_installer.py
+      - scripts/check_candidate_install.ps1
+      - .github/workflows/candidate.yml
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.12'
+      - name: Prepare verified Windows runtime
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -m venv .venv
+          $py = (Resolve-Path .venv/Scripts/python.exe).Path
+          & $py -m pip install -r requirements.txt
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $url = 'https://github.com/huangchong-4806/Eggie-DocuFlow/releases/download/v1.5.2'
+          curl.exe -fLsS --retry 3 "$url/Windows-2026110601-clean-runtime.zip" -o runtime.zip
+          if ($LASTEXITCODE -ne 0 -or (Get-FileHash runtime.zip).Hash -ne '0143babc5e6d5e7cf8b32d6c696b0a896110b684e7fd2ba01474db527db097e4') { throw 'Unexpected reference runtime' }
+          Expand-Archive runtime.zip -DestinationPath runtime
+          & $py packaging/rebuild/restore_windows_engine.py runtime
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          curl.exe -fLsS --retry 3 "$url/eggie-update-ed25519.pub" -o eggie-update-ed25519.pub
+          if ($LASTEXITCODE -ne 0 -or (Get-FileHash eggie-update-ed25519.pub).Hash -ne '818dfdda7e516addd81ac40c58df6faf2ac60b10e5ef91bd674a24af38930788') { throw 'Unexpected public key' }
+          "PYTHON=$py" >> $env:GITHUB_ENV
+          "EGGIE_UPDATE_PUBLIC_KEY_FILE=$((Resolve-Path eggie-update-ed25519.pub).Path)" >> $env:GITHUB_ENV
+      - name: Build and check installation
+        shell: pwsh
+        run: |
+          ./scripts/check_candidate_install.ps1 -TestWait
+          ./scripts/build_windows.ps1
+          $exe = Get-ChildItem release/*Setup.exe
+          if (@($exe).Count -ne 1) { throw 'Expected one installer' }
+          ./scripts/check_candidate_install.ps1 -Installer $exe.FullName
+          "$((Get-FileHash $exe.FullName).Hash.ToLowerInvariant())  $($exe.Name)" | Set-Content -Encoding ascii release/SHA256SUMS.txt
+          $line = (Get-Content release/SHA256SUMS.txt -Raw).Trim()
+          $copiedHash, $copiedName = $line -split '  ', 2
+          if ($copiedName -ne $exe.Name -or $copiedHash -ne (Get-FileHash -LiteralPath (Join-Path release $copiedName)).Hash) { throw 'Candidate checksum mismatch' }
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: Windows-candidate
+          path: release/
+          if-no-files-found: error
+  mac:
+    runs-on: macos-15
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.12'
+      - name: Rebuild pinned components and package
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          python -m venv .venv
+          export PYTHON="$PWD/.venv/bin/python"
+          export PATH="$PWD/.venv/bin:$PATH"
+          python -m pip install -r packaging/rebuild/requirements-mac-portable.txt
+          root="$RUNNER_TEMP/eggie-inputs"
+          mkdir -p "$root"
+          origin="https://github.com/huangchong-4806/Eggie-DocuFlow/releases/download"
+          export EGGIE_UPDATE_PUBLIC_KEY_FILE="$root/eggie-update-ed25519.pub"
+          export EGGIE_QT_COCOA_REPAIR_DIR="$root/cocoa"
+          curl -fLsS --retry 3 "$origin/v1.5.2/eggie-update-ed25519.pub" -o "$EGGIE_UPDATE_PUBLIC_KEY_FILE"
+          curl -fLsS --retry 3 "$origin/v1.5.1/EggieDocuFlow_V1.5.1_third-party-sources.zip" -o "$root/sources.zip"
+          (cd "$root"; echo '818dfdda7e516addd81ac40c58df6faf2ac60b10e5ef91bd674a24af38930788  eggie-update-ed25519.pub' | shasum -a 256 -c -; echo '369484d0bde67c75021b71d147e972d8ddf58b888dde7fbb345cb20881ada5c9  sources.zip' | shasum -a 256 -c -)
+          unzip -pj "$root/sources.zip" '*/mupdf-1.28.5-source.tar.gz' > "$root/engine.tar.gz"
+          unzip -pj "$root/sources.zip" '*/pymupdf-1.28.2.tar.gz' > "$root/binding.tar.gz"
+          for part in engine binding; do mkdir "$root/$part"; tar -xzf "$root/$part.tar.gz" -C "$root/$part" --strip-components=1; done
+          PYMUPDF_SETUP_MUPDF_BUILD="$root/engine" python -m pip install --no-build-isolation --no-deps "$root/binding"
+          python -c 'from PySide6 import QtCore; import pymupdf; assert (pymupdf.VersionBind,pymupdf.VersionFitz)==("1.28.2","1.28.5")'
+          python packaging/rebuild/normalize_engine_path.py
+          unzip -pj "$root/sources.zip" '*/qtbase-everywhere-src-6.10.3.tar.xz' > "$root/qtbase-source.tar.xz"
+          curl -fLsS --retry 3 'https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_6103/qt6_6103/qt.qt6.6103.clang_64/6.10.3-0-202603310405qtbase-MacOS-MacOS_15-Clang-MacOS-MacOS_15-X86_64-ARM64.7z' -o "$root/qtbase-sdk.7z"
+          python scripts/build_mac_cocoa.py --inputs "$root" --output "$EGGIE_QT_COCOA_REPAIR_DIR"
+          bash scripts/build_macos.sh
+          mkdir "$root/smoke"
+          ditto -x -k release/*.zip "$root/smoke"
+          app="$(find "$root/smoke" -maxdepth 1 -name '*.app' -print)"
+          codesign --verify --deep --strict "$app"
+          "$app/Contents/MacOS/Eggie DocuFlow" --check-install
+          (cd release; shasum -a 256 *.zip > SHA256SUMS.txt; shasum -a 256 -c SHA256SUMS.txt)
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: Mac-candidate
+          path: release/
+          if-no-files-found: error

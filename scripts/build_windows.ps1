@@ -109,7 +109,7 @@ try {
         throw 'Installer copy failed its SHA-256 check.'
     }
     # Publish by same-directory rename, including on Windows PowerShell 5.1.
-    & $Python -c 'import os, sys; os.replace(sys.argv[1], sys.argv[2])' $StagedInstaller $InstallerPath
+    & $Python (Join-Path $PSScriptRoot 'publish_installer.py') $StagedInstaller $InstallerPath
     if ($LASTEXITCODE -ne 0) {
         throw "Cannot replace the installer at $InstallerPath. Check permissions and close any program using it."
     }

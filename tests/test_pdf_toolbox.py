@@ -209,6 +209,28 @@ class PdfToolboxTests(unittest.TestCase):
         self.assertIn("状态=已生成", log_text)
         self.assertIn("像素=", log_text)
 
+    def test_raster_compression_preserves_page_order_size_and_colors(self):
+        paths = []
+        cases = [((40, 60), (224, 16, 32)), ((66, 38), (24, 32, 224))]
+        for index, (size, color) in enumerate(cases):
+            path = self.root / f"tile{index}.png"
+            with Image.new("RGB", size, color) as tile:
+                tile.save(path)
+            paths.append(path)
+        source = images_to_pdf(paths, self.root / "tiles.pdf").output_file
+        for preset in ("standard", "small"):
+            output = self.root / f"{preset}.pdf"
+            pdf_toolbox.write_raster_compressed_pdf(source, output, preset)
+            pages = PdfReader(output, strict=True).pages
+            self.assertEqual(len(pages), len(cases))
+            for page, (size, color) in zip(pages, cases, strict=True):
+                for actual, expected in zip((page.mediabox.width, page.mediabox.height), size):
+                    self.assertAlmostEqual(float(actual), expected, delta=0.6)
+                with page.images[0].image as image:
+                    pixel = image.getpixel((image.width // 2, image.height // 2))
+                    for actual, expected in zip(pixel, color, strict=True):
+                        self.assertAlmostEqual(actual, expected, delta=6)
+
     def test_images_to_pdf_composites_transparency_on_white(self):
         for mode in ("RGBA", "P"):
             with self.subTest(mode=mode):

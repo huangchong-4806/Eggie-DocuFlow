@@ -34,11 +34,14 @@ def localized_app_name(locale):
 
 
 def resource_path(relative_path):
-    base_path = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
+    bundled_root = getattr(sys, "_MEIPASS", None)
+    base_path = Path(bundled_root) if bundled_root is not None else Path(__file__).resolve().parents[1]
     return base_path / relative_path
 
 
 def application_icon_path():
+    if sys.platform == "darwin" and getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent.parent / "Resources" / "app_icon.icns"
     icon_name = "app_icon.ico" if sys.platform == "win32" else "app_icon.icns"
     return resource_path(f"assets/{icon_name}")
 

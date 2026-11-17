@@ -9,9 +9,12 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import threading
+import time
 import unittest
 from unittest.mock import patch
 
+from scripts.publish_installer import publish_installer
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -63,6 +66,51 @@ class SourceArchiveTests(unittest.TestCase):
 
 @unittest.skipUnless(sys.platform == "win32", "Requires native Windows PowerShell")
 class WindowsBuildTests(unittest.TestCase):
+    def test_publishing_waits_for_brief_lock_and_preserves_files_on_timeout(self):
+        import ctypes
+        from ctypes import wintypes
+
+        kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+        kernel.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
+                                      wintypes.LPVOID, wintypes.DWORD, wintypes.DWORD,
+                                      wintypes.HANDLE]
+        kernel.CreateFileW.restype = wintypes.HANDLE
+        kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+        kernel.CloseHandle.restype = wintypes.BOOL
+        with tempfile.TemporaryDirectory() as folder:
+            source, target = Path(folder) / 'verified.tmp', Path(folder) / 'installer.exe'
+            source.write_bytes(b'new complete installer')
+            target.write_bytes(b'old complete installer')
+            # Allow readers and writers, but deliberately deny deletion/renaming.
+            handle = kernel.CreateFileW(str(target), 0x80000000, 3, None, 3, 0x80, None)
+            self.assertNotEqual(handle, ctypes.c_void_p(-1).value)
+            held = [handle]
+            timer = None
+
+            def release():
+                if held:
+                    kernel.CloseHandle(held.pop())
+
+            try:
+                start = time.monotonic()
+                with self.assertRaises(OSError) as failed:
+                    publish_installer(source, target, timeout_seconds=0.25)
+                self.assertIn(failed.exception.winerror, (5, 32))
+                self.assertGreaterEqual(time.monotonic() - start, 0.25)
+                self.assertLess(time.monotonic() - start, 5)
+                self.assertEqual(source.read_bytes(), b'new complete installer')
+                self.assertEqual(target.read_bytes(), b'old complete installer')
+
+                timer = threading.Timer(0.35, release)
+                timer.start()
+                publish_installer(source, target, timeout_seconds=3)
+                self.assertFalse(source.exists())
+                self.assertEqual(target.read_bytes(), b'new complete installer')
+            finally:
+                if timer is not None:
+                    timer.join()
+                release()
+
     def test_concurrent_builds_and_corrupt_copy(self):
         compiler = shutil.which("ISCC.exe")
         if not compiler:
@@ -80,6 +128,7 @@ class WindowsBuildTests(unittest.TestCase):
             script = root / "scripts/build_windows.ps1"
             script.parent.mkdir()
             shutil.copyfile(ROOT / "scripts/build_windows.ps1", script)
+            shutil.copyfile(ROOT / "scripts/publish_installer.py", script.with_name("publish_installer.py"))
             package = root / "packaging"
             package.mkdir()
             (package / "ChineseSimplified.isl").touch()

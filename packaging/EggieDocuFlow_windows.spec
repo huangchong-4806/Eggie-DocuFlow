@@ -16,7 +16,7 @@ if trust_data:
     recovery_data = [(str(recovery_helper), "update-tools")]
 APP_BASENAME = "Eggie DocuFlow"
 LICENSE_METADATA = []
-for package in ("openpyxl", "pdfplumber", "pypdf", "Pillow", "pypdfium2", "PyMuPDF",
+for package in ("openpyxl", "xlrd", "pdfplumber", "pypdf", "Pillow", "pypdfium2", "PyMuPDF",
                 "PySide6-Essentials", "alibabacloud_ocr_api20210707"):
     LICENSE_METADATA += copy_metadata(package, recursive=True)
 
@@ -30,7 +30,6 @@ a = Analysis(
         (str(PROJECT_ROOT / f"release_notes_v{version_scope['APP_VERSION']}.md"), "."),
         (str(PROJECT_ROOT / "BUILD_RELEASE.md"), "."),
         (str(PROJECT_ROOT / "licenses"), "licenses"),
-        (str(PROJECT_ROOT / "assets" / "software_logo.png"), "assets"),
         (str(PROJECT_ROOT / "assets" / "app_icon.png"), "assets"),
         (str(PROJECT_ROOT / "assets" / "app_icon.ico"), "assets"),
         (str(PROJECT_ROOT / "docs" / "OCR使用说明.pdf"), "docs"),
