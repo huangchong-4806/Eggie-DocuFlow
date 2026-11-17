@@ -407,7 +407,7 @@ class AppNavigationTests(unittest.TestCase):
         self.assertGreaterEqual(label.height(), label.heightForWidth(label.width()))
         self.assertTrue(label.parentWidget().rect().contains(label.geometry()))
 
-    @patch("app.is_provider_configured", return_value=True)
+    @patch("ui.pages.batch_page.is_provider_configured", return_value=True)
     @patch("app.QMessageBox.question", return_value=QMessageBox.No)
     def test_batch_ocr_confirmation_lists_exact_scanned_pages(
         self, question, _configured
@@ -871,7 +871,7 @@ with tempfile.TemporaryDirectory() as folder:
             f"/tmp/example-{index}.txt" for index in range(5001)
         ]
 
-        with patch("app.preview_renames", return_value=()) as preview:
+        with patch("ui.pages.rename_page.preview_renames", return_value=()) as preview:
             started = self.window.refresh_rename_file_list()
             for _ in range(100):
                 self.application.processEvents()
@@ -997,7 +997,7 @@ with tempfile.TemporaryDirectory() as folder:
             QThread.msleep(100)
             return inspection
 
-        with patch("app.inspect_pdf", side_effect=slow_inspection), patch.object(
+        with patch("ui.pages.document_page.inspect_pdf", side_effect=slow_inspection), patch.object(
             self.window, "document_inspection_completed"
         ) as completed:
             self.window.start_document_inspection("process")
@@ -1025,7 +1025,7 @@ with tempfile.TemporaryDirectory() as folder:
                 image_files=(str(first_image),),
             )
 
-            with patch("app.QMessageBox") as message_class, patch.object(
+            with patch("ui.pages.pdf_page.QMessageBox") as message_class, patch.object(
                 self.window, "open_output_file"
             ) as open_output:
                 message = message_class.return_value

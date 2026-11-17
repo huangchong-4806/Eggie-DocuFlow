@@ -5,14 +5,14 @@ from pathlib import Path
 from zipfile import ZipFile
 
 from core.classifier import CONTRACT, TABLE
-from v2.batch_engine import BatchEngine
-from v2.layout_extractor import _add_contract_table
-from v2.layout_engine import process_layout_document
-from v2.layout_exporters import export_contract_layout
-from v2.queue_system import TaskQueue
+from layout_batch.batch_engine import BatchEngine
+from layout_batch.layout_extractor import _add_contract_table
+from layout_batch.layout_engine import process_layout_document
+from layout_batch.layout_exporters import export_contract_layout
+from layout_batch.queue_system import TaskQueue
 
 
-class DocuFlowV2Tests(unittest.TestCase):
+class LayoutBatchTests(unittest.TestCase):
     def setUp(self):
         self.temporary_directory = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary_directory.name)

@@ -395,6 +395,8 @@ PDF 工具箱： / PDF toolbox:
 Developers can run the project from source with the commands below. Regular
 users do not need to follow these steps.
 
+当前开发分支仅进行 V1.6 的第一阶段纯重构，尚未发布新版。主窗口入口保留在 `app.py`，页面方法位于 `ui/pages/`，窗口导航与公共任务分别位于 `ui/window_shell.py`、`ui/window_tasks.py`。原 `v2` 版面与批量处理包现名为 `layout_batch`，例如命令行入口为 `python -m layout_batch.batch_engine --help`。本轮保持既有处理规则及 V1.5.2 版本标识；检查范围见 [纯重构开发与验收](docs/superpowers/plans/2026-11-10-v1.6-refactor.md)。
+
 准确重建本版请先阅读 [BUILD_RELEASE.md](BUILD_RELEASE.md)，准备定制MuPDF1.28.5引擎。下列pip命令只提供开发环境，默认依赖不等同于发布包。<br>
 For a release-equivalent build, follow [BUILD_RELEASE.md](BUILD_RELEASE.md), including the custom MuPDF 1.28.5 engine. The pip commands below set up a development environment; default dependencies do not reproduce the release package.
 

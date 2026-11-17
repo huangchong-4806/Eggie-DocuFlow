@@ -5,7 +5,7 @@ from pathlib import Path
 from api_layer import inspect_pdf, process_document_with_ocr
 from core.document_router import process_document
 from utils.file_helper import available_output_path
-from v2.batch_engine import BatchEngine
+from layout_batch.batch_engine import BatchEngine
 
 
 @dataclass(frozen=True)
