@@ -1,19 +1,22 @@
 # Eggie DocuFlow｜免费的 Excel 与 PDF 桌面处理工具
 
-![Version](https://img.shields.io/badge/version-1.5.2-blue)
+![Version](https://img.shields.io/badge/version-1.6.0-blue)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-blue)
 
 免费的 Excel、PDF 与文件处理工具，无需安装 Python。支持 Excel 合并、拆分与清理，PDF 编辑、发票解析和批量改名。<br>
 A free desktop toolkit for Excel, PDF and file workflows. Merge, split and clean Excel files, edit PDFs, extract invoice data and rename files in batches. No Python installation required.
 
-## 下载 V1.5.2 / Download V1.5.2
+## V1.6.0 下载准备 / V1.6.0 download preparation
 
-**V1.5.2 · 编号 2026110601。V1.5.1 或更早版本的用户需完整安装一次本版，之后才能使用软件内更新。** 安装后可在侧栏底部核对版本和编号。<br>
-**V1.5.2 · Build 2026110601. Users of V1.5.1 or earlier must install this full package once to enable in-app updates.** Check the version and build at the bottom of the sidebar after installation.
+**V1.6.0 · 编号 2026111702，尚未发布。以下链接将在正式发布后生效；目前可用版本仍为 [V1.5.2](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/tag/v1.5.2)。**<br>
+**V1.6.0 · Build 2026111702, not published yet. The links below become available after release; V1.5.2 remains the currently available release.**
 
-- [下载 Mac 版 / Download for Mac](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/download/v1.5.2/EggieDocuFlow_V1.5.2_mac_arm64.zip)
-- [下载 Windows 版 / Download for Windows](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/download/v1.5.2/EggieDocuFlow_V1.5.2_Windows_x64_Setup.exe)
-- [源码与校验清单 / Source and checksums](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/tag/v1.5.2)
+发布后，V1.5.2（2026110601）可在软件内更新至本版；V1.5.1 或更早版本需使用完整安装包。安装后可在侧栏底部核对版本和编号。<br>
+After release, V1.5.2 (2026110601) can update in-app. Users of V1.5.1 or earlier should use the full installer. Check the version and build at the bottom of the sidebar.
+
+- [Mac 完整包（待发布） / Mac full package (pending)](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/download/v1.6.0/EggieDocuFlow_V1.6.0_mac_arm64.zip)
+- [Windows 完整包（待发布） / Windows full package (pending)](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/download/v1.6.0/EggieDocuFlow_V1.6.0_Windows_x64_Setup.exe)
+- [源码与校验清单（待发布） / Source and checksums (pending)](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/tag/v1.6.0)
 
 **普通用户只需下载对应系统的安装包，无需下载或安装项目源码、第三方源码包及 GitHub 的 Source code 归档；不下载源码包也不影响软件使用。校验清单可按需下载。**<br>
 **For normal use, download only the installer for your operating system. Project source, third-party source packages and GitHub's Source code archives are not required to install or use the app. Checksums are optional.**
@@ -22,10 +25,19 @@ A free desktop toolkit for Excel, PDF and file workflows. Merge, split and clean
 - **Windows**：Windows 10/11，64 位。 / Windows 10/11, 64-bit.
 - 无需安装 Python。 / No Python installation required.
 
-[V1.5.2 更新说明 / Release notes](release_notes_v1.5.2.md) · [下载校验与已知安全事项 / Verification and security](SECURITY.md)
+[V1.6.0 更新说明 / Release notes](release_notes_v1.6.0.md) · [下载校验与已知安全事项 / Verification and security](SECURITY.md)
 
 Excel 与 PDF 默认在本机处理并另存结果；文件改名先预览再执行。只有主动配置、启用并确认云 OCR 后，扫描页才会发送给所选服务商。<br>
 Excel and PDF processing runs locally and saves new output files. File renaming requires a preview first. Scanned pages are sent to the selected cloud OCR provider only after configuration, opt-in and confirmation.
+
+## V1.6.0 主要变化 / What's new in V1.6.0
+
+- 发票解析增加数电普票、专票 OFD，可与 PDF 混合处理，修复购销双方、备注及跨页明细误读。<br>
+  Parse supported digital OFD invoices alongside PDFs, with fixes for buyer/seller fields, remarks and multi-page items.
+- Excel 分类拆分支持 XLS 与 CSV；可预览 CSV 编码和分隔符，并兼容部分业务系统导出的特殊工作簿。<br>
+  Split XLS and CSV files by category, preview CSV encoding and delimiters, and read more business-system exports.
+- 批量任务支持安全停止，改进文件变更复核、反馈入口及 Mac 更新清理。<br>
+  Stop batch tasks safely, check for changed input files, copy feedback details and clean up completed Mac updates.
 
 ## V1.5.2 主要变化 / What's new in V1.5.2
 
@@ -57,6 +69,8 @@ Excel and PDF processing runs locally and saves new output files. File renaming 
   Updated home and tool layouts, clearer labels, and fixes for image previews, conversion buttons, save locations, long Excel identifiers and cell references.
 
 ## 历史版本 / Previous release
+
+- [V1.5.2 下载与说明 / Current available release](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/tag/v1.5.2)
 
 - [V1.5.1 下载与说明 / Previous stable release](https://github.com/huangchong-4806/Eggie-DocuFlow/releases/tag/v1.5.1)
 
@@ -138,14 +152,14 @@ The current release focuses on:
 
 如果你只是想直接使用软件，不需要安装 Python，也不需要运行源码。
 
-1. Mac：下载V1.5.2 ZIP，解压后将 `Eggie DocuFlow.app` 放入“应用程序”目录。旧版V1.4.0的应用名为 `EggieDocuFlow_V1.4.0_mac.app`。
-2. Windows：下载安装包并运行 `EggieDocuFlow_V1.5.2_Windows_x64_Setup.exe`，完成安装后从桌面或开始菜单打开软件
+1. Mac：发布后下载V1.6.0 ZIP，解压后将 `Eggie DocuFlow.app` 放入“应用程序”目录。旧版V1.4.0的应用名为 `EggieDocuFlow_V1.4.0_mac.app`。
+2. Windows：下载安装包并运行 `EggieDocuFlow_V1.6.0_Windows_x64_Setup.exe`，完成安装后从桌面或开始菜单打开软件
 
 If you only want to use the application, you do not need to install Python or
 run the source code.
 
-1. On macOS, extract the V1.5.2 ZIP and place `Eggie DocuFlow.app` in Applications.
-2. On Windows, run `EggieDocuFlow_V1.5.2_Windows_x64_Setup.exe`, then launch the app from the desktop or Start menu
+1. On macOS, after release, extract the V1.6.0 ZIP and place `Eggie DocuFlow.app` in Applications.
+2. On Windows, run `EggieDocuFlow_V1.6.0_Windows_x64_Setup.exe`, then launch the app from the desktop or Start menu
 
 > Windows 版支持 Windows 10/11 64 位系统；安装程序默认安装到 `C:\Program Files\Eggie DocuFlow`，安装时会请求 Windows 管理员授权，并提供标准卸载入口。
 > The Windows build supports 64-bit Windows 10/11. It installs to `C:\Program Files\Eggie DocuFlow` by default, requests Windows administrator approval during setup, and includes a standard uninstall entry.
@@ -395,7 +409,7 @@ PDF 工具箱： / PDF toolbox:
 Developers can run the project from source with the commands below. Regular
 users do not need to follow these steps.
 
-V1.6.0 候选版的构建编号为 2026111602，尚未正式发布。用户已授权按纯重构、可靠性修复、功能补齐、打包与实测的顺序合入 main，四阶段结果分别见 [#22](https://github.com/huangchong-4806/Eggie-DocuFlow/pull/22)、[#23](https://github.com/huangchong-4806/Eggie-DocuFlow/pull/23)、[#24](https://github.com/huangchong-4806/Eggie-DocuFlow/pull/24)、[#25](https://github.com/huangchong-4806/Eggie-DocuFlow/pull/25)。主窗口入口在 `app.py`，页面方法在 `ui/pages/`，窗口导航与公共任务在 `ui/window_shell.py`、`ui/window_tasks.py`。原 `v2` 版面与批量处理包现名为 `layout_batch`，例如命令行入口为 `python -m layout_batch.batch_engine --help`。双端候选安装与升级、本地业务样本验收已有记录；整版远端测试、凭证扫描和两端候选构建已有通过记录。后续补充了 Windows 打包遇到短暂占用时的处理，最新提交检查与产物见 [PR #25](https://github.com/huangchong-4806/Eggie-DocuFlow/pull/25)。用户确认本次不追加 DNG 原片支持和真实大图测试；构造图片结果有效，真实大图仍未实测。逐项状态、构建修复及验证边界见 [V1.6 本地开发与验收](docs/superpowers/plans/2026-11-10-v1.6-refactor.md)。
+V1.6.0 的四个 PR 已合入 main（27bd87b），现于本地准备正式标识的 2026111702，尚未正式发布。以下 2026111602 候选包的验收记录保留，1702 成品另行验收。用户已授权按纯重构、可靠性修复、功能补齐、打包与实测的顺序合入 main，四阶段结果分别见 [#22](https://github.com/huangchong-4806/Eggie-DocuFlow/pull/22)、[#23](https://github.com/huangchong-4806/Eggie-DocuFlow/pull/23)、[#24](https://github.com/huangchong-4806/Eggie-DocuFlow/pull/24)、[#25](https://github.com/huangchong-4806/Eggie-DocuFlow/pull/25)。主窗口入口在 `app.py`，页面方法在 `ui/pages/`，窗口导航与公共任务在 `ui/window_shell.py`、`ui/window_tasks.py`。原 `v2` 版面与批量处理包现名为 `layout_batch`，例如命令行入口为 `python -m layout_batch.batch_engine --help`。双端候选安装与升级、本地业务样本验收已有记录；整版远端测试、凭证扫描和两端候选构建已有通过记录。后续补充了 Windows 打包遇到短暂占用时的处理，最新提交检查与产物见 [PR #25](https://github.com/huangchong-4806/Eggie-DocuFlow/pull/25)。用户确认本次不追加 DNG 原片支持和真实大图测试；构造图片结果有效，真实大图仍未实测。逐项状态、构建修复及验证边界见 [V1.6 本地开发与验收](docs/superpowers/plans/2026-11-10-v1.6-refactor.md)。
 
 准确重建本版请先阅读 [BUILD_RELEASE.md](BUILD_RELEASE.md)，准备定制MuPDF1.28.5引擎。下列pip命令只提供开发环境，默认依赖不等同于发布包。<br>
 For a release-equivalent build, follow [BUILD_RELEASE.md](BUILD_RELEASE.md), including the custom MuPDF 1.28.5 engine. The pip commands below set up a development environment; default dependencies do not reproduce the release package.
